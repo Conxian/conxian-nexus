@@ -14,3 +14,7 @@ Thank you for your interest in contributing!
 - Follow standard Rust formatting (`cargo fmt`).
 - Ensure all public functions have doc comments.
 - Maintain high test coverage for new logic.
+
+## Core Modules Update
+- **NexusState**: Now uses a native Merkle Tree for verifiable state root tracking.
+- **lib-conxian-core**: Enhanced with a full Wallet implementation (k256/ECDSA).

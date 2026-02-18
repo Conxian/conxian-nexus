@@ -47,19 +47,41 @@ impl NexusSync {
         Self { storage, state }
     }
 
-    /// Starts the sync service, listening for Stacks node events via WebSocket.
+    /// Starts the sync service, listening for Stacks node events.
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting NexusSync service...");
 
-        let _storage = self.storage.clone();
-        tokio::spawn(async move {
-            loop {
-                // Mocking event loop
-                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
-                tracing::debug!("NexusSync heartbeat...");
-            }
-        });
+        // In a real implementation, we'd use tokio_tungstenite to connect to a Stacks node WS.
+        // For now, we simulate an event stream.
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
 
+        loop {
+            interval.tick().await;
+            self.simulate_event().await?;
+        }
+    }
+
+    async fn simulate_event(&self) -> anyhow::Result<()> {
+        let height = Utc::now().timestamp() as u64 / 600; // Mock height
+        let hash = format!("0x{:x}", Sha256::digest(format!("block-{}", Utc::now()).as_bytes()));
+
+        if rand::random::<u8>() % 10 == 0 {
+             let event = StacksEvent::BurnBlock(BurnBlockData {
+                 hash,
+                 height,
+                 timestamp: Utc::now(),
+             });
+             self.handle_event(event).await?;
+        } else {
+             let event = StacksEvent::Microblock(MicroblockData {
+                 hash,
+                 height,
+                 parent_hash: "0x...".to_string(),
+                 txs: vec!["tx1".to_string(), "tx2".to_string()],
+                 timestamp: Utc::now(),
+             });
+             self.handle_event(event).await?;
+        }
         Ok(())
     }
 
@@ -101,8 +123,10 @@ impl NexusSync {
 
         tx.commit().await?;
 
-        // Update cryptographic state root
-        self.state.update_state(&data.hash, data.txs.len());
+        // Update cryptographic state root with Merkle Tree
+        for tx_id in &data.txs {
+            self.state.update_state(tx_id, 1);
+        }
 
         // Invalidate cache on new microblock
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
@@ -139,3 +163,5 @@ impl NexusSync {
         Ok(())
     }
 }
+
+use sha2::{Sha256, Digest};
