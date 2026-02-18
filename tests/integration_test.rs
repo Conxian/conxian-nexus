@@ -12,9 +12,11 @@ async fn test_state_transition_flow() {
 
     assert_ne!(initial_root, new_root);
 
-    let (root, proof) = state.generate_proof("user_key");
+    let (root, proof_json) = state.generate_proof("block1");
     assert_eq!(root, new_root);
-    assert!(proof.starts_with("0x"));
+    // proof_json should be a valid JSON representation of MerkleProof
+    let proof: conxian_nexus::state::MerkleProof = serde_json::from_str(&proof_json).expect("Proof should be valid JSON");
+    assert_eq!(proof.leaf, "block1");
 }
 
 #[tokio::test]

@@ -30,14 +30,29 @@ impl NexusState {
     }
 
     pub fn update_state(&self, data: &str, _tx_count: usize) {
+        self.update_state_batch(&[data.to_string()]);
+    }
+
+    pub fn update_state_batch(&self, data: &[String]) {
         let mut leaves = self.leaves.lock().unwrap();
-        leaves.push(data.to_string());
+        for item in data {
+            leaves.push(item.clone());
+        }
 
         let new_root = self.calculate_root(&leaves);
         *self.state_root.lock().unwrap() = new_root;
         *self.last_updated.lock().unwrap() = Utc::now();
 
         tracing::debug!("Nexus state updated. New root: {}", self.get_state_root());
+    }
+
+    pub fn set_initial_leaves(&self, new_leaves: Vec<String>) {
+        let mut leaves = self.leaves.lock().unwrap();
+        *leaves = new_leaves;
+        let new_root = self.calculate_root(&leaves);
+        *self.state_root.lock().unwrap() = new_root;
+        *self.last_updated.lock().unwrap() = Utc::now();
+        tracing::info!("Nexus state initialized with {} leaves. Root: {}", leaves.len(), self.get_state_root());
     }
 
     fn calculate_root(&self, leaves: &[String]) -> String {
@@ -67,22 +82,16 @@ impl NexusState {
             current_level = next_level;
         }
 
-        format!("0x{}", hex::encode(Sha256::digest(&current_level[0])))
+        format!("0x{}", hex::encode(current_level[0]))
     }
 
     pub fn generate_proof(&self, key: &str) -> (String, String) {
-        let leaves = self.leaves.lock().unwrap();
-        let index = leaves.iter().position(|l| l == key);
-
-        match index {
-            Some(_) => {
-                let root = self.get_state_root();
-                let mut hasher = Sha256::new();
-                hasher.update(key.as_bytes());
-                let proof = format!("0x{}", hex::encode(hasher.finalize()));
-                (root, proof)
-            },
-            None => (self.get_state_root(), "0x0".to_string())
+        match self.generate_merkle_proof(key) {
+            Some(proof) => {
+                let proof_json = serde_json::to_string(&proof).unwrap_or_default();
+                (proof.root, proof_json)
+            }
+            None => (self.get_state_root(), "{}".to_string())
         }
     }
 
@@ -143,7 +152,10 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     let mut current_hash: [u8; 32] = hasher.finalize().into();
 
     for (sibling_hash_str, is_left) in &proof.path {
-        let sibling_hash = hex::decode(sibling_hash_str.trim_start_matches("0x")).unwrap_or_default();
+        let sibling_hash = match hex::decode(sibling_hash_str.trim_start_matches("0x")) {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
         let mut hasher = Sha256::new();
         if *is_left {
             hasher.update(current_hash);
@@ -155,6 +167,6 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
         current_hash = hasher.finalize().into();
     }
 
-    let final_root = format!("0x{}", hex::encode(Sha256::digest(&current_hash)));
+    let final_root = format!("0x{}", hex::encode(current_hash));
     final_root == proof.root
 }

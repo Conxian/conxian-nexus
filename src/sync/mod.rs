@@ -8,6 +8,8 @@ use crate::storage::Storage;
 use crate::state::NexusState;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
+use sha2::{Sha256, Digest};
+use sqlx::Row;
 
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +47,20 @@ pub struct NexusSync {
 impl NexusSync {
     pub fn new(storage: Arc<Storage>, state: Arc<NexusState>) -> Self {
         Self { storage, state }
+    }
+
+    /// Loads initial state from the database.
+    pub async fn load_initial_state(&self) -> anyhow::Result<()> {
+        tracing::info!("Loading initial state from database...");
+        let rows = sqlx::query(
+            "SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC"
+        )
+        .fetch_all(&self.storage.pg_pool)
+        .await?;
+
+        let leaves: Vec<String> = rows.into_iter().map(|r| r.get("tx_id")).collect();
+        self.state.set_initial_leaves(leaves);
+        Ok(())
     }
 
     /// Starts the sync service, listening for Stacks node events.
@@ -124,9 +140,7 @@ impl NexusSync {
         tx.commit().await?;
 
         // Update cryptographic state root with Merkle Tree
-        for tx_id in &data.txs {
-            self.state.update_state(tx_id, 1);
-        }
+        self.state.update_state_batch(&data.txs);
 
         // Invalidate cache on new microblock
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
@@ -163,5 +177,3 @@ impl NexusSync {
         Ok(())
     }
 }
-
-use sha2::{Sha256, Digest};

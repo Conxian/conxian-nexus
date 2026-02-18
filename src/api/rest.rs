@@ -2,6 +2,8 @@ use axum::{
     routing::{get, post},
     extract::{Query, State, Json},
     Router,
+    http::StatusCode,
+    response::IntoResponse,
 };
 use std::sync::Arc;
 use crate::storage::Storage;
@@ -66,7 +68,7 @@ pub async fn start_rest_server(storage: Arc<Storage>, nexus_state: Arc<NexusStat
 async fn get_proof(
     State(state): State<AppState>,
     Query(params): Query<ProofParams>,
-) -> Json<ProofResponse> {
+) -> impl IntoResponse {
     let (hash, proof) = state.nexus_state.generate_proof(&params.key);
     Json(ProofResponse {
         hash,
@@ -77,7 +79,7 @@ async fn get_proof(
 async fn verify_state(
     State(state): State<AppState>,
     Json(payload): Json<VerifyStateRequest>,
-) -> Json<VerifyStateResponse> {
+) -> impl IntoResponse {
     let current_root = state.nexus_state.get_state_root();
     Json(VerifyStateResponse {
         valid: current_root == payload.state_root,
@@ -86,23 +88,43 @@ async fn verify_state(
 
 async fn get_status(
     State(state): State<AppState>,
-) -> Json<StatusResponse> {
+) -> Result<Json<StatusResponse>, StatusCode> {
     let state_root = state.nexus_state.get_state_root();
 
     let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
-        .fetch_one(&state.storage.pg_pool).await.unwrap();
+        .fetch_one(&state.storage.pg_pool)
+        .await
+        .map_err(|e| {
+            tracing::error!("Database error in get_status: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
     let processed_height: Option<i64> = row.get("max_height");
 
-    let mut conn = state.storage.redis_client.get_multiplexed_async_connection().await.unwrap();
-    let safety_mode: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
-    let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
+    let mut conn = state.storage.redis_client.get_multiplexed_async_connection().await
+        .map_err(|e| {
+            tracing::error!("Redis connection error in get_status: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
-    Json(StatusResponse {
+    let safety_mode: bool = redis::cmd("GET")
+        .arg("nexus:safety_mode")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(false);
+
+    let drift: u64 = redis::cmd("GET")
+        .arg("nexus:drift")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(0);
+
+    Ok(Json(StatusResponse {
         state_root,
         processed_height: processed_height.unwrap_or(0) as u64,
         safety_mode,
         drift,
-    })
+    }))
 }
 
 async fn health_check() -> &'static str { "OK" }

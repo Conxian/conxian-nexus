@@ -35,6 +35,9 @@ async fn main() -> anyhow::Result<()> {
     let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone()));
     let safety_service = Arc::new(NexusSafety::new(storage.clone()));
 
+    // Load Initial State from DB
+    sync_service.load_initial_state().await?;
+
     // Spawn Sync Service
     let sync_handle = {
         let sync = sync_service.clone();
