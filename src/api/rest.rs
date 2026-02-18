@@ -28,14 +28,14 @@ pub struct VerifyStateResponse {
     valid: bool,
 }
 
-pub async fn start_rest_server(storage: Arc<Storage>) -> anyhow::Result<()> {
+pub async fn start_rest_server(storage: Arc<Storage>, port: u16) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/verify-state", post(verify_state))
         .route("/health", get(health_check))
         .with_state(storage);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("REST server listening on {}", listener.local_addr()?);
     axum::serve(listener, app).await?;
     Ok(())

@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
 use std::sync::Arc;
+use chrono::{DateTime, Utc};
 
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +24,7 @@ pub struct MicroblockData {
     pub height: u64,
     pub parent_hash: String,
     pub txs: Vec<String>,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Data payload for a Stacks burn block.
@@ -30,6 +32,7 @@ pub struct MicroblockData {
 pub struct BurnBlockData {
     pub hash: String,
     pub height: u64,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// The sync service responsible for processing on-chain events.
@@ -45,6 +48,7 @@ impl NexusSync {
     /// Starts the sync service, listening for Stacks node events via WebSocket.
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting NexusSync service...");
+
         let _storage = self.storage.clone();
         tokio::spawn(async move {
             loop {
@@ -53,9 +57,6 @@ impl NexusSync {
                 tracing::debug!("NexusSync heartbeat...");
             }
         });
-
-        // In a real implementation, this would connect to a Stacks node WebSocket.
-        // For now, we simulate event processing or wait for external triggers.
 
         Ok(())
     }
@@ -76,12 +77,27 @@ impl NexusSync {
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
         tracing::debug!("Processing microblock: {} (soft-finality)", data.hash);
 
+        let mut tx = self.storage.pg_pool.begin().await?;
+
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state) VALUES ($1, $2, 'microblock', 'soft') ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .bind(data.timestamp)
+        .execute(&mut *tx).await?;
+
+        for tx_id in &data.txs {
+            sqlx::query(
+                "INSERT INTO stacks_transactions (tx_id, block_hash, created_at) VALUES ($1, $2, $3) ON CONFLICT (tx_id) DO NOTHING"
+            )
+            .bind(tx_id)
+            .bind(&data.hash)
+            .bind(data.timestamp)
+            .execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
 
         // Invalidate cache on new microblock
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
@@ -93,19 +109,24 @@ impl NexusSync {
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {} (hard-finality)", data.hash);
 
+        let mut tx = self.storage.pg_pool.begin().await?;
+
         // Update all previous soft blocks to hard state up to this height
         sqlx::query(
             "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'"
         )
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .execute(&mut *tx).await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state) VALUES ($1, $2, 'burn_block', 'hard') ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'burn_block', 'hard', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .bind(data.timestamp)
+        .execute(&mut *tx).await?;
+
+        tx.commit().await?;
 
         Ok(())
     }

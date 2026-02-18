@@ -37,8 +37,8 @@ impl NexusService for MyNexusService {
     }
 }
 
-pub async fn start_grpc_server(storage: Arc<Storage>) -> anyhow::Result<()> {
-    let addr = "0.0.0.0:50051".parse()?;
+pub async fn start_grpc_server(storage: Arc<Storage>, port: u16) -> anyhow::Result<()> {
+    let addr = format!("0.0.0.0:{}", port).parse()?;
     let nexus_service = MyNexusService { _storage: storage };
 
     tracing::info!("gRPC server listening on {}", addr);

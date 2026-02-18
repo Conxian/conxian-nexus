@@ -3,20 +3,25 @@ pub mod storage;
 pub mod sync;
 pub mod executor;
 pub mod safety;
+pub mod config;
 
 use std::sync::Arc;
+use tokio::signal;
 use crate::storage::Storage;
 use crate::sync::NexusSync;
 use crate::safety::NexusSafety;
+use crate::config::Config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
 
+    let config = Config::from_env();
+
     // Initialize logging
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(&config.log_level)
         .init();
 
     tracing::info!("Initializing Conxian Nexus (Glass Node)...");
@@ -54,24 +59,34 @@ async fn main() -> anyhow::Result<()> {
 
     // Start REST API Server
     let rest_storage = storage.clone();
+    let rest_port = config.rest_port;
     let rest_handle = tokio::spawn(async move {
-        if let Err(e) = api::rest::start_rest_server(rest_storage).await {
+        if let Err(e) = api::rest::start_rest_server(rest_storage, rest_port).await {
             tracing::error!("REST API server failed: {}", e);
         }
     });
 
     // Start gRPC API Server
     let grpc_storage = storage.clone();
+    let grpc_port = config.grpc_port;
     let grpc_handle = tokio::spawn(async move {
-        if let Err(e) = api::grpc::start_grpc_server(grpc_storage).await {
+        if let Err(e) = api::grpc::start_grpc_server(grpc_storage, grpc_port).await {
             tracing::error!("gRPC API server failed: {}", e);
         }
     });
 
     tracing::info!("All Nexus services are running.");
 
-    // Wait for all services (though they are supposed to run indefinitely)
+    // Graceful shutdown handling
+    let shutdown = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install CTRL+C handler");
+        tracing::info!("Shutdown signal received");
+    };
+
     tokio::select! {
+        _ = shutdown => tracing::info!("Shutting down..."),
         res = sync_handle => tracing::error!("Sync service exited: {:?}", res),
         res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
