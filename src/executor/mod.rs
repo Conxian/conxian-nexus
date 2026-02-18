@@ -81,21 +81,38 @@ impl NexusExecutor {
 
     /// Checks for front-running against detected on-chain liquidations or oracle updates.
     async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // Real logic would involve querying the last few seconds of microblocks for similar payloads.
-        // For now, we check if there's any transaction from the same sender in the same microblock
-        // that has a different payload, which might indicate a replacement attempt.
+        // We check if there's any transaction from the same sender in recent blocks
+        // that has a different payload but targets the same logic, or if there's an unusually
+        // high number of similar transactions from different senders (spam/front-running).
 
         let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND block_hash IN (SELECT hash FROM stacks_blocks WHERE created_at > $2)"
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
         )
         .bind(&request.tx_id)
+        .bind(&request.sender)
+        .bind(request.timestamp - chrono::Duration::seconds(60)) // 1 minute window
+        .fetch_one(&self.storage.pg_pool).await?;
+
+        let sender_count: i64 = row.get(0);
+
+        if sender_count > 5 {
+            tracing::warn!("User {} is sending transactions too frequently: {}", request.sender, sender_count);
+            return Ok(true);
+        }
+
+        // Check for similar payloads in the same time window (potential front-running of a public strategy)
+        let row = sqlx::query(
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
+        )
+        .bind(&request.tx_id)
+        .bind(&request.payload)
         .bind(request.timestamp - chrono::Duration::seconds(10))
         .fetch_one(&self.storage.pg_pool).await?;
 
-        let count: i64 = row.get(0);
+        let payload_count: i64 = row.get(0);
 
-        // Simple heuristic: if there's high activity for similar-timed transactions, flag for review.
-        if count > 100 {
+        if payload_count > 2 {
+            tracing::warn!("Multiple identical payloads detected in a short window: {}", payload_count);
             return Ok(true);
         }
 
