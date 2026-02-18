@@ -33,8 +33,11 @@ impl NexusExecutor {
         if let Some(event_time) = latest_on_chain_event_time {
             // Strict verification against the Stacks microblock stream.
             if request.timestamp < event_time {
-                 // Transaction claims to be from before an event we already saw on-chain.
-                 // This is a sign of potential manipulation or late submission.
+                 tracing::warn!(
+                     "Transaction {} timestamp ({}) is before latest on-chain event ({}). Potential manipulation.",
+                     request.tx_id, request.timestamp, event_time
+                 );
+                 return Ok(false);
             }
         }
 
@@ -58,18 +61,33 @@ impl NexusExecutor {
 
     /// Checks for front-running against detected on-chain liquidations or oracle updates.
     async fn detect_front_running(&self, _request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // In a full implementation, this parses microblock contents.
+        // In a full implementation, this parses microblock contents for specific patterns.
+        // E.g. checking if this transaction interacts with the same assets as a pending liquidation.
         Ok(false)
     }
 
     /// Executes high-frequency internal trades and collateral rebalancing.
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
         tracing::info!("Executing collateral rebalancing for dex-router.clar...");
+        // Logic for rebalancing goes here
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // Tests for FSOC sequencer would go here
+    use super::*;
+    use chrono::Utc;
+
+    #[tokio::test]
+    async fn test_execution_request_serialization() {
+        let req = ExecutionRequest {
+            tx_id: "tx123".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+        };
+        let serialized = serde_json::to_string(&req).unwrap();
+        let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(req.tx_id, deserialized.tx_id);
+    }
 }

@@ -42,6 +42,16 @@ impl NexusSync {
         Self { storage }
     }
 
+    /// Starts the sync service, listening for Stacks node events via WebSocket.
+    pub async fn run(&self) -> anyhow::Result<()> {
+        tracing::info!("Starting NexusSync service...");
+
+        // In a real implementation, this would connect to a Stacks node WebSocket.
+        // For now, we simulate event processing or wait for external triggers.
+
+        Ok(())
+    }
+
     /// Handles incoming Stacks node events and updates the local state.
     pub async fn handle_event(&self, event: StacksEvent) -> anyhow::Result<()> {
         match event {
@@ -65,7 +75,8 @@ impl NexusSync {
         .bind(data.height as i64)
         .execute(&self.storage.pg_pool).await?;
 
-        let mut conn = self.storage.redis_client.get_async_connection().await?;
+        // Invalidate cache on new microblock
+        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
         redis::cmd("DEL").arg("cache:vaults:all").query_async::<_, ()>(&mut conn).await?;
 
         Ok(())
@@ -74,6 +85,7 @@ impl NexusSync {
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {} (hard-finality)", data.hash);
 
+        // Update all previous soft blocks to hard state up to this height
         sqlx::query(
             "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'"
         )

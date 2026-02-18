@@ -1,0 +1,49 @@
+openapi: 3.0.0
+info:
+  title: Conxian Nexus API
+  version: 1.0.0
+  description: API for Conxian Nexus (Glass Node)
+paths:
+  /v1/proof:
+    get:
+      summary: Get cryptographic proof
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hash:
+                    type: string
+                  proof:
+                    type: string
+  /v1/verify-state:
+    post:
+      summary: Verify state against MARF tip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state_root:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
