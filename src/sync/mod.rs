@@ -26,8 +26,16 @@ pub struct MicroblockData {
     pub hash: String,
     pub height: u64,
     pub parent_hash: String,
-    pub txs: Vec<String>,
+    pub txs: Vec<TransactionData>,
     pub timestamp: DateTime<Utc>,
+}
+
+/// Data payload for a transaction within a microblock.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionData {
+    pub tx_id: String,
+    pub sender: String,
+    pub payload: Option<String>,
 }
 
 /// Data payload for a Stacks burn block.
@@ -93,7 +101,18 @@ impl NexusSync {
                  hash,
                  height,
                  parent_hash: "0x...".to_string(),
-                 txs: vec!["tx1".to_string(), "tx2".to_string()],
+                 txs: vec![
+                     TransactionData {
+                         tx_id: "tx1".to_string(),
+                         sender: "SP123".to_string(),
+                         payload: Some("payload1".to_string())
+                     },
+                     TransactionData {
+                         tx_id: "tx2".to_string(),
+                         sender: "SP456".to_string(),
+                         payload: Some("payload2".to_string())
+                     },
+                 ],
                  timestamp: Utc::now(),
              });
              self.handle_event(event).await?;
@@ -127,12 +146,14 @@ impl NexusSync {
         .bind(data.timestamp)
         .execute(&mut *tx).await?;
 
-        for tx_id in &data.txs {
+        for tx_data in &data.txs {
             sqlx::query(
-                "INSERT INTO stacks_transactions (tx_id, block_hash, created_at) VALUES ($1, $2, $3) ON CONFLICT (tx_id) DO NOTHING"
+                "INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tx_id) DO NOTHING"
             )
-            .bind(tx_id)
+            .bind(&tx_data.tx_id)
             .bind(&data.hash)
+            .bind(&tx_data.sender)
+            .bind(&tx_data.payload)
             .bind(data.timestamp)
             .execute(&mut *tx).await?;
         }
@@ -140,7 +161,8 @@ impl NexusSync {
         tx.commit().await?;
 
         // Update cryptographic state root with Merkle Tree
-        self.state.update_state_batch(&data.txs);
+        let tx_ids: Vec<String> = data.txs.into_iter().map(|t| t.tx_id).collect();
+        self.state.update_state_batch(&tx_ids);
 
         // Invalidate cache on new microblock
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
