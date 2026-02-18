@@ -5,7 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
+use crate::state::NexusState;
 use std::sync::Arc;
+use chrono::{DateTime, Utc};
 
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +25,7 @@ pub struct MicroblockData {
     pub height: u64,
     pub parent_hash: String,
     pub txs: Vec<String>,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// Data payload for a Stacks burn block.
@@ -30,16 +33,34 @@ pub struct MicroblockData {
 pub struct BurnBlockData {
     pub hash: String,
     pub height: u64,
+    pub timestamp: DateTime<Utc>,
 }
 
 /// The sync service responsible for processing on-chain events.
 pub struct NexusSync {
     storage: Arc<Storage>,
+    state: Arc<NexusState>,
 }
 
 impl NexusSync {
-    pub fn new(storage: Arc<Storage>) -> Self {
-        Self { storage }
+    pub fn new(storage: Arc<Storage>, state: Arc<NexusState>) -> Self {
+        Self { storage, state }
+    }
+
+    /// Starts the sync service, listening for Stacks node events via WebSocket.
+    pub async fn run(&self) -> anyhow::Result<()> {
+        tracing::info!("Starting NexusSync service...");
+
+        let _storage = self.storage.clone();
+        tokio::spawn(async move {
+            loop {
+                // Mocking event loop
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                tracing::debug!("NexusSync heartbeat...");
+            }
+        });
+
+        Ok(())
     }
 
     /// Handles incoming Stacks node events and updates the local state.
@@ -58,14 +79,33 @@ impl NexusSync {
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
         tracing::debug!("Processing microblock: {} (soft-finality)", data.hash);
 
+        let mut tx = self.storage.pg_pool.begin().await?;
+
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state) VALUES ($1, $2, 'microblock', 'soft') ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .bind(data.timestamp)
+        .execute(&mut *tx).await?;
 
-        let mut conn = self.storage.redis_client.get_async_connection().await?;
+        for tx_id in &data.txs {
+            sqlx::query(
+                "INSERT INTO stacks_transactions (tx_id, block_hash, created_at) VALUES ($1, $2, $3) ON CONFLICT (tx_id) DO NOTHING"
+            )
+            .bind(tx_id)
+            .bind(&data.hash)
+            .bind(data.timestamp)
+            .execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
+
+        // Update cryptographic state root
+        self.state.update_state(&data.hash, data.txs.len());
+
+        // Invalidate cache on new microblock
+        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
         redis::cmd("DEL").arg("cache:vaults:all").query_async::<_, ()>(&mut conn).await?;
 
         Ok(())
@@ -74,18 +114,27 @@ impl NexusSync {
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {} (hard-finality)", data.hash);
 
+        let mut tx = self.storage.pg_pool.begin().await?;
+
+        // Update all previous soft blocks to hard state up to this height
         sqlx::query(
             "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'"
         )
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .execute(&mut *tx).await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state) VALUES ($1, $2, 'burn_block', 'hard') ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'burn_block', 'hard', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
-        .execute(&self.storage.pg_pool).await?;
+        .bind(data.timestamp)
+        .execute(&mut *tx).await?;
+
+        tx.commit().await?;
+
+        // Update state root for burn block
+        self.state.update_state(&data.hash, 0);
 
         Ok(())
     }

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package nexus;
+
+service NexusService {
+  rpc GetProof (ProofRequest) returns (ProofResponse);
+  rpc VerifyState (VerifyStateRequest) returns (VerifyStateResponse);
+}
+
+message ProofRequest {
+  string key = 1;
+}
+
+message ProofResponse {
+  string hash = 1;
+  string proof = 2;
+}
+
+message VerifyStateRequest {
+  string state_root = 1;
+}
+
+message VerifyStateResponse {
+  bool valid = 1;
+}

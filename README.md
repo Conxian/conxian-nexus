@@ -15,12 +15,28 @@ The Nexus is composed of several functional modules:
 - **nexus-sync**: Ingests Stacks node events via WebSocket and updates local persistence.
 - **nexus-executor**: specialized execution environment for high-frequency internal trades and rebalancing.
 - **nexus-safety**: Heartbeat service for health monitoring and safety mode triggers.
-- **API & gRPC**: High-throughput interfaces for external and internal communication.
+- **API (REST & gRPC)**: High-throughput interfaces for external and internal communication.
+
+## Directory Structure
+
+```
+.
+├── src/
+│   ├── api/          # REST and gRPC implementations
+│   ├── executor/     # FSOC sequencer and trade logic
+│   ├── safety/       # Drift monitoring and safety mode
+│   ├── storage/      # Database and Redis connections
+│   ├── sync/         # Stacks L1 event ingestion
+│   └── main.rs       # Application entry point
+├── proto/            # Protobuf definitions
+├── docs/             # OpenAPI specifications
+└── migrations/      # SQLx database migrations
+```
 
 ## Tech Stack
 
 - **Runtime**: Rust (Tokio/Axum)
-- **Database**: PostgreSQL (State persistence)
+- **Database**: PostgreSQL (State persistence via SQLx)
 - **Cache**: Redis (Fast state caching)
 - **Communication**: gRPC (Tonic/Prost) and REST (Axum)
 
@@ -31,12 +47,12 @@ The Nexus is composed of several functional modules:
 - Rust (latest stable)
 - PostgreSQL
 - Redis
-- Protobuf Compiler (protoc)
+- *Note: Protobuf compiler is bundled via `protoc-bin-vendored`*
 
 ### Installation
 
 ```bash
-git clone --recursive https://github.com/Conxian/conxian-nexus
+git clone https://github.com/Conxian/conxian-nexus
 cd conxian-nexus
 cargo build
 ```
@@ -45,22 +61,20 @@ cargo build
 
 ```bash
 cp .env.example .env
-# Update .env with your credentials
+# Update .env with your DATABASE_URL and REDIS_URL
 cargo run
 ```
 
 ## API Documentation
 
-- **REST API**: See [OpenAPI Spec](docs/openapi.yaml)
-- **gRPC**: See [Protobuf Definition](proto/nexus.proto)
+- **REST API**: See [OpenAPI Spec](docs/openapi.yaml) (Running on port 3000)
+- **gRPC**: See [Protobuf Definition](proto/nexus.proto) (Running on port 50051)
 
 ## Testing
 
 ```bash
 cargo test
 ```
-
-Includes unit tests, MEV simulation, and Chaos testing for Sovereign Handoff.
 
 ## License
 
