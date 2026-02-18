@@ -32,6 +32,7 @@ pub async fn start_rest_server(storage: Arc<Storage>) -> anyhow::Result<()> {
     let app = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/verify-state", post(verify_state))
+        .route("/health", get(health_check))
         .with_state(storage);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
@@ -60,3 +61,4 @@ async fn verify_state(
         valid: payload.state_root.starts_with("0x"),
     })
 }
+async fn health_check() -> &'static str { "OK" }

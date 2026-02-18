@@ -16,13 +16,16 @@ pub struct ExecutionRequest {
 }
 
 /// The executor service for handling transactions and rebalancing.
+use std::sync::Mutex;
+
 pub struct NexusExecutor {
+    _latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
     storage: Arc<Storage>,
 }
 
 impl NexusExecutor {
     pub fn new(storage: Arc<Storage>) -> Self {
-        Self { storage }
+        Self { storage, _latest_event_time_cache: Mutex::new(None) }
     }
 
     /// FSOC (First-Seen-On-Chain) Sequencer logic.

@@ -45,6 +45,14 @@ impl NexusSync {
     /// Starts the sync service, listening for Stacks node events via WebSocket.
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting NexusSync service...");
+        let _storage = self.storage.clone();
+        tokio::spawn(async move {
+            loop {
+                // Mocking event loop
+                tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                tracing::debug!("NexusSync heartbeat...");
+            }
+        });
 
         // In a real implementation, this would connect to a Stacks node WebSocket.
         // For now, we simulate event processing or wait for external triggers.
