@@ -5,7 +5,14 @@ use axum::{
 };
 use std::sync::Arc;
 use crate::storage::Storage;
+use crate::state::NexusState;
 use serde::{Deserialize, Serialize};
+
+#[derive(Clone)]
+pub struct AppState {
+    pub storage: Arc<Storage>,
+    pub nexus_state: Arc<NexusState>,
+}
 
 #[derive(Deserialize)]
 pub struct ProofParams {
@@ -28,12 +35,17 @@ pub struct VerifyStateResponse {
     valid: bool,
 }
 
-pub async fn start_rest_server(storage: Arc<Storage>, port: u16) -> anyhow::Result<()> {
+pub async fn start_rest_server(storage: Arc<Storage>, nexus_state: Arc<NexusState>, port: u16) -> anyhow::Result<()> {
+    let state = AppState {
+        storage,
+        nexus_state,
+    };
+
     let app = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/verify-state", post(verify_state))
         .route("/health", get(health_check))
-        .with_state(storage);
+        .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("REST server listening on {}", listener.local_addr()?);
@@ -42,23 +54,24 @@ pub async fn start_rest_server(storage: Arc<Storage>, port: u16) -> anyhow::Resu
 }
 
 async fn get_proof(
-    State(_storage): State<Arc<Storage>>,
+    State(state): State<AppState>,
     Query(params): Query<ProofParams>,
 ) -> Json<ProofResponse> {
-    // Placeholder implementation
+    let (hash, proof) = state.nexus_state.generate_proof(&params.key);
     Json(ProofResponse {
-        hash: format!("hash_for_{}", params.key),
-        proof: "dummy_proof".to_string(),
+        hash,
+        proof,
     })
 }
 
 async fn verify_state(
-    State(_storage): State<Arc<Storage>>,
+    State(state): State<AppState>,
     Json(payload): Json<VerifyStateRequest>,
 ) -> Json<VerifyStateResponse> {
-    // Placeholder implementation
+    let current_root = state.nexus_state.get_state_root();
     Json(VerifyStateResponse {
-        valid: payload.state_root.starts_with("0x"),
+        valid: current_root == payload.state_root,
     })
 }
+
 async fn health_check() -> &'static str { "OK" }

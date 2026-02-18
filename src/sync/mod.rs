@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
+use crate::state::NexusState;
 use std::sync::Arc;
 use chrono::{DateTime, Utc};
 
@@ -38,11 +39,12 @@ pub struct BurnBlockData {
 /// The sync service responsible for processing on-chain events.
 pub struct NexusSync {
     storage: Arc<Storage>,
+    state: Arc<NexusState>,
 }
 
 impl NexusSync {
-    pub fn new(storage: Arc<Storage>) -> Self {
-        Self { storage }
+    pub fn new(storage: Arc<Storage>, state: Arc<NexusState>) -> Self {
+        Self { storage, state }
     }
 
     /// Starts the sync service, listening for Stacks node events via WebSocket.
@@ -99,6 +101,9 @@ impl NexusSync {
 
         tx.commit().await?;
 
+        // Update cryptographic state root
+        self.state.update_state(&data.hash, data.txs.len());
+
         // Invalidate cache on new microblock
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
         redis::cmd("DEL").arg("cache:vaults:all").query_async::<_, ()>(&mut conn).await?;
@@ -127,6 +132,9 @@ impl NexusSync {
         .execute(&mut *tx).await?;
 
         tx.commit().await?;
+
+        // Update state root for burn block
+        self.state.update_state(&data.hash, 0);
 
         Ok(())
     }

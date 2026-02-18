@@ -1,16 +1,11 @@
-pub mod api;
-pub mod storage;
-pub mod sync;
-pub mod executor;
-pub mod safety;
-pub mod config;
-
 use std::sync::Arc;
 use tokio::signal;
-use crate::storage::Storage;
-use crate::sync::NexusSync;
-use crate::safety::NexusSafety;
-use crate::config::Config;
+use conxian_nexus::storage::Storage;
+use conxian_nexus::sync::NexusSync;
+use conxian_nexus::safety::NexusSafety;
+use conxian_nexus::config::Config;
+use conxian_nexus::state::NexusState;
+use conxian_nexus::api;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,8 +28,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Running database migrations...");
     storage.run_migrations().await?;
 
+    // Initialize State Tracker
+    let state_tracker = Arc::new(NexusState::new());
+
     // Initialize Services
-    let sync_service = Arc::new(NexusSync::new(storage.clone()));
+    let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone()));
     let safety_service = Arc::new(NexusSafety::new(storage.clone()));
 
     // Spawn Sync Service
@@ -59,18 +57,20 @@ async fn main() -> anyhow::Result<()> {
 
     // Start REST API Server
     let rest_storage = storage.clone();
+    let rest_state = state_tracker.clone();
     let rest_port = config.rest_port;
     let rest_handle = tokio::spawn(async move {
-        if let Err(e) = api::rest::start_rest_server(rest_storage, rest_port).await {
+        if let Err(e) = api::rest::start_rest_server(rest_storage, rest_state, rest_port).await {
             tracing::error!("REST API server failed: {}", e);
         }
     });
 
     // Start gRPC API Server
     let grpc_storage = storage.clone();
+    let grpc_state = state_tracker.clone();
     let grpc_port = config.grpc_port;
     let grpc_handle = tokio::spawn(async move {
-        if let Err(e) = api::grpc::start_grpc_server(grpc_storage, grpc_port).await {
+        if let Err(e) = api::grpc::start_grpc_server(grpc_storage, grpc_state, grpc_port).await {
             tracing::error!("gRPC API server failed: {}", e);
         }
     });
