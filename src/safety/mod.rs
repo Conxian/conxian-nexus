@@ -7,29 +7,32 @@ use std::sync::Arc;
 use crate::storage::Storage;
 use tokio::time::{self, Duration};
 use sqlx::Row;
-use std::sync::atomic::{AtomicU64, Ordering};
+use reqwest::Client;
+use serde_json::Value;
 
 /// Monitors the health and sync status of the Nexus.
 pub struct NexusSafety {
     storage: Arc<Storage>,
     max_drift: u64,
-    simulated_l1_height: AtomicU64,
+    rpc_url: String,
+    http_client: Client,
 }
 
 impl NexusSafety {
     /// Creates a new safety monitor with a default max drift of 2 blocks.
-    pub fn new(storage: Arc<Storage>) -> Self {
+    pub fn new(storage: Arc<Storage>, rpc_url: String) -> Self {
         Self {
             storage,
             max_drift: 2,
-            simulated_l1_height: AtomicU64::new(0),
+            rpc_url,
+            http_client: Client::new(),
         }
     }
 
     /// Runs the heartbeat monitor loop.
     pub async fn run_heartbeat(&self) -> anyhow::Result<()> {
         let mut interval = time::interval(Duration::from_secs(10));
-        tracing::info!("Starting NexusSafety heartbeat (max_drift: {} blocks)...", self.max_drift);
+        tracing::info!("Starting NexusSafety heartbeat (max_drift: {} blocks, RPC: {})...", self.max_drift, self.rpc_url);
 
         loop {
             interval.tick().await;
@@ -65,24 +68,16 @@ impl NexusSafety {
     }
 
     async fn get_external_burn_height(&self) -> anyhow::Result<u64> {
-        // Simulation: slowly increase L1 height.
-        // In a real implementation, this would call a Stacks node RPC.
-        let local = self.get_processed_height().await?;
-        let current_sim = self.simulated_l1_height.load(Ordering::SeqCst);
+        // Real implementation: calls Stacks node RPC.
+        let url = format!("{}/extended/v1/block?limit=1", self.rpc_url);
+        let resp = self.http_client.get(&url).send().await?;
+        let json: Value = resp.json().await?;
 
-        let target = if current_sim < local { local } else { current_sim };
+        let height = json["results"][0]["height"]
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("Failed to parse block height from Stacks RPC"))?;
 
-        // Occasionally jump ahead to simulate drift
-        let new_height = if rand::random::<u8>() % 20 == 0 {
-            target + 5
-        } else if target > local {
-            target
-        } else {
-            local
-        };
-
-        self.simulated_l1_height.store(new_height, Ordering::SeqCst);
-        Ok(new_height)
+        Ok(height)
     }
 
     async fn get_processed_height(&self) -> anyhow::Result<u64> {
@@ -138,17 +133,5 @@ impl NexusSafety {
         } else {
             Ok(format!("User {}: System healthy, use standard exit paths", user_address))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_drift_threshold() {
-        let max_drift = 2;
-        let current_burn_height = 105;
-        let processed_height = 100;
-        let delta = current_burn_height - processed_height;
-        assert!(delta > max_drift);
     }
 }

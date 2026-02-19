@@ -10,7 +10,7 @@ pub struct Storage {
 impl Storage {
     pub async fn new() -> anyhow::Result<Self> {
         let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/nexus".to_string());
+            .unwrap_or_else(|_| "postgres://localhost/nexus".to_string());
         let redis_url = env::var("REDIS_URL")
             .unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
 
