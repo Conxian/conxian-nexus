@@ -191,3 +191,77 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     let final_root = format!("0x{}", hex::encode(current_hash));
     final_root == proof.root
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_nexus_state() {
+        let state = NexusState::new();
+        assert_eq!(state.get_state_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
+    }
+
+    #[test]
+    fn test_calculate_root_empty() {
+        let state = NexusState::new();
+        assert_eq!(state.calculate_root(&[]), "0x0000000000000000000000000000000000000000000000000000000000000000");
+    }
+
+    #[test]
+    fn test_calculate_root_single() {
+        let state = NexusState::new();
+        let root = state.calculate_root(&["leaf1".to_string()]);
+        assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
+
+        let mut hasher = Sha256::new();
+        hasher.update("leaf1".as_bytes());
+        let expected = format!("0x{}", hex::encode(hasher.finalize()));
+        assert_eq!(root, expected);
+    }
+
+    #[test]
+    fn test_update_state_batch() {
+        let state = NexusState::new();
+        state.update_state_batch(&["tx1".to_string(), "tx2".to_string()]);
+        let root = state.get_state_root();
+        assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
+    }
+
+    #[test]
+    fn test_merkle_proof_verification_internal() {
+        let state = NexusState::new();
+        let leaves = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        state.set_initial_leaves(leaves);
+
+        let proof = state.generate_merkle_proof("b").unwrap();
+        assert!(verify_merkle_proof(&proof));
+
+        let invalid_proof = MerkleProof {
+            leaf: "b".to_string(),
+            path: proof.path,
+            root: "0xwrong".to_string(),
+        };
+        assert!(!verify_merkle_proof(&invalid_proof));
+    }
+
+    #[test]
+    fn test_merkle_proof_odd_leaves() {
+        let state = NexusState::new();
+        let leaves = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string(), "e".to_string()];
+        state.set_initial_leaves(leaves);
+
+        for leaf in &["a", "b", "c", "d", "e"] {
+            let proof = state.generate_merkle_proof(leaf).unwrap();
+            assert!(verify_merkle_proof(&proof), "Failed for leaf {}", leaf);
+        }
+    }
+
+    #[test]
+    fn test_merkle_proof_not_found() {
+        let state = NexusState::new();
+        state.update_state_batch(&["a".to_string()]);
+        let proof = state.generate_merkle_proof("non-existent");
+        assert!(proof.is_none());
+    }
+}

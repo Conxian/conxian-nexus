@@ -73,51 +73,59 @@ impl NexusSync {
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting NexusSync service...");
 
-        // In a real implementation, we'd use tokio_tungstenite to connect to a Stacks node WS.
-        // For now, we simulate an event stream.
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
 
-        loop {
-            interval.tick().await;
-            self.simulate_event().await?;
+        // Spawn simulation task
+        let simulator_tx = tx.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+                if let Err(e) = Self::generate_simulated_event(&simulator_tx).await {
+                    tracing::error!("Event simulation error: {}", e);
+                }
+            }
+        });
+
+        while let Some(event) = rx.recv().await {
+            if let Err(e) = self.handle_event(event).await {
+                tracing::error!("Error handling event: {}", e);
+            }
         }
+
+        Ok(())
     }
 
-    async fn simulate_event(&self) -> anyhow::Result<()> {
+    async fn generate_simulated_event(tx: &tokio::sync::mpsc::Sender<StacksEvent>) -> anyhow::Result<()> {
         let height = Utc::now().timestamp() as u64 / 600; // Mock height
         let hash = format!(
             "0x{:x}",
             Sha256::digest(format!("block-{}", Utc::now()).as_bytes())
         );
 
-        if rand::random::<u8>().is_multiple_of(10) {
-            let event = StacksEvent::BurnBlock(BurnBlockData {
+        let event = if rand::random::<u8>() % 10 == 0 {
+            StacksEvent::BurnBlock(BurnBlockData {
                 hash,
                 height,
                 timestamp: Utc::now(),
-            });
-            self.handle_event(event).await?;
+            })
         } else {
-            let event = StacksEvent::Microblock(MicroblockData {
+            StacksEvent::Microblock(MicroblockData {
                 hash,
                 height,
                 parent_hash: "0x...".to_string(),
                 txs: vec![
                     TransactionData {
-                        tx_id: "tx1".to_string(),
+                        tx_id: format!("tx-{}", rand::random::<u32>()),
                         sender: "SP123".to_string(),
-                        payload: Some("payload1".to_string()),
-                    },
-                    TransactionData {
-                        tx_id: "tx2".to_string(),
-                        sender: "SP456".to_string(),
-                        payload: Some("payload2".to_string()),
+                        payload: Some("payload".to_string()),
                     },
                 ],
                 timestamp: Utc::now(),
-            });
-            self.handle_event(event).await?;
-        }
+            })
+        };
+
+        tx.send(event).await?;
         Ok(())
     }
 
@@ -206,5 +214,38 @@ impl NexusSync {
         self.state.update_state(&data.hash, 0);
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::NexusState;
+    use crate::storage::Storage;
+    use std::sync::Arc;
+
+    // Note: These tests are disabled by default as they require a running Postgres/Redis.
+    // In a real CI, they would run against a test container.
+    #[tokio::test]
+    #[ignore]
+    async fn test_handle_microblock_event() {
+        let storage = Arc::new(Storage::new().await.unwrap());
+        let state = Arc::new(NexusState::new());
+        let sync = NexusSync::new(storage, state);
+
+        let event = StacksEvent::Microblock(MicroblockData {
+            hash: "test-hash".to_string(),
+            height: 100,
+            parent_hash: "parent".to_string(),
+            txs: vec![TransactionData {
+                tx_id: "tx-test".to_string(),
+                sender: "SP123".to_string(),
+                payload: Some("data".to_string()),
+            }],
+            timestamp: Utc::now(),
+        });
+
+        sync.handle_event(event).await.unwrap();
+        assert_eq!(sync.state.get_state_root(), "..."); // Should verify the root changed
     }
 }
