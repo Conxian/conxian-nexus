@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use conxian_nexus::state::NexusState;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_state_transition_flow() {
@@ -15,7 +15,8 @@ async fn test_state_transition_flow() {
     let (root, proof_json) = state.generate_proof("block1");
     assert_eq!(root, new_root);
     // proof_json should be a valid JSON representation of MerkleProof
-    let proof: conxian_nexus::state::MerkleProof = serde_json::from_str(&proof_json).expect("Proof should be valid JSON");
+    let proof: conxian_nexus::state::MerkleProof =
+        serde_json::from_str(&proof_json).expect("Proof should be valid JSON");
     assert_eq!(proof.leaf, "block1");
 }
 
@@ -28,7 +29,9 @@ async fn test_merkle_proof_verification() {
     state.update_state("tx3", 1);
     state.update_state("tx4", 1);
 
-    let proof = state.generate_merkle_proof("tx2").expect("Proof should be generated");
+    let proof = state
+        .generate_merkle_proof("tx2")
+        .expect("Proof should be generated");
 
     assert_eq!(proof.leaf, "tx2");
     assert!(conxian_nexus::state::verify_merkle_proof(&proof));
@@ -49,7 +52,11 @@ async fn test_leaf_to_root_verification() {
 
     for leaf in &leaves {
         let proof = state.generate_merkle_proof(leaf).expect("Proof exists");
-        assert!(conxian_nexus::state::verify_merkle_proof(&proof), "Failed to verify leaf: {}", leaf);
+        assert!(
+            conxian_nexus::state::verify_merkle_proof(&proof),
+            "Failed to verify leaf: {}",
+            leaf
+        );
     }
 }
 

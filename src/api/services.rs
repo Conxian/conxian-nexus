@@ -1,4 +1,4 @@
-use lib_conxian_core::gateway::{BisqService, RGBService, ConxianService};
+use lib_conxian_core::gateway::{BisqService, BitVMService, ConxianService, RGBService};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -9,11 +9,9 @@ pub struct MultiProtocolStatus {
 pub fn get_all_services_status() -> MultiProtocolStatus {
     let bisq = BisqService;
     let rgb = RGBService;
+    let bitvm = BitVMService;
 
     MultiProtocolStatus {
-        services: vec![
-            bisq.status(),
-            rgb.status(),
-        ],
+        services: vec![bisq.status(), rgb.status(), bitvm.status()],
     }
 }

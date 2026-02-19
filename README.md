@@ -55,11 +55,15 @@ This will start the Nexus node, PostgreSQL 15, and Redis 7.
    cargo run
    ```
 
+## Documentation
+
+- **PRD**: See [docs/PRD.md](docs/PRD.md) for full product requirements and alignment.
+
 ## API Documentation
 
 - **REST API**: Running on port 3000
   - `GET /v1/status`: System health and sync status.
-  - `GET /v1/services`: Status of multi-protocol services (Bisq, RGB).
+  - `GET /v1/services`: Status of multi-protocol services (Bisq, RGB, BitVM).
   - `GET /v1/proof?key=<tx_id>`: Merkle proof for a transaction.
   - `POST /v1/verify-state`: Verify a state root.
 - **gRPC**: Running on port 50051 (See `proto/nexus.proto`)

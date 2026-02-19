@@ -1,7 +1,7 @@
-use tonic::{transport::Server, Request, Response, Status};
-use std::sync::Arc;
-use crate::storage::Storage;
 use crate::state::NexusState;
+use crate::storage::Storage;
+use std::sync::Arc;
+use tonic::{Request, Response, Status, transport::Server};
 
 pub mod nexus_proto {
     tonic::include_proto!("nexus");
@@ -23,10 +23,7 @@ impl NexusService for MyNexusService {
     ) -> Result<Response<ProofResponse>, Status> {
         let req = request.into_inner();
         let (hash, proof) = self.nexus_state.generate_proof(&req.key);
-        Ok(Response::new(ProofResponse {
-            hash,
-            proof,
-        }))
+        Ok(Response::new(ProofResponse { hash, proof }))
     }
 
     async fn verify_state(
@@ -41,9 +38,16 @@ impl NexusService for MyNexusService {
     }
 }
 
-pub async fn start_grpc_server(storage: Arc<Storage>, nexus_state: Arc<NexusState>, port: u16) -> anyhow::Result<()> {
+pub async fn start_grpc_server(
+    storage: Arc<Storage>,
+    nexus_state: Arc<NexusState>,
+    port: u16,
+) -> anyhow::Result<()> {
     let addr = format!("0.0.0.0:{}", port).parse()?;
-    let nexus_service = MyNexusService { _storage: storage, nexus_state };
+    let nexus_service = MyNexusService {
+        _storage: storage,
+        nexus_state,
+    };
 
     tracing::info!("gRPC server listening on {}", addr);
 
