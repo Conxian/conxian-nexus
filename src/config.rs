@@ -7,6 +7,7 @@ pub struct Config {
     pub rest_port: u16,
     pub grpc_port: u16,
     pub log_level: String,
+    pub stacks_node_rpc_url: String,
 }
 
 impl Config {
@@ -25,6 +26,7 @@ impl Config {
                 .parse()
                 .unwrap_or(50051),
             log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+            stacks_node_rpc_url: env::var("STACKS_NODE_RPC_URL").unwrap_or_else(|_| "https://api.mainnet.hiro.so".to_string()),
         }
     }
 }

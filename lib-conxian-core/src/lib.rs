@@ -49,3 +49,50 @@ mod tests {
         println!("Signature: {}", signature);
     }
 }
+
+pub mod gateway {
+    use serde::{Serialize, Deserialize};
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ServiceStatus {
+        pub service_name: String,
+        pub status: String,
+        pub version: String,
+    }
+
+    pub trait ConxianService {
+        fn name(&self) -> &str;
+        fn status(&self) -> ServiceStatus;
+        fn handle_request(&self, payload: &str) -> String;
+    }
+
+    pub struct BisqService;
+    impl ConxianService for BisqService {
+        fn name(&self) -> &str { "Bisq" }
+        fn status(&self) -> ServiceStatus {
+            ServiceStatus {
+                service_name: self.name().to_string(),
+                status: "Active".to_string(),
+                version: "v1.2.0".to_string(),
+            }
+        }
+        fn handle_request(&self, _payload: &str) -> String {
+            "Bisq request processed".to_string()
+        }
+    }
+
+    pub struct RGBService;
+    impl ConxianService for RGBService {
+        fn name(&self) -> &str { "RGB" }
+        fn status(&self) -> ServiceStatus {
+            ServiceStatus {
+                service_name: self.name().to_string(),
+                status: "Active".to_string(),
+                version: "v0.10.0".to_string(),
+            }
+        }
+        fn handle_request(&self, _payload: &str) -> String {
+            "RGB request processed".to_string()
+        }
+    }
+}
