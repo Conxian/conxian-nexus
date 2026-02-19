@@ -56,6 +56,7 @@ pub async fn start_rest_server(storage: Arc<Storage>, nexus_state: Arc<NexusStat
         .route("/v1/proof", get(get_proof))
         .route("/v1/verify-state", post(verify_state))
         .route("/v1/status", get(get_status))
+        .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
         .with_state(state);
 
@@ -125,6 +126,10 @@ async fn get_status(
         safety_mode,
         drift,
     }))
+}
+
+async fn get_services_status() -> impl IntoResponse {
+    Json(crate::api::services::get_all_services_status())
 }
 
 async fn health_check() -> &'static str { "OK" }
