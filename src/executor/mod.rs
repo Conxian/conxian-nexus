@@ -1,11 +1,11 @@
 //! nexus-executor module provides a specialized environment for high-frequency trades
 //! and implements the FSOC (First-Seen-On-Chain) sequencer logic.
 
-use std::sync::Arc;
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 /// A request for off-chain execution.
@@ -27,7 +27,7 @@ impl NexusExecutor {
     pub fn new(storage: Arc<Storage>) -> Self {
         Self {
             storage,
-            latest_event_time_cache: Mutex::new(None)
+            latest_event_time_cache: Mutex::new(None),
         }
     }
 
@@ -39,11 +39,13 @@ impl NexusExecutor {
         if let Some(event_time) = latest_on_chain_event_time {
             // Strict verification against the Stacks microblock stream.
             if request.timestamp < event_time {
-                 tracing::warn!(
-                     "Transaction {} timestamp ({}) is before latest on-chain event ({}). Potential manipulation.",
-                     request.tx_id, request.timestamp, event_time
-                 );
-                 return Ok(false);
+                tracing::warn!(
+                    "Transaction {} timestamp ({}) is before latest on-chain event ({}). Potential manipulation.",
+                    request.tx_id,
+                    request.timestamp,
+                    event_time
+                );
+                return Ok(false);
             }
         }
 
@@ -65,9 +67,10 @@ impl NexusExecutor {
             }
         }
 
-        let row = sqlx::query(
-            "SELECT created_at FROM stacks_blocks ORDER BY created_at DESC LIMIT 1"
-        ).fetch_optional(&self.storage.pg_pool).await?;
+        let row =
+            sqlx::query("SELECT created_at FROM stacks_blocks ORDER BY created_at DESC LIMIT 1")
+                .fetch_optional(&self.storage.pg_pool)
+                .await?;
 
         let time = row.map(|r| r.get::<DateTime<Utc>, _>("created_at"));
 
@@ -96,7 +99,11 @@ impl NexusExecutor {
         let sender_count: i64 = row.get(0);
 
         if sender_count > 5 {
-            tracing::warn!("User {} is sending transactions too frequently: {}", request.sender, sender_count);
+            tracing::warn!(
+                "User {} is sending transactions too frequently: {}",
+                request.sender,
+                sender_count
+            );
             return Ok(true);
         }
 
@@ -112,7 +119,10 @@ impl NexusExecutor {
         let payload_count: i64 = row.get(0);
 
         if payload_count > 2 {
-            tracing::warn!("Multiple identical payloads detected in a short window: {}", payload_count);
+            tracing::warn!(
+                "Multiple identical payloads detected in a short window: {}",
+                payload_count
+            );
             return Ok(true);
         }
 

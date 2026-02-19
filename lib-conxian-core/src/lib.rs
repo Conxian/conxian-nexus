@@ -81,6 +81,21 @@ pub mod gateway {
         }
     }
 
+    pub struct BitVMService;
+    impl ConxianService for BitVMService {
+        fn name(&self) -> &str { "BitVM" }
+        fn status(&self) -> ServiceStatus {
+            ServiceStatus {
+                service_name: self.name().to_string(),
+                status: "Active".to_string(),
+                version: "v0.1.0".to_string(),
+            }
+        }
+        fn handle_request(&self, _payload: &str) -> String {
+            "BitVM request processed".to_string()
+        }
+    }
+
     pub struct RGBService;
     impl ConxianService for RGBService {
         fn name(&self) -> &str { "RGB" }

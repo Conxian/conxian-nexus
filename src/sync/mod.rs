@@ -3,13 +3,13 @@
 //! It distinguishes between microblock soft-finality and burn-block hard-finality
 //! to maintain an accurate off-chain representation of the Stacks L1 state.
 
-use serde::{Deserialize, Serialize};
-use crate::storage::Storage;
 use crate::state::NexusState;
-use std::sync::Arc;
+use crate::storage::Storage;
 use chrono::{DateTime, Utc};
-use sha2::{Sha256, Digest};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
+use std::sync::Arc;
 
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,11 +60,9 @@ impl NexusSync {
     /// Loads initial state from the database.
     pub async fn load_initial_state(&self) -> anyhow::Result<()> {
         tracing::info!("Loading initial state from database...");
-        let rows = sqlx::query(
-            "SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC"
-        )
-        .fetch_all(&self.storage.pg_pool)
-        .await?;
+        let rows = sqlx::query("SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC")
+            .fetch_all(&self.storage.pg_pool)
+            .await?;
 
         let leaves: Vec<String> = rows.into_iter().map(|r| r.get("tx_id")).collect();
         self.state.set_initial_leaves(leaves);
@@ -87,35 +85,38 @@ impl NexusSync {
 
     async fn simulate_event(&self) -> anyhow::Result<()> {
         let height = Utc::now().timestamp() as u64 / 600; // Mock height
-        let hash = format!("0x{:x}", Sha256::digest(format!("block-{}", Utc::now()).as_bytes()));
+        let hash = format!(
+            "0x{:x}",
+            Sha256::digest(format!("block-{}", Utc::now()).as_bytes())
+        );
 
-        if rand::random::<u8>() % 10 == 0 {
-             let event = StacksEvent::BurnBlock(BurnBlockData {
-                 hash,
-                 height,
-                 timestamp: Utc::now(),
-             });
-             self.handle_event(event).await?;
+        if rand::random::<u8>().is_multiple_of(10) {
+            let event = StacksEvent::BurnBlock(BurnBlockData {
+                hash,
+                height,
+                timestamp: Utc::now(),
+            });
+            self.handle_event(event).await?;
         } else {
-             let event = StacksEvent::Microblock(MicroblockData {
-                 hash,
-                 height,
-                 parent_hash: "0x...".to_string(),
-                 txs: vec![
-                     TransactionData {
-                         tx_id: "tx1".to_string(),
-                         sender: "SP123".to_string(),
-                         payload: Some("payload1".to_string())
-                     },
-                     TransactionData {
-                         tx_id: "tx2".to_string(),
-                         sender: "SP456".to_string(),
-                         payload: Some("payload2".to_string())
-                     },
-                 ],
-                 timestamp: Utc::now(),
-             });
-             self.handle_event(event).await?;
+            let event = StacksEvent::Microblock(MicroblockData {
+                hash,
+                height,
+                parent_hash: "0x...".to_string(),
+                txs: vec![
+                    TransactionData {
+                        tx_id: "tx1".to_string(),
+                        sender: "SP123".to_string(),
+                        payload: Some("payload1".to_string()),
+                    },
+                    TransactionData {
+                        tx_id: "tx2".to_string(),
+                        sender: "SP456".to_string(),
+                        payload: Some("payload2".to_string()),
+                    },
+                ],
+                timestamp: Utc::now(),
+            });
+            self.handle_event(event).await?;
         }
         Ok(())
     }
@@ -165,8 +166,15 @@ impl NexusSync {
         self.state.update_state_batch(&tx_ids);
 
         // Invalidate cache on new microblock
-        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
-        redis::cmd("DEL").arg("cache:vaults:all").query_async::<_, ()>(&mut conn).await?;
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await?;
+        redis::cmd("DEL")
+            .arg("cache:vaults:all")
+            .query_async::<_, ()>(&mut conn)
+            .await?;
 
         Ok(())
     }
@@ -178,10 +186,11 @@ impl NexusSync {
 
         // Update all previous soft blocks to hard state up to this height
         sqlx::query(
-            "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'"
+            "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'",
         )
         .bind(data.height as i64)
-        .execute(&mut *tx).await?;
+        .execute(&mut *tx)
+        .await?;
 
         sqlx::query(
             "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'burn_block', 'hard', $3) ON CONFLICT (hash) DO NOTHING"

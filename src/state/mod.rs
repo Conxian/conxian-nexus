@@ -1,6 +1,6 @@
-use std::sync::Mutex;
-use sha2::{Sha256, Digest};
 use chrono::{DateTime, Utc};
+use sha2::{Digest, Sha256};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MerkleProof {
@@ -15,9 +15,16 @@ pub struct NexusState {
     last_updated: Mutex<DateTime<Utc>>,
 }
 
+impl Default for NexusState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NexusState {
     pub fn new() -> Self {
-        let initial_root = "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        let initial_root =
+            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
         Self {
             leaves: Mutex::new(Vec::new()),
             state_root: Mutex::new(initial_root),
@@ -52,19 +59,27 @@ impl NexusState {
         let new_root = self.calculate_root(&leaves);
         *self.state_root.lock().unwrap() = new_root;
         *self.last_updated.lock().unwrap() = Utc::now();
-        tracing::info!("Nexus state initialized with {} leaves. Root: {}", leaves.len(), self.get_state_root());
+        tracing::info!(
+            "Nexus state initialized with {} leaves. Root: {}",
+            leaves.len(),
+            self.get_state_root()
+        );
     }
 
     fn calculate_root(&self, leaves: &[String]) -> String {
         if leaves.is_empty() {
-            return "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+            return "0x0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string();
         }
 
-        let mut current_level: Vec<[u8; 32]> = leaves.iter().map(|l| {
-            let mut hasher = Sha256::new();
-            hasher.update(l.as_bytes());
-            hasher.finalize().into()
-        }).collect();
+        let mut current_level: Vec<[u8; 32]> = leaves
+            .iter()
+            .map(|l| {
+                let mut hasher = Sha256::new();
+                hasher.update(l.as_bytes());
+                hasher.finalize().into()
+            })
+            .collect();
 
         while current_level.len() > 1 {
             let mut next_level = Vec::new();
@@ -91,7 +106,7 @@ impl NexusState {
                 let proof_json = serde_json::to_string(&proof).unwrap_or_default();
                 (proof.root, proof_json)
             }
-            None => (self.get_state_root(), "{}".to_string())
+            None => (self.get_state_root(), "{}".to_string()),
         }
     }
 
@@ -99,11 +114,14 @@ impl NexusState {
         let leaves = self.leaves.lock().unwrap();
         let index = leaves.iter().position(|l| l == key)?;
 
-        let mut current_level: Vec<[u8; 32]> = leaves.iter().map(|l| {
-            let mut hasher = Sha256::new();
-            hasher.update(l.as_bytes());
-            hasher.finalize().into()
-        }).collect();
+        let mut current_level: Vec<[u8; 32]> = leaves
+            .iter()
+            .map(|l| {
+                let mut hasher = Sha256::new();
+                hasher.update(l.as_bytes());
+                hasher.finalize().into()
+            })
+            .collect();
 
         let mut path = Vec::new();
         let mut idx = index;
@@ -121,7 +139,10 @@ impl NexusState {
                 idx - 1
             };
 
-            path.push((format!("0x{}", hex::encode(current_level[sibling_idx])), idx % 2 == 0));
+            path.push((
+                format!("0x{}", hex::encode(current_level[sibling_idx])),
+                idx % 2 == 0,
+            ));
 
             for chunk in current_level.chunks(2) {
                 let mut hasher = Sha256::new();

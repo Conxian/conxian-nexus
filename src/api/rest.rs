@@ -1,15 +1,15 @@
+use crate::state::NexusState;
+use crate::storage::Storage;
 use axum::{
-    routing::{get, post},
-    extract::{Query, State, Json},
     Router,
+    extract::{Json, Query, State},
     http::StatusCode,
     response::IntoResponse,
+    routing::{get, post},
 };
-use std::sync::Arc;
-use crate::storage::Storage;
-use crate::state::NexusState;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -46,7 +46,11 @@ pub struct StatusResponse {
     drift: u64,
 }
 
-pub async fn start_rest_server(storage: Arc<Storage>, nexus_state: Arc<NexusState>, port: u16) -> anyhow::Result<()> {
+pub async fn start_rest_server(
+    storage: Arc<Storage>,
+    nexus_state: Arc<NexusState>,
+    port: u16,
+) -> anyhow::Result<()> {
     let state = AppState {
         storage,
         nexus_state,
@@ -71,10 +75,7 @@ async fn get_proof(
     Query(params): Query<ProofParams>,
 ) -> impl IntoResponse {
     let (hash, proof) = state.nexus_state.generate_proof(&params.key);
-    Json(ProofResponse {
-        hash,
-        proof,
-    })
+    Json(ProofResponse { hash, proof })
 }
 
 async fn verify_state(
@@ -87,9 +88,7 @@ async fn verify_state(
     })
 }
 
-async fn get_status(
-    State(state): State<AppState>,
-) -> Result<Json<StatusResponse>, StatusCode> {
+async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {
     let state_root = state.nexus_state.get_state_root();
 
     let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
@@ -102,7 +101,11 @@ async fn get_status(
 
     let processed_height: Option<i64> = row.get("max_height");
 
-    let mut conn = state.storage.redis_client.get_multiplexed_async_connection().await
+    let mut conn = state
+        .storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
         .map_err(|e| {
             tracing::error!("Redis connection error in get_status: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -132,4 +135,6 @@ async fn get_services_status() -> impl IntoResponse {
     Json(crate::api::services::get_all_services_status())
 }
 
-async fn health_check() -> &'static str { "OK" }
+async fn health_check() -> &'static str {
+    "OK"
+}
