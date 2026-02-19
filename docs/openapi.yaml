@@ -47,3 +47,50 @@ paths:
                 properties:
                   valid:
                     type: boolean
+  /v1/status:
+    get:
+      summary: Get system health and sync status
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state_root:
+                    type: string
+                  processed_height:
+                    type: integer
+                  safety_mode:
+                    type: boolean
+                  drift:
+                    type: integer
+  /v1/services:
+    get:
+      summary: Get status of multi-protocol services (Bisq, RGB, BitVM)
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        service_name:
+                          type: string
+                        status:
+                          type: string
+                        version:
+                          type: string
+  /health:
+    get:
+      summary: Basic health check
+      responses:
+        '200':
+          description: OK

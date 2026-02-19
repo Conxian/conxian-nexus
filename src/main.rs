@@ -1,11 +1,11 @@
-use std::sync::Arc;
-use tokio::signal;
+use conxian_nexus::api;
+use conxian_nexus::config::Config;
+use conxian_nexus::safety::NexusSafety;
+use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
-use conxian_nexus::safety::NexusSafety;
-use conxian_nexus::config::Config;
-use conxian_nexus::state::NexusState;
-use conxian_nexus::api;
+use std::sync::Arc;
+use tokio::signal;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,7 +33,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Services
     let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone()));
-    let safety_service = Arc::new(NexusSafety::new(storage.clone(), config.stacks_node_rpc_url.clone()));
+    let safety_service = Arc::new(NexusSafety::new(
+        storage.clone(),
+        config.stacks_node_rpc_url.clone(),
+    ));
 
     // Load Initial State from DB
     sync_service.load_initial_state().await?;
