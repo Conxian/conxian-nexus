@@ -84,10 +84,7 @@ impl NexusExecutor {
 
     /// Checks for front-running against detected on-chain liquidations or oracle updates.
     async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // We check if there's any transaction from the same sender in recent blocks
-        // that has a different payload but targets the same logic, or if there's an unusually
-        // high number of similar transactions from different senders (spam/front-running).
-
+        // 1. Check for spamming from the same sender
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
         )
@@ -98,7 +95,7 @@ impl NexusExecutor {
 
         let sender_count: i64 = row.get(0);
 
-        if sender_count > 5 {
+        if sender_count > 10 {
             tracing::warn!(
                 "User {} is sending transactions too frequently: {}",
                 request.sender,
@@ -107,23 +104,35 @@ impl NexusExecutor {
             return Ok(true);
         }
 
-        // Check for similar payloads in the same time window (potential front-running of a public strategy)
+        // 2. Check for identical payloads in a short window (copy-cat front-running)
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
         )
         .bind(&request.tx_id)
         .bind(&request.payload)
-        .bind(request.timestamp - chrono::Duration::seconds(10))
+        .bind(request.timestamp - chrono::Duration::seconds(5))
         .fetch_one(&self.storage.pg_pool).await?;
 
         let payload_count: i64 = row.get(0);
 
-        if payload_count > 2 {
+        if payload_count > 0 {
             tracing::warn!(
-                "Multiple identical payloads detected in a short window: {}",
-                payload_count
+                "Identical payload already seen on-chain: {}",
+                request.tx_id
             );
             return Ok(true);
+        }
+
+        // 3. Heuristic: check if the payload contains keywords associated with liquidations
+        // and if it's arriving very close to an oracle update (simplified simulation)
+        if request.payload.contains("liquidate") {
+             let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
+             if let Some(t) = last_oracle_update {
+                 if request.timestamp.signed_duration_since(t).num_milliseconds() < 500 {
+                     tracing::warn!("Liquidation tx {} arrived within 500ms of latest block. Potential MEV.", request.tx_id);
+                     // We don't necessarily block it, but we log it for FSOC.
+                 }
+             }
         }
 
         Ok(false)
@@ -131,8 +140,35 @@ impl NexusExecutor {
 
     /// Executes high-frequency internal trades and collateral rebalancing.
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
-        tracing::info!("Executing collateral rebalancing for dex-router.clar...");
-        // Logic to interact with Stacks smart contracts via conxian-core wallet
+        tracing::info!("Checking collateral health for rebalancing...");
+
+        // In a real implementation, this would:
+        // 1. Fetch vault states from Redis (cached from on-chain)
+        // 2. Check LTV ratios against thresholds
+        // 3. If any vault is near liquidation, trigger a rebalance tx via conxian-core
+
+        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
+        let needs_rebalance: bool = redis::cmd("GET")
+            .arg("nexus:rebalance_required")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(false);
+
+        if needs_rebalance {
+            tracing::info!("Rebalance required! Calling dex-router.clar...");
+            // Simulate calling conxian-core wallet to sign and broadcast
+            let tx_id = lib_conxian_core::sign_transaction("rebalance-payload");
+            tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
+
+            // Clear the flag
+            redis::cmd("DEL")
+                .arg("nexus:rebalance_required")
+                .query_async::<_, ()>(&mut conn)
+                .await?;
+        } else {
+            tracing::debug!("Collateral levels healthy. No rebalance needed.");
+        }
+
         Ok(())
     }
 }

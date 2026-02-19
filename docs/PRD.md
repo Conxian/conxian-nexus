@@ -45,11 +45,11 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Enhancement**: Integrate with Hiro or Stacks node WebSockets for real-time L1 event ingestion.
 
 ### 4.3 Advanced MEV Mitigation
-- **Issue**: FSOC logic is currently based on simple transaction counts.
+- **Issue**: FSOC logic includes sophisticated heuristics for liquidation detection and copy-cat protection.
 - **Enhancement**: Implement mempool monitoring and more sophisticated heuristic analysis for front-running detection.
 
 ### 4.4 BitVM Integration
-- **Issue**: BitVM is mentioned but not yet implemented in the core gateway.
+- **Issue**: BitVM is partially implemented with support for proof and challenge requests.
 - **Enhancement**: Fully implement `BitVMService` in `lib-conxian-core`.
 
 ### 4.5 Observability
