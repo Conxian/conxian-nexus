@@ -14,7 +14,7 @@ impl Config {
     pub fn from_env() -> Self {
         Self {
             database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://postgres:postgres@localhost/nexus".to_string()),
+                .unwrap_or_else(|_| "postgres://localhost/nexus".to_string()),
             redis_url: env::var("REDIS_URL")
                 .unwrap_or_else(|_| "redis://127.0.0.1/".to_string()),
             rest_port: env::var("REST_PORT")

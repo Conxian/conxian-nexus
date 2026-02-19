@@ -7,9 +7,9 @@ services:
       - "3000:3000"
       - "50051:50051"
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/nexus
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-nexus}
       - REDIS_URL=redis://redis:6379/
-      - STACKS_NODE_RPC_URL=https://api.mainnet.hiro.so
+      - STACKS_NODE_RPC_URL=${STACKS_NODE_RPC_URL:-https://api.mainnet.hiro.so}
       - RUST_LOG=info
     depends_on:
       postgres:
@@ -20,13 +20,13 @@ services:
   postgres:
     image: postgres:15
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=nexus
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-nexus}
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
