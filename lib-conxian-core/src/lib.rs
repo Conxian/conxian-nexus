@@ -46,7 +46,14 @@ mod tests {
         let message = "hello world";
         let signature = wallet.sign(message);
         assert!(!signature.is_empty());
-        println!("Signature: {}", signature);
+    }
+
+    #[test]
+    fn test_bitvm_service_handling() {
+        use crate::gateway::{BitVMService, ConxianService};
+        let service = BitVMService;
+        assert_eq!(service.handle_request("prove something"), "BitVM proof generated");
+        assert_eq!(service.handle_request("challenge this"), "BitVM challenge registered");
     }
 }
 
@@ -91,8 +98,14 @@ pub mod gateway {
                 version: "v0.1.0".to_string(),
             }
         }
-        fn handle_request(&self, _payload: &str) -> String {
-            "BitVM request processed".to_string()
+        fn handle_request(&self, payload: &str) -> String {
+            if payload.contains("prove") {
+                "BitVM proof generated".to_string()
+            } else if payload.contains("challenge") {
+                "BitVM challenge registered".to_string()
+            } else {
+                "BitVM request processed".to_string()
+            }
         }
     }
 

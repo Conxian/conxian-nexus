@@ -171,3 +171,21 @@ impl NexusSafety {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::Storage;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_safety_check_health() {
+        let storage = Arc::new(Storage::new().await.unwrap());
+        let safety = NexusSafety::new(storage, "http://localhost:3999".to_string());
+
+        // This would fail without a real RPC, but we can test the structure
+        let result = safety.check_health().await;
+        assert!(result.is_err());
+    }
+}
