@@ -1,6 +1,7 @@
 use k256::ecdsa::{SigningKey, Signature, signature::Signer};
 use rand::rngs::OsRng;
 use sha2::{Sha256, Digest};
+use std::env;
 
 pub struct Wallet {
     signing_key: SigningKey,
@@ -8,6 +9,16 @@ pub struct Wallet {
 
 impl Wallet {
     pub fn new() -> Self {
+        // Try to load from NEXUS_PRIVATE_KEY
+        if let Ok(hex_key) = env::var("NEXUS_PRIVATE_KEY") {
+            if let Ok(bytes) = hex::decode(hex_key) {
+                if let Ok(key) = SigningKey::from_slice(&bytes) {
+                    return Self { signing_key: key };
+                }
+            }
+        }
+
+        // Fallback to random
         let signing_key = SigningKey::random(&mut OsRng);
         Self { signing_key }
     }
@@ -31,7 +42,6 @@ impl Wallet {
 }
 
 pub fn sign_transaction(tx_id: &str) -> String {
-    // Legacy support or simplified helper
     let wallet = Wallet::new();
     wallet.sign(tx_id)
 }
@@ -46,6 +56,19 @@ mod tests {
         let message = "hello world";
         let signature = wallet.sign(message);
         assert!(!signature.is_empty());
+    }
+
+    #[test]
+    fn test_wallet_from_env() {
+        let key = "0101010101010101010101010101010101010101010101010101010101010101";
+        unsafe {
+            env::set_var("NEXUS_PRIVATE_KEY", key);
+        }
+        let wallet = Wallet::new();
+        assert_eq!(wallet.public_key(), "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f");
+        unsafe {
+            env::remove_var("NEXUS_PRIVATE_KEY");
+        }
     }
 
     #[test]
