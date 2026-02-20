@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
     let state_tracker = Arc::new(NexusState::new());
 
     // Initialize Services
-    let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone()));
+    let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone(), config.stacks_node_rpc_url.clone()));
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),
         config.stacks_node_rpc_url.clone(),

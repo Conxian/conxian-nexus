@@ -7,18 +7,18 @@ Conxian Nexus is a high-performance Rust-based middleware designed to synchroniz
 - **Unified Architecture**: Consumes `lib-conxian-core` to run Multi-Protocol Services (Bisq/RGB/BitVM) alongside core Network Health logic.
 - **Glass Node Activated**: Real-world awareness via Stacks Node RPC polling for accurate burn-block height tracking.
 - **Nakamoto Awareness**: Tracks Stacks Epoch 3.0/3.1 finality, differentiating between microblock soft-finality and burn-block hard-finality.
-- **FSOC Sequencer**: Implements "First-Seen-On-Chain" (FSOC) transaction ordering to prevent front-running.
+- **FSOC Sequencer**: Implements "First-Seen-On-Chain" (FSOC) transaction ordering and LTV-based rebalancing to prevent front-running and maintain health.
 - **Sovereign Handoff**: A safety protocol that monitors sync drift and enables "Direct Withdrawal Tenure" if the Nexus falls behind.
-- **Cryptographic Verification**: Provides a `/v1/proof` endpoint for verifiable state matching against the Stacks MARF tip.
+- **Cryptographic Verification**: Provides a `/v1/proof` endpoint and gRPC methods for verifiable state matching against the Stacks MARF tip.
 
 ## Architecture
 
 The Nexus is composed of several functional modules:
-- **nexus-sync**: Ingests Stacks node events (simulated or real) and updates local persistence.
-- **nexus-executor**: specialized execution environment for high-frequency internal trades and rebalancing.
+- **nexus-sync**: Ingests Stacks node events (simulated or real) and updates local persistence with Merkle root tracking in Redis.
+- **nexus-executor**: specialized execution environment for high-frequency internal trades and LTV-based rebalancing.
 - **nexus-safety**: Heartbeat service for health monitoring and safety mode triggers based on real L1 height.
 - **API (REST & gRPC)**: High-throughput interfaces for external and internal communication.
-- **lib-conxian-core**: Shared library for wallet logic and multi-protocol gateway services.
+- **lib-conxian-core**: Shared library for wallet logic and multi-protocol gateway services (Enhanced BitVM support).
 
 ## Getting Started
 
@@ -62,11 +62,15 @@ This will start the Nexus node, PostgreSQL 15, and Redis 7.
 ## API Documentation
 
 - **REST API**: Running on port 3000
-  - `GET /v1/status`: System health and sync status.
+  - `GET /v1/status`: System health, sync status, and state root.
   - `GET /v1/services`: Status of multi-protocol services (Bisq, RGB, BitVM).
   - `GET /v1/proof?key=<tx_id>`: Merkle proof for a transaction.
   - `POST /v1/verify-state`: Verify a state root.
 - **gRPC**: Running on port 50051 (See `proto/nexus.proto`)
+  - `GetProof`: Retrieve Merkle proof.
+  - `VerifyState`: Check state root validity.
+  - `GetStatus`: Comprehensive system status.
+  - `GetServices`: Multi-protocol service health.
 
 ## Testing
 
