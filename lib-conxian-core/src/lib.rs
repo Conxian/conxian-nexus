@@ -52,8 +52,9 @@ mod tests {
     fn test_bitvm_service_handling() {
         use crate::gateway::{BitVMService, ConxianService};
         let service = BitVMService;
-        assert_eq!(service.handle_request("prove something"), "BitVM proof generated");
-        assert_eq!(service.handle_request("challenge this"), "BitVM challenge registered");
+        assert!(service.handle_request("prove something").contains("BitVM proof generated"));
+        assert!(service.handle_request("challenge this").contains("BitVM challenge registered"));
+        assert!(service.handle_request("verify").contains("BitVM verification successful"));
     }
 }
 
@@ -100,11 +101,13 @@ pub mod gateway {
         }
         fn handle_request(&self, payload: &str) -> String {
             if payload.contains("prove") {
-                "BitVM proof generated".to_string()
+                format!("BitVM proof generated for: {}", payload)
             } else if payload.contains("challenge") {
-                "BitVM challenge registered".to_string()
+                format!("BitVM challenge registered: {}", payload)
+            } else if payload.contains("verify") {
+                format!("BitVM verification successful for: {}", payload)
             } else {
-                "BitVM request processed".to_string()
+                "BitVM generic request processed".to_string()
             }
         }
     }

@@ -65,7 +65,25 @@ impl NexusSync {
             .await?;
 
         let leaves: Vec<String> = rows.into_iter().map(|r| r.get("tx_id")).collect();
+        let count = leaves.len();
         self.state.set_initial_leaves(leaves);
+
+        let root = self.state.get_state_root();
+        tracing::info!("State rebuilt: {} leaves, root: {}", count, root);
+
+        // Persist the verified root to Redis for fast health checks
+        self.persist_root_to_redis(&root).await.ok();
+
+        Ok(())
+    }
+
+    async fn persist_root_to_redis(&self, root: &str) -> anyhow::Result<()> {
+        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
+        redis::cmd("SET")
+            .arg("nexus:state_root")
+            .arg(root)
+            .query_async::<_, ()>(&mut conn)
+            .await?;
         Ok(())
     }
 
@@ -170,19 +188,20 @@ impl NexusSync {
         tx.commit().await?;
 
         // Update cryptographic state root with Merkle Tree
-        let tx_ids: Vec<String> = data.txs.into_iter().map(|t| t.tx_id).collect();
+        let tx_ids: Vec<String> = data.txs.iter().map(|t| t.tx_id.clone()).collect();
         self.state.update_state_batch(&tx_ids);
 
+        // Persist new root
+        let root = self.state.get_state_root();
+        self.persist_root_to_redis(&root).await.ok();
+
         // Invalidate cache on new microblock
-        let mut conn = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await?;
-        redis::cmd("DEL")
-            .arg("cache:vaults:all")
-            .query_async::<_, ()>(&mut conn)
-            .await?;
+        if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
+            redis::cmd("DEL")
+                .arg("cache:vaults:all")
+                .query_async::<_, ()>(&mut conn)
+                .await.ok();
+        }
 
         Ok(())
     }
@@ -213,6 +232,9 @@ impl NexusSync {
         // Update state root for burn block
         self.state.update_state(&data.hash, 0);
 
+        let root = self.state.get_state_root();
+        self.persist_root_to_redis(&root).await.ok();
+
         Ok(())
     }
 }
@@ -225,7 +247,6 @@ mod tests {
     use std::sync::Arc;
 
     // Note: These tests are disabled by default as they require a running Postgres/Redis.
-    // In a real CI, they would run against a test container.
     #[tokio::test]
     #[ignore]
     async fn test_handle_microblock_event() {
@@ -246,6 +267,7 @@ mod tests {
         });
 
         sync.handle_event(event).await.unwrap();
-        assert_eq!(sync.state.get_state_root(), "..."); // Should verify the root changed
+        // Should verify the root changed
+        assert_ne!(sync.state.get_state_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
     }
 }

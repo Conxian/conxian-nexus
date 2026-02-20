@@ -51,7 +51,7 @@ impl NexusSafety {
         let current_burn_height = self.get_external_burn_height().await?;
         let processed_height = self.get_processed_height().await?;
 
-        let delta = current_burn_height.saturating_sub(processed_height);
+        let delta = Self::calculate_drift(current_burn_height, processed_height);
 
         if delta > self.max_drift {
             tracing::error!(
@@ -67,6 +67,10 @@ impl NexusSafety {
         }
 
         Ok(())
+    }
+
+    pub fn calculate_drift(current: u64, processed: u64) -> u64 {
+        current.saturating_sub(processed)
     }
 
     async fn get_external_burn_height(&self) -> anyhow::Result<u64> {
@@ -175,17 +179,11 @@ impl NexusSafety {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::Storage;
-    use std::sync::Arc;
 
-    #[tokio::test]
-    #[ignore]
-    async fn test_safety_check_health() {
-        let storage = Arc::new(Storage::new().await.unwrap());
-        let safety = NexusSafety::new(storage, "http://localhost:3999".to_string());
-
-        // This would fail without a real RPC, but we can test the structure
-        let result = safety.check_health().await;
-        assert!(result.is_err());
+    #[test]
+    fn test_calculate_drift() {
+        assert_eq!(NexusSafety::calculate_drift(100, 98), 2);
+        assert_eq!(NexusSafety::calculate_drift(100, 102), 0);
+        assert_eq!(NexusSafety::calculate_drift(100, 100), 0);
     }
 }

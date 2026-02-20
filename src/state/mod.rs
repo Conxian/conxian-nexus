@@ -66,6 +66,9 @@ impl NexusState {
         );
     }
 
+    /// Optimized Merkle root calculation.
+    /// In a production environment with millions of leaves, this would use
+    /// an incremental approach or a persistent Merkle Mountain Range.
     fn calculate_root(&self, leaves: &[String]) -> String {
         if leaves.is_empty() {
             return "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -82,7 +85,7 @@ impl NexusState {
             .collect();
 
         while current_level.len() > 1 {
-            let mut next_level = Vec::new();
+            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
             for chunk in current_level.chunks(2) {
                 let mut hasher = Sha256::new();
                 if chunk.len() == 2 {
@@ -127,8 +130,6 @@ impl NexusState {
         let mut idx = index;
 
         while current_level.len() > 1 {
-            let mut next_level = Vec::new();
-
             let sibling_idx = if idx % 2 == 0 {
                 if idx + 1 < current_level.len() {
                     idx + 1
@@ -144,6 +145,7 @@ impl NexusState {
                 idx % 2 == 0,
             ));
 
+            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
             for chunk in current_level.chunks(2) {
                 let mut hasher = Sha256::new();
                 if chunk.len() == 2 {

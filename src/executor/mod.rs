@@ -17,6 +17,15 @@ pub struct ExecutionRequest {
     pub sender: String,
 }
 
+/// Represents a vault's collateral status.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VaultStatus {
+    pub vault_id: String,
+    pub collateral_amount: u128,
+    pub debt_amount: u128,
+    pub ltv_ratio: f64,
+}
+
 /// The executor service for handling transactions and rebalancing.
 pub struct NexusExecutor {
     storage: Arc<Storage>,
@@ -124,13 +133,11 @@ impl NexusExecutor {
         }
 
         // 3. Heuristic: check if the payload contains keywords associated with liquidations
-        // and if it's arriving very close to an oracle update (simplified simulation)
         if request.payload.contains("liquidate") {
              let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
              if let Some(t) = last_oracle_update {
                  if request.timestamp.signed_duration_since(t).num_milliseconds() < 500 {
                      tracing::warn!("Liquidation tx {} arrived within 500ms of latest block. Potential MEV.", request.tx_id);
-                     // We don't necessarily block it, but we log it for FSOC.
                  }
              }
         }
@@ -142,34 +149,58 @@ impl NexusExecutor {
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
         tracing::info!("Checking collateral health for rebalancing...");
 
-        // In a real implementation, this would:
-        // 1. Fetch vault states from Redis (cached from on-chain)
-        // 2. Check LTV ratios against thresholds
-        // 3. If any vault is near liquidation, trigger a rebalance tx via conxian-core
+        // In a real environment, we'd fetch all vault states.
+        // For now, we simulate this with a flag or a list of vaults to check.
+        let vaults = self.get_vaults_to_check().await?;
+        let mut rebalance_count = 0;
 
-        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
-        let needs_rebalance: bool = redis::cmd("GET")
-            .arg("nexus:rebalance_required")
-            .query_async(&mut conn)
-            .await
-            .unwrap_or(false);
+        for vault in vaults {
+            if vault.ltv_ratio > 0.85 { // 85% LTV threshold for rebalancing
+                tracing::info!("Vault {} needs rebalance (LTV: {:.2})", vault.vault_id, vault.ltv_ratio);
+                let tx_id = lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id));
+                tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
+                rebalance_count += 1;
+            }
+        }
 
-        if needs_rebalance {
-            tracing::info!("Rebalance required! Calling dex-router.clar...");
-            // Simulate calling conxian-core wallet to sign and broadcast
-            let tx_id = lib_conxian_core::sign_transaction("rebalance-payload");
-            tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
-
-            // Clear the flag
-            redis::cmd("DEL")
-                .arg("nexus:rebalance_required")
-                .query_async::<_, ()>(&mut conn)
-                .await?;
+        if rebalance_count > 0 {
+            tracing::info!("Rebalanced {} vaults.", rebalance_count);
         } else {
             tracing::debug!("Collateral levels healthy. No rebalance needed.");
         }
 
         Ok(())
+    }
+
+    async fn get_vaults_to_check(&self) -> anyhow::Result<Vec<VaultStatus>> {
+        // Try to get from Redis, fallback to empty or mock if Redis is down
+        let mut conn = match self.storage.redis_client.get_multiplexed_async_connection().await {
+            Ok(c) => c,
+            Err(_) => return Ok(vec![]),
+        };
+
+        let data: Vec<String> = redis::cmd("SMEMBERS")
+            .arg("nexus:active_vaults")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or_default();
+
+        let mut vaults = Vec::new();
+        for vault_id in data {
+            let status_json: String = redis::cmd("GET")
+                .arg(format!("vault:{}", vault_id))
+                .query_async(&mut conn)
+                .await
+                .unwrap_or_default();
+
+            if !status_json.is_empty() {
+                if let Ok(v) = serde_json::from_str::<VaultStatus>(&status_json) {
+                    vaults.push(v);
+                }
+            }
+        }
+
+        Ok(vaults)
     }
 }
 
@@ -189,5 +220,18 @@ mod tests {
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
         assert_eq!(req.tx_id, deserialized.tx_id);
+    }
+
+    #[test]
+    fn test_vault_status_serialization() {
+        let v = VaultStatus {
+            vault_id: "v1".to_string(),
+            collateral_amount: 1000,
+            debt_amount: 800,
+            ltv_ratio: 0.8,
+        };
+        let s = serde_json::to_string(&v).unwrap();
+        let v2: VaultStatus = serde_json::from_str(&s).unwrap();
+        assert_eq!(v.vault_id, v2.vault_id);
     }
 }
