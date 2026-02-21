@@ -124,7 +124,9 @@ pub mod gateway {
         }
         fn handle_request(&self, payload: &str) -> String {
             if payload.contains("prove") {
-                format!("BitVM proof generated for: {}", payload)
+                // Trigger IaaS Fee Payout
+                let fee_tx = crate::sign_transaction("agent-treasury:deposit-service-fee");
+                format!("BitVM proof generated for: {}. Fee deposited: {}", payload, fee_tx)
             } else if payload.contains("challenge") {
                 format!("BitVM challenge registered: {}", payload)
             } else if payload.contains("verify") {

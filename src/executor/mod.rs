@@ -165,6 +165,9 @@ impl NexusExecutor {
 
         if rebalance_count > 0 {
             tracing::info!("Rebalanced {} vaults.", rebalance_count);
+            // Signal bounty success to the Stacks contract
+            let signal_tx = lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success");
+            tracing::info!("Bounty success signaled: {}", signal_tx);
         } else {
             tracing::debug!("Collateral levels healthy. No rebalance needed.");
         }
