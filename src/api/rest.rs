@@ -64,16 +64,12 @@ pub struct ExecutionResponse {
     message: String,
 }
 
-static START_TIME: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-
 pub async fn start_rest_server(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     port: u16,
 ) -> anyhow::Result<()> {
-    START_TIME.get_or_init(std::time::Instant::now);
-
     let state = AppState {
         storage,
         nexus_state,
@@ -174,7 +170,7 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
     let safety_mode: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
     let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
 
-    let uptime = START_TIME.get().map(|t| t.elapsed().as_secs()).unwrap_or(0);
+    let uptime = crate::api::get_uptime();
 
     Ok(Json(MetricsResponse {
         total_transactions: tx_count as u64,

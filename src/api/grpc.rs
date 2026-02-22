@@ -13,6 +13,7 @@ use nexus_proto::nexus_service_server::{NexusService, NexusServiceServer};
 use nexus_proto::{
     ProofRequest, ProofResponse, VerifyStateRequest, VerifyStateResponse,
     StatusRequest, StatusResponse, ServicesRequest, ServicesResponse,
+    MetricsRequest, MetricsResponse, ExecuteRequest, ExecuteResponse,
     ServiceStatus as ProtoServiceStatus
 };
 
@@ -82,6 +83,73 @@ impl NexusService for MyNexusService {
             safety_mode,
             drift,
         }))
+    }
+
+    async fn get_metrics(
+        &self,
+        _request: Request<MetricsRequest>,
+    ) -> Result<Response<MetricsResponse>, Status> {
+        let tx_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_transactions")
+            .fetch_one(&self.storage.pg_pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        let block_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_blocks")
+            .fetch_one(&self.storage.pg_pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await
+            .map_err(|e| Status::internal(format!("Redis error: {}", e)))?;
+        let safety_mode: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
+        let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
+
+        let uptime = crate::api::get_uptime();
+
+        Ok(Response::new(MetricsResponse {
+            total_transactions: tx_count as u64,
+            total_blocks: block_count as u64,
+            safety_mode,
+            drift,
+            uptime_seconds: uptime,
+        }))
+    }
+
+    async fn execute(
+        &self,
+        request: Request<ExecuteRequest>,
+    ) -> Result<Response<ExecuteResponse>, Status> {
+        let req = request.into_inner();
+        let execution_request = crate::executor::ExecutionRequest {
+            tx_id: req.tx_id.clone(),
+            payload: req.payload,
+            sender: req.sender,
+            timestamp: chrono::DateTime::parse_from_rfc3339(&req.timestamp)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now()),
+        };
+
+        match self.executor.validate_transaction(&execution_request).await {
+            Ok(true) => {
+                Ok(Response::new(ExecuteResponse {
+                    tx_id: req.tx_id,
+                    status: "Success".to_string(),
+                    message: "Transaction validated by FSOC Sequencer and executed.".to_string(),
+                }))
+            }
+            Ok(false) => {
+                Ok(Response::new(ExecuteResponse {
+                    tx_id: req.tx_id,
+                    status: "Rejected".to_string(),
+                    message: "Transaction rejected by FSOC Sequencer (Potential MEV/Front-running).".to_string(),
+                }))
+            }
+            Err(e) => {
+                Err(Status::internal(format!("Internal error during validation: {}", e)))
+            }
+        }
     }
 
     async fn get_services(

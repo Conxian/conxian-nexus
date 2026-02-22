@@ -23,6 +23,9 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Initializing Conxian Nexus (Glass Node)...");
 
+    // Initialize Global Start Time
+    api::init_start_time();
+
     // Initialize Storage
     let storage = Arc::new(Storage::new().await?);
 
