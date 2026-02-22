@@ -1,58 +1,18 @@
-openapi: 3.0.0
+openapi: 3.0.3
 info:
-  title: Conxian Nexus API
-  version: 1.0.0
-  description: API for Conxian Nexus (Glass Node)
+  title: Conxian Nexus (Glass Node) API
+  description: High-performance middleware for Stacks L1 state synchronization and multi-protocol support.
+  version: 0.1.0
+servers:
+  - url: http://localhost:3000
+    description: Local development server
 paths:
-  /v1/proof:
-    get:
-      summary: Get cryptographic proof
-      parameters:
-        - name: key
-          in: query
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  hash:
-                    type: string
-                  proof:
-                    type: string
-  /v1/verify-state:
-    post:
-      summary: Verify state against MARF tip
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                state_root:
-                  type: string
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  valid:
-                    type: boolean
   /v1/status:
     get:
-      summary: Get system health and sync status
+      summary: Get system status
       responses:
         '200':
-          description: Successful response
+          description: OK
           content:
             application/json:
               schema:
@@ -66,12 +26,100 @@ paths:
                     type: boolean
                   drift:
                     type: integer
-  /v1/services:
+  /v1/metrics:
     get:
-      summary: Get status of multi-protocol services (Bisq, RGB, BitVM)
+      summary: Get system metrics
       responses:
         '200':
-          description: Successful response
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_transactions:
+                    type: integer
+                  total_blocks:
+                    type: integer
+                  safety_mode:
+                    type: boolean
+                  drift:
+                    type: integer
+                  uptime_seconds:
+                    type: integer
+  /v1/proof:
+    get:
+      summary: Get Merkle proof for a transaction
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hash:
+                    type: string
+                  proof:
+                    type: string
+  /v1/verify-state:
+    post:
+      summary: Verify a state root
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state_root:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+  /v1/execute:
+    post:
+      summary: Execute a transaction via FSOC Sequencer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tx_id:
+                  type: string
+                payload:
+                  type: string
+                sender:
+                  type: string
+                timestamp:
+                  type: string
+                  format: date-time
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Rejected by FSOC
+  /v1/services:
+    get:
+      summary: Get status of multi-protocol services
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:
@@ -90,7 +138,7 @@ paths:
                           type: string
   /health:
     get:
-      summary: Basic health check
+      summary: Health check
       responses:
         '200':
           description: OK

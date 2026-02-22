@@ -1,5 +1,6 @@
 use crate::state::NexusState;
 use crate::storage::Storage;
+use crate::executor::NexusExecutor;
 use std::sync::Arc;
 use tonic::{Request, Response, Status, transport::Server};
 use sqlx::Row;
@@ -18,6 +19,7 @@ use nexus_proto::{
 pub struct MyNexusService {
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
+    executor: Arc<NexusExecutor>,
 }
 
 #[tonic::async_trait]
@@ -100,12 +102,14 @@ impl NexusService for MyNexusService {
 pub async fn start_grpc_server(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
+    executor: Arc<NexusExecutor>,
     port: u16,
 ) -> anyhow::Result<()> {
     let addr = format!("0.0.0.0:{}", port).parse()?;
     let nexus_service = MyNexusService {
         storage,
         nexus_state,
+        executor,
     };
 
     tracing::info!("gRPC server listening on {}", addr);

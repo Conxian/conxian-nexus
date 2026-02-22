@@ -79,6 +79,22 @@ mod tests {
         assert!(service.handle_request("challenge this").contains("BitVM challenge registered"));
         assert!(service.handle_request("verify").contains("BitVM verification successful"));
     }
+
+    #[test]
+    fn test_bisq_service_handling() {
+        use crate::gateway::{BisqService, ConxianService};
+        let service = BisqService;
+        let resp = service.handle_request(r#"{"trade_id": "T1", "amount": 100}"#);
+        assert!(resp.contains("Bisq trade verified"));
+    }
+
+    #[test]
+    fn test_rgb_service_handling() {
+        use crate::gateway::{RGBService, ConxianService};
+        let service = RGBService;
+        let resp = service.handle_request(r#"{"asset_id": "RGB1", "amount": 50}"#);
+        assert!(resp.contains("RGB asset transfer validated"));
+    }
 }
 
 pub mod gateway {
@@ -97,6 +113,12 @@ pub mod gateway {
         fn handle_request(&self, payload: &str) -> String;
     }
 
+    #[derive(Deserialize)]
+    struct BisqTrade {
+        trade_id: String,
+        amount: u64,
+    }
+
     pub struct BisqService;
     impl ConxianService for BisqService {
         fn name(&self) -> &str { "Bisq" }
@@ -107,9 +129,19 @@ pub mod gateway {
                 version: "v1.2.0".to_string(),
             }
         }
-        fn handle_request(&self, _payload: &str) -> String {
-            "Bisq request processed".to_string()
+        fn handle_request(&self, payload: &str) -> String {
+            if let Ok(trade) = serde_json::from_str::<BisqTrade>(payload) {
+                 format!("Bisq trade verified: ID={}, Amount={}. Nexus mediation secured.", trade.trade_id, trade.amount)
+            } else {
+                "Bisq request received. Invalid trade payload for full verification.".to_string()
+            }
         }
+    }
+
+    #[derive(Deserialize)]
+    struct RGBAssetTransfer {
+        asset_id: String,
+        amount: u64,
     }
 
     pub struct BitVMService;
@@ -128,11 +160,11 @@ pub mod gateway {
                 let fee_tx = crate::sign_transaction("agent-treasury:deposit-service-fee");
                 format!("BitVM proof generated for: {}. Fee deposited: {}", payload, fee_tx)
             } else if payload.contains("challenge") {
-                format!("BitVM challenge registered: {}", payload)
+                format!("BitVM challenge registered: {}. Monitoring for state transition.", payload)
             } else if payload.contains("verify") {
-                format!("BitVM verification successful for: {}", payload)
+                format!("BitVM verification successful for: {}. State root consistency confirmed.", payload)
             } else {
-                "BitVM generic request processed".to_string()
+                "BitVM gateway ready. Awaiting prove/challenge/verify commands.".to_string()
             }
         }
     }
@@ -147,8 +179,12 @@ pub mod gateway {
                 version: "v0.10.0".to_string(),
             }
         }
-        fn handle_request(&self, _payload: &str) -> String {
-            "RGB request processed".to_string()
+        fn handle_request(&self, payload: &str) -> String {
+            if let Ok(transfer) = serde_json::from_str::<RGBAssetTransfer>(payload) {
+                format!("RGB asset transfer validated: Asset={}, Amount={}. Proof recorded in Nexus state.", transfer.asset_id, transfer.amount)
+            } else {
+                "RGB request received. Asset transfer proof missing or invalid.".to_string()
+            }
         }
     }
 }

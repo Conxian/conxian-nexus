@@ -1,7 +1,5 @@
-//! nexus-sync module handles the ingestion of Stacks node events.
-//!
-//! It distinguishes between microblock soft-finality and burn-block hard-finality
-//! to maintain an accurate off-chain representation of the Stacks L1 state.
+//! nexus-sync module handles the ingestion and processing of Stacks L1 events,
+//! maintaining a local representation of the Stacks L1 state.
 
 use crate::state::NexusState;
 use crate::storage::Storage;
@@ -135,6 +133,9 @@ impl NexusSync {
         // 1. Get current height from L1
         let url = format!("{}/extended/v1/block?limit=1", rpc_url);
         let resp = http_client.get(&url).send().await?;
+        if !resp.status().is_success() {
+            return Err(anyhow::anyhow!("Stacks RPC returned error: {}", resp.status()));
+        }
         let json: serde_json::Value = resp.json().await?;
         let latest_l1_height = json["results"][0]["height"].as_u64().unwrap_or(0);
 
@@ -147,31 +148,36 @@ impl NexusSync {
         if latest_l1_height > processed_height as u64 {
             for height in (processed_height as u64 + 1)..=latest_l1_height {
                 tracing::info!("Fetching data for height: {}", height);
-                // In a real implementation, we fetch block and txs
-                // For this middleware, we simulate the event construction from the fetched data
 
                 let block_url = format!("{}/extended/v1/block/by_height/{}", rpc_url, height);
                 let block_resp = http_client.get(&block_url).send().await?;
+                if !block_resp.status().is_success() {
+                    tracing::warn!("Failed to fetch block at height {}: {}", height, block_resp.status());
+                    continue;
+                }
                 let block_json: serde_json::Value = block_resp.json().await?;
 
                 let hash = block_json["hash"].as_str().unwrap_or("").to_string();
-                let timestamp = DateTime::parse_from_rfc3339(block_json["burn_block_time_iso"].as_str().unwrap_or(""))
+                let timestamp = block_json["burn_block_time_iso"].as_str()
+                    .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                     .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                    .unwrap_or_else(Utc::now);
 
                 // Fetch transactions
                 let txs_url = format!("{}/extended/v1/tx/block_height/{}", rpc_url, height);
                 let txs_resp = http_client.get(&txs_url).send().await?;
-                let txs_json: serde_json::Value = txs_resp.json().await?;
-
                 let mut txs = Vec::new();
-                if let Some(results) = txs_json["results"].as_array() {
-                    for tx_val in results {
-                        txs.push(TransactionData {
-                            tx_id: tx_val["tx_id"].as_str().unwrap_or("").to_string(),
-                            sender: tx_val["sender_address"].as_str().unwrap_or("").to_string(),
-                            payload: Some(tx_val["tx_type"].as_str().unwrap_or("").to_string()),
-                        });
+
+                if txs_resp.status().is_success() {
+                    let txs_json: serde_json::Value = txs_resp.json().await?;
+                    if let Some(results) = txs_json["results"].as_array() {
+                        for tx_val in results {
+                            txs.push(TransactionData {
+                                tx_id: tx_val["tx_id"].as_str().unwrap_or("").to_string(),
+                                sender: tx_val["sender_address"].as_str().unwrap_or("").to_string(),
+                                payload: Some(tx_val["tx_type"].as_str().unwrap_or("").to_string()),
+                            });
+                        }
                     }
                 }
 
@@ -218,7 +224,7 @@ impl NexusSync {
         let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES (, , 'microblock', 'soft', ) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
@@ -227,7 +233,7 @@ impl NexusSync {
 
         for tx_data in &data.txs {
             sqlx::query(
-                "INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tx_id) DO NOTHING"
+                "INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES (, , , , ) ON CONFLICT (tx_id) DO NOTHING"
             )
             .bind(&tx_data.tx_id)
             .bind(&data.hash)
@@ -261,14 +267,14 @@ impl NexusSync {
         let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query(
-            "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'",
+            "UPDATE stacks_blocks SET state = 'hard' WHERE height <=  AND state = 'soft'",
         )
         .bind(data.height as i64)
         .execute(&mut *tx)
         .await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'burn_block', 'hard', $3) ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES (, , 'burn_block', 'hard', ) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
@@ -277,8 +283,9 @@ impl NexusSync {
 
         tx.commit().await?;
 
-        self.state.update_state(&data.hash, 0);
-
+        // Note: Burn blocks confirm transactions, they don't necessarily add new state to the transaction tree
+        // unless we want to include block hashes in the root.
+        // For now, we only update the root in Redis to ensure it's current.
         let root = self.state.get_state_root();
         self.persist_root_to_redis(&root).await.ok();
 
