@@ -2,28 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.1] - 2026-02-18
-### Improved
-- **NexusSync**: Refactored to use a channel-based event loop, decoupling generation from handling and enabling better testability.
-- **NexusExecutor**: Enhanced FSOC logic with liquidation-specific heuristics and implemented functional collateral rebalancing.
-- **lib-conxian-core**: Expanded `BitVMService` to support specialized request handling for proofs and challenges.
-- **NexusState**: Added comprehensive unit tests for Merkle tree logic, covering edge cases like odd leaf counts and missing keys.
+## [0.2.0] - 2024-05-22
+
+### Added
+- Prometheus metrics exporter at `/metrics`.
+- Historical state root persistence in PostgreSQL (`nexus_state_roots` table).
+- Enhanced simulation logic for BitVM (multi-step proof generation) and RGB (schema validation) services.
+- Tracking of sync drift and safety mode status in Prometheus metrics.
 
 ### Fixed
-- Fixed multiple stubs in Executor and Core services.
-- Improved database query parameter safety.
-- Enhanced error logging and graceful recovery in Safety heartbeat.
+- Corrected SQL placeholders in `nexus-sync` module (fixed empty `` placeholders to `$1`, `$2`, etc.).
+- Robust state rebuilding in `load_initial_state` to correctly handle database results.
 
-## [0.1.0] - 2026-02-17
-### Added
-- Initial implementation of Conxian Nexus (Glass Node).
-- nexus-sync module for Stacks event ingestion.
-- FSOC Sequencer for MEV mitigation.
-- Sovereign Handoff safety monitor.
-- REST and gRPC interfaces.
-- PostgreSQL and Redis persistence layers.
-- Robust Merkle Tree implementation for state root tracking and proof generation.
-- Full Wallet functionality in lib-conxian-core using k256 (ECDSA).
-- Comprehensive /v1/status endpoint for system monitoring.
-- Real-time drift simulation and recovery logic in NexusSafety.
-- Integration tests for "Root to leaf | leaf to root" verification.
+### Security
+- FSOC Sequencer now increments transaction metrics upon successful validation.

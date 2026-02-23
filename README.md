@@ -18,11 +18,13 @@ Conxian Nexus is a high-performance middleware designed to synchronize off-chain
 - **Sovereign Handoff**: Automatic safety mode if sync drift exceeds threshold.
 - **Verifiable Proofs**: Generate and verify Merkle proofs for any transaction.
 - **Multi-Protocol**: Unified support for Bisq, RGB, and BitVM.
+- **Observability**: Prometheus metrics exporter and internal JSON metrics.
 
 ## API Highlights
 
 - `GET /v1/status`: System status and state root.
-- `GET /v1/metrics`: System performance metrics.
+- `GET /v1/metrics`: System performance metrics (JSON).
+- `GET /metrics`: Prometheus metrics exporter (Text).
 - `POST /v1/execute`: Submit transactions for FSOC validation.
 - `GET /v1/proof?key=<tx_id>`: Retrieve Merkle proof.
 - `GET /v1/services`: Multi-protocol service health.
@@ -50,6 +52,7 @@ cargo run
 
 - **PRD**: [docs/PRD.md](docs/PRD.md)
 - **API Spec**: [docs/openapi.yaml](docs/openapi.yaml)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
 ## License
 
