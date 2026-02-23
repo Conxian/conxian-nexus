@@ -4,3 +4,16 @@ pub mod rest;
 pub use grpc::start_grpc_server;
 pub use rest::start_rest_server;
 pub mod services;
+
+use std::sync::OnceLock;
+use std::time::Instant;
+
+pub static START_TIME: OnceLock<Instant> = OnceLock::new();
+
+pub fn init_start_time() {
+    START_TIME.get_or_init(Instant::now);
+}
+
+pub fn get_uptime() -> u64 {
+    START_TIME.get().map(|t| t.elapsed().as_secs()).unwrap_or(0)
+}

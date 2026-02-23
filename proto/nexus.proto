@@ -6,6 +6,8 @@ service NexusService {
   rpc GetProof (ProofRequest) returns (ProofResponse);
   rpc VerifyState (VerifyStateRequest) returns (VerifyStateResponse);
   rpc GetStatus (StatusRequest) returns (StatusResponse);
+  rpc GetMetrics (MetricsRequest) returns (MetricsResponse);
+  rpc Execute (ExecuteRequest) returns (ExecuteResponse);
   rpc GetServices (ServicesRequest) returns (ServicesResponse);
 }
 
@@ -33,6 +35,29 @@ message StatusResponse {
   uint64 processed_height = 2;
   bool safety_mode = 3;
   uint64 drift = 4;
+}
+
+message MetricsRequest {}
+
+message MetricsResponse {
+  uint64 total_transactions = 1;
+  uint64 total_blocks = 2;
+  bool safety_mode = 3;
+  uint64 drift = 4;
+  uint64 uptime_seconds = 5;
+}
+
+message ExecuteRequest {
+  string tx_id = 1;
+  string payload = 2;
+  string sender = 3;
+  string timestamp = 4;
+}
+
+message ExecuteResponse {
+  string tx_id = 1;
+  string status = 2;
+  string message = 3;
 }
 
 message ServicesRequest {}
