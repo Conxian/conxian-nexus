@@ -71,7 +71,7 @@ impl NexusSync {
             .fetch_all(&self.storage.pg_pool)
             .await?;
 
-        let leaves: Vec<String> = rows.into_iter().map(|r| r.get("tx_id")).collect();
+        let leaves: Vec<String> = rows.into_iter().map(|r| r.get::<String, _>("tx_id")).collect();
         let count = leaves.len();
         self.state.set_initial_leaves(leaves);
 
@@ -79,6 +79,15 @@ impl NexusSync {
         tracing::info!("State rebuilt: {} leaves, root: {}", count, root);
 
         self.persist_root_to_redis(&root).await.ok();
+
+        let max_height_row = sqlx::query("SELECT MAX(height) as h FROM stacks_blocks")
+            .fetch_one(&self.storage.pg_pool).await?;
+        let max_height: i64 = max_height_row.get::<Option<i64>, _>("h").unwrap_or(0);
+
+        sqlx::query("INSERT INTO nexus_state_roots (block_height, state_root) VALUES ($1, $2) ON CONFLICT (block_height) DO UPDATE SET state_root = EXCLUDED.state_root")
+            .bind(max_height)
+            .bind(&root)
+            .execute(&self.storage.pg_pool).await.ok();
 
         Ok(())
     }
@@ -224,7 +233,7 @@ impl NexusSync {
         let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES (, , 'microblock', 'soft', ) ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
@@ -233,7 +242,7 @@ impl NexusSync {
 
         for tx_data in &data.txs {
             sqlx::query(
-                "INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES (, , , , ) ON CONFLICT (tx_id) DO NOTHING"
+                "INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tx_id) DO NOTHING"
             )
             .bind(&tx_data.tx_id)
             .bind(&data.hash)
@@ -251,6 +260,11 @@ impl NexusSync {
         let root = self.state.get_state_root();
         self.persist_root_to_redis(&root).await.ok();
 
+        sqlx::query("INSERT INTO nexus_state_roots (block_height, state_root) VALUES ($1, $2) ON CONFLICT (block_height) DO UPDATE SET state_root = EXCLUDED.state_root")
+            .bind(data.height as i64)
+            .bind(&root)
+            .execute(&self.storage.pg_pool).await.ok();
+
         if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
             redis::cmd("DEL")
                 .arg("cache:vaults:all")
@@ -267,14 +281,14 @@ impl NexusSync {
         let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query(
-            "UPDATE stacks_blocks SET state = 'hard' WHERE height <=  AND state = 'soft'",
+            "UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'",
         )
         .bind(data.height as i64)
         .execute(&mut *tx)
         .await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES (, , 'burn_block', 'hard', ) ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'burn_block', 'hard', $3) ON CONFLICT (hash) DO NOTHING"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
@@ -283,11 +297,13 @@ impl NexusSync {
 
         tx.commit().await?;
 
-        // Note: Burn blocks confirm transactions, they don't necessarily add new state to the transaction tree
-        // unless we want to include block hashes in the root.
-        // For now, we only update the root in Redis to ensure it's current.
         let root = self.state.get_state_root();
         self.persist_root_to_redis(&root).await.ok();
+
+        sqlx::query("INSERT INTO nexus_state_roots (block_height, state_root) VALUES ($1, $2) ON CONFLICT (block_height) DO UPDATE SET state_root = EXCLUDED.state_root")
+            .bind(data.height as i64)
+            .bind(&root)
+            .execute(&self.storage.pg_pool).await.ok();
 
         Ok(())
     }
