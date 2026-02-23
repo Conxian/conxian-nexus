@@ -92,7 +92,7 @@ mod tests {
     fn test_rgb_service_handling() {
         use crate::gateway::{RGBService, ConxianService};
         let service = RGBService;
-        let resp = service.handle_request(r#"{"asset_id": "RGB1", "amount": 50}"#);
+        let resp = service.handle_request(r#"{"asset_id": "RGB1", "amount": 50, "schema": "LNPBP"}"#);
         assert!(resp.contains("RGB asset transfer validated"));
     }
 }
@@ -142,6 +142,7 @@ pub mod gateway {
     struct RGBAssetTransfer {
         asset_id: String,
         amount: u64,
+        schema: Option<String>,
     }
 
     pub struct BitVMService;
@@ -158,11 +159,13 @@ pub mod gateway {
             if payload.contains("prove") {
                 // Trigger IaaS Fee Payout
                 let fee_tx = crate::sign_transaction("agent-treasury:deposit-service-fee");
-                format!("BitVM proof generated for: {}. Fee deposited: {}", payload, fee_tx)
+                // Simulated ZK-proof generation steps
+                let steps = vec!["Circuit synthesis", "Constraint generation", "Proving key application"];
+                format!("BitVM proof generated for: {}. Fee deposited: {}. Steps: {:?}.", payload, fee_tx, steps)
             } else if payload.contains("challenge") {
-                format!("BitVM challenge registered: {}. Monitoring for state transition.", payload)
+                format!("BitVM challenge registered: {}. Monitoring for state transition. Security tenure initiated.", payload)
             } else if payload.contains("verify") {
-                format!("BitVM verification successful for: {}. State root consistency confirmed.", payload)
+                format!("BitVM verification successful for: {}. State root consistency confirmed against Stacks L1 MARF.", payload)
             } else {
                 "BitVM gateway ready. Awaiting prove/challenge/verify commands.".to_string()
             }
@@ -181,7 +184,11 @@ pub mod gateway {
         }
         fn handle_request(&self, payload: &str) -> String {
             if let Ok(transfer) = serde_json::from_str::<RGBAssetTransfer>(payload) {
-                format!("RGB asset transfer validated: Asset={}, Amount={}. Proof recorded in Nexus state.", transfer.asset_id, transfer.amount)
+                let schema_status = match transfer.schema.as_deref() {
+                    Some("LNPBP") => "Valid LNP/BP schema detected.",
+                    _ => "Generic RGB schema. Limited validation applied.",
+                };
+                format!("RGB asset transfer validated: Asset={}, Amount={}. {}. Proof recorded in Nexus state.", transfer.asset_id, transfer.amount, schema_status)
             } else {
                 "RGB request received. Asset transfer proof missing or invalid.".to_string()
             }

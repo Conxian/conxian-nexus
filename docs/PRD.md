@@ -22,8 +22,8 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Implementation**: `NexusSafety` heartbeats compare local height with Stacks RPC height. If drift > 2 blocks, "Safety Mode" is triggered, enabling direct withdrawal tenure.
 
 ### 2.5 Cryptographic Verification
-- **Requirement**: Provide verifiable proofs of state.
-- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. REST/gRPC endpoints (`/v1/proof`, `/v1/verify-state`) allow clients to verify data against the state root.
+- **Requirement**: Provide verifiable proofs of state and persist state roots.
+- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. REST/gRPC endpoints (`/v1/proof`, `/v1/verify-state`) allow clients to verify data against the state root. **Update**: State roots are now persisted in PostgreSQL for historical audit trail.
 
 ### 2.6 Multi-Protocol Gateway
 - **Requirement**: Support multiple protocols including Bisq, RGB, and BitVM.
@@ -33,11 +33,12 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Language**: Rust (Tokio, Axum, Tonic)
 - **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub)
 - **Cryptography**: Sha256 (Merkle Tree), k256 (ECDSA for wallet)
+- **Observability**: Prometheus, Tracing
 
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree (Full)
-- **Status**: Phase 1 Complete (Root persistence).
+- **Status**: Phase 2 Complete (Historical Root persistence).
 - **Next Step**: Implement a full persistent Merkle Tree (e.g., using a Merkle Mountain Range in a key-value store).
 
 ### 4.2 Real-time Sync Ingestion
@@ -53,5 +54,5 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Integrate with a real BitVM prover/verifier library.
 
 ### 4.5 Observability
-- **Status**: Internal Metrics Endpoint Complete (`/v1/metrics`).
-- **Next Step**: Add Prometheus/OpenTelemetry exporter.
+- **Status**: Internal Metrics and Prometheus Exporter Complete (`/v1/metrics`, `/metrics`).
+- **Next Step**: Add OpenTelemetry tracing.

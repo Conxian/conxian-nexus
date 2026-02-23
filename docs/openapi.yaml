@@ -28,7 +28,7 @@ paths:
                     type: integer
   /v1/metrics:
     get:
-      summary: Get system metrics
+      summary: Get system metrics (JSON)
       responses:
         '200':
           description: OK
@@ -47,6 +47,16 @@ paths:
                     type: integer
                   uptime_seconds:
                     type: integer
+  /metrics:
+    get:
+      summary: Get Prometheus metrics (Text)
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
   /v1/proof:
     get:
       summary: Get Merkle proof for a transaction

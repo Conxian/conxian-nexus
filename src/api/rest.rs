@@ -11,6 +11,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use prometheus::{Encoder, TextEncoder, IntGauge, register_int_gauge};
+use lazy_static::lazy_static;
+
+lazy_static! {
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!("nexus_transactions_total", "Total number of transactions processed").unwrap();
+    pub static ref TOTAL_BLOCKS: IntGauge = register_int_gauge!("nexus_blocks_total", "Total number of blocks processed").unwrap();
+    pub static ref SYNC_DRIFT: IntGauge = register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
+    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!("nexus_safety_mode", "Safety mode status (1 = active, 0 = inactive)").unwrap();
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -81,6 +90,7 @@ pub async fn start_rest_server(
         .route("/v1/verify-state", post(verify_state))
         .route("/v1/status", get(get_status))
         .route("/v1/metrics", get(get_metrics))
+        .route("/metrics", get(prometheus_metrics))
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
@@ -167,18 +177,33 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     let mut conn = state.storage.redis_client.get_multiplexed_async_connection().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let safety_mode: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
+    let safety_mode_active: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
     let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
+
+    // Update Prometheus metrics
+    TOTAL_TRANSACTIONS.set(tx_count);
+    TOTAL_BLOCKS.set(block_count);
+    SYNC_DRIFT.set(drift as i64);
+    SAFETY_MODE.set(if safety_mode_active { 1 } else { 0 });
 
     let uptime = crate::api::get_uptime();
 
     Ok(Json(MetricsResponse {
         total_transactions: tx_count as u64,
         total_blocks: block_count as u64,
-        safety_mode,
+        safety_mode: safety_mode_active,
         drift,
         uptime_seconds: uptime,
     }))
+}
+
+async fn prometheus_metrics() -> impl IntoResponse {
+    let encoder = TextEncoder::new();
+    let metric_families = prometheus::gather();
+    let mut buffer = vec![];
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    String::from_utf8(buffer).unwrap()
 }
 
 async fn execute_tx(
@@ -187,6 +212,7 @@ async fn execute_tx(
 ) -> impl IntoResponse {
     match state.executor.validate_transaction(&request).await {
         Ok(true) => {
+            TOTAL_TRANSACTIONS.set(TOTAL_TRANSACTIONS.get() + 1);
             // Simulate execution success
             Json(ExecutionResponse {
                 tx_id: request.tx_id,
