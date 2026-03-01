@@ -94,6 +94,7 @@ pub async fn start_rest_server(
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
+        .nest("/v1/billing", crate::api::billing::billing_routes())
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
