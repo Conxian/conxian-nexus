@@ -44,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),
         config.stacks_node_rpc_url.clone(),
+        config.gateway_url.clone(),
     ));
 
     // Load Initial State from DB

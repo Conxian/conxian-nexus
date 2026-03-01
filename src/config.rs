@@ -8,6 +8,7 @@ pub struct Config {
     pub grpc_port: u16,
     pub log_level: String,
     pub stacks_node_rpc_url: String,
+    pub gateway_url: String,
 }
 
 impl Config {
@@ -27,6 +28,8 @@ impl Config {
             log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
             stacks_node_rpc_url: env::var("STACKS_NODE_RPC_URL")
                 .unwrap_or_else(|_| "https://api.mainnet.hiro.so".to_string()),
+            gateway_url: env::var("GATEWAY_URL")
+                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
         }
     }
 }

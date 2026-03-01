@@ -15,16 +15,18 @@ pub struct NexusSafety {
     storage: Arc<Storage>,
     max_drift: u64,
     rpc_url: String,
+    gateway_url: String,
     http_client: Client,
 }
 
 impl NexusSafety {
     /// Creates a new safety monitor with a default max drift of 2 blocks.
-    pub fn new(storage: Arc<Storage>, rpc_url: String) -> Self {
+    pub fn new(storage: Arc<Storage>, rpc_url: String, gateway_url: String) -> Self {
         Self {
             storage,
             max_drift: 2,
             rpc_url,
+            gateway_url,
             http_client: Client::new(),
         }
     }
@@ -33,9 +35,10 @@ impl NexusSafety {
     pub async fn run_heartbeat(&self) -> anyhow::Result<()> {
         let mut interval = time::interval(Duration::from_secs(10));
         tracing::info!(
-            "Starting NexusSafety heartbeat (max_drift: {} blocks, RPC: {})...",
+            "Starting NexusSafety heartbeat (max_drift: {} blocks, RPC: {}, Gateway: {})...",
             self.max_drift,
-            self.rpc_url
+            self.rpc_url,
+            self.gateway_url
         );
 
         loop {
@@ -43,7 +46,47 @@ impl NexusSafety {
             if let Err(e) = self.check_health().await {
                 tracing::error!("Safety heartbeat error: {}", e);
             }
+            if let Err(e) = self.ingest_gateway_telemetry().await {
+                tracing::error!("Gateway telemetry ingestion error: {}", e);
+            }
         }
+    }
+
+    /// Ingests telemetry from the Gateway and triggers safety mode if failure rates spike.
+    async fn ingest_gateway_telemetry(&self) -> anyhow::Result<()> {
+        let url = format!("{}/api/v1/state", self.gateway_url);
+        let resp = self.http_client.get(&url).send().await?;
+        
+        if !resp.status().is_success() {
+            tracing::warn!("Failed to fetch Gateway state: {}", resp.status());
+            return Ok(());
+        }
+
+        let json: Value = resp.json().await?;
+        
+        let success_count = json["metrics"]["verification_success"].as_u64().unwrap_or(0);
+        let failure_count = json["metrics"]["verification_failure"].as_u64().unwrap_or(0);
+        
+        // Define a simple circuit breaker logic based on failures
+        let total_verifications = success_count + failure_count;
+        
+        if total_verifications > 100 {
+            let failure_rate = (failure_count as f64) / (total_verifications as f64);
+            // If more than 10% of verifications are failing, trigger an infrastructure-level safety alert
+            if failure_rate > 0.10 {
+                tracing::error!(
+                    "Gateway Circuit Breaker Triggered! Failure Rate: {:.2}% (Success: {}, Failures: {})",
+                    failure_rate * 100.0,
+                    success_count,
+                    failure_count
+                );
+                
+                // We reuse the existing safety mode broadcast but flag it as a telemetry alert
+                self.trigger_safety_mode(999).await?; // 999 is a synthetic drift indicating a telemetry fault
+            }
+        }
+        
+        Ok(())
     }
 
     /// Checks the health by comparing local processed height with external L1 height.
