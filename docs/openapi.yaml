@@ -152,3 +152,57 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/billing/generate-key:
+    post:
+      summary: Generate developer API key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                developer_email:
+                  type: string
+                project_name:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  api_key:
+                    type: string
+                  status:
+                    type: string
+  /v1/billing/telemetry/track-signature:
+    post:
+      summary: Track signature telemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key:
+                  type: string
+                signature_hash:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  current_usage:
+                    type: integer
+                  limit:
+                    type: integer
+                  status:
+                    type: string

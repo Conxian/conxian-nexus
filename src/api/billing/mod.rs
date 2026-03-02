@@ -49,13 +49,15 @@ async fn generate_developer_key(
     State(state): State<AppState>,
     Json(payload): Json<GenerateKeyRequest>,
 ) -> impl IntoResponse {
-    let mut rng = rand::thread_rng();
-    let mut raw_key = [0u8; 32];
-    rng.fill_bytes(&mut raw_key);
-    
-    let mut hasher = Sha256::new();
-    hasher.update(&raw_key);
-    let api_key = format!("cxl_{}", hex::encode(hasher.finalize()));
+    let api_key = {
+        let mut rng = rand::thread_rng();
+        let mut raw_key = [0u8; 32];
+        rng.fill_bytes(&mut raw_key);
+
+        let mut hasher = Sha256::new();
+        hasher.update(&raw_key);
+        format!("cxl_{}", hex::encode(hasher.finalize()))
+    };
 
     let mut conn = match state.storage.redis_client.get_multiplexed_async_connection().await {
         Ok(c) => c,
