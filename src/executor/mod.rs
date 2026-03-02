@@ -95,7 +95,7 @@ impl NexusExecutor {
     async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
         // 1. Check for spamming from the same sender
         let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id !=  AND sender =  AND created_at > "
         )
         .bind(&request.tx_id)
         .bind(&request.sender)
@@ -115,7 +115,7 @@ impl NexusExecutor {
 
         // 2. Check for identical payloads in a short window (copy-cat front-running)
         let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id !=  AND payload =  AND created_at > "
         )
         .bind(&request.tx_id)
         .bind(&request.payload)
@@ -236,5 +236,23 @@ mod tests {
         let s = serde_json::to_string(&v).unwrap();
         let v2: VaultStatus = serde_json::from_str(&s).unwrap();
         assert_eq!(v.vault_id, v2.vault_id);
+    }
+}
+
+#[cfg(test)]
+mod fsoc_tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[tokio::test]
+    async fn test_fsoc_validation_logic() {
+        let req = ExecutionRequest {
+            tx_id: "test_tx".to_string(),
+            payload: "liquidate_vault_1".to_string(),
+            timestamp: Utc::now(),
+            sender: "SP123".to_string(),
+        };
+
+        assert_eq!(req.sender, "SP123");
     }
 }

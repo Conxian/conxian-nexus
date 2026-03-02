@@ -11,7 +11,11 @@ pub struct PppState {
     pub timestamp: u64,
 }
 
-#[allow(dead_code)]
+#[derive(Deserialize)]
+struct ExchangeRateResponse {
+    rates: HashMap<String, f64>,
+}
+
 pub struct OracleStub {
     client: Client,
     endpoint_url: String, 
@@ -27,23 +31,34 @@ impl OracleStub {
 
     /// Fetches the latest global FX rates for dynamic PPP pricing
     pub async fn fetch_universal_fx(&self) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
-        // Stub implementation for development
-        let mut mock_rates = HashMap::new();
-        mock_rates.insert("ZAR".to_string(), 18.5);
-        mock_rates.insert("NGN".to_string(), 1500.0);
-        mock_rates.insert("BRL".to_string(), 5.0);
-        mock_rates.insert("EUR".to_string(), 0.92);
+        let resp = self.client.get(&self.endpoint_url).send().await?;
         
-        let mut mock_ppp = HashMap::new();
-        mock_ppp.insert("ZAR".to_string(), 0.45); 
-        mock_ppp.insert("NGN".to_string(), 0.30);
-        mock_ppp.insert("BRL".to_string(), 0.50);
-        mock_ppp.insert("EUR".to_string(), 1.0);
+        let mut rates = if resp.status().is_success() {
+            let data: ExchangeRateResponse = resp.json().await?;
+            data.rates
+        } else {
+            tracing::warn!("Failed to fetch FX rates from {}, using fallback", self.endpoint_url);
+            let mut fallback = HashMap::new();
+            fallback.insert("EUR".to_string(), 0.92);
+            fallback
+        };
+
+        // Ensure we have some base rates if the API fails or returns partial data
+        rates.entry("ZAR".to_string()).or_insert(18.5);
+        rates.entry("NGN".to_string()).or_insert(1500.0);
+        rates.entry("BRL".to_string()).or_insert(5.0);
+
+        let mut ppp_indices = HashMap::new();
+        // Mock PPP adjustment ratios (in a real scenario, these would be fetched from a World Bank/IMF API)
+        ppp_indices.insert("ZAR".to_string(), 0.45);
+        ppp_indices.insert("NGN".to_string(), 0.30);
+        ppp_indices.insert("BRL".to_string(), 0.50);
+        ppp_indices.insert("EUR".to_string(), 1.0);
 
         Ok(PppState {
             base_currency: "USD".to_string(),
-            rates: mock_rates,
-            ppp_indices: mock_ppp,
+            rates,
+            ppp_indices,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -54,6 +69,7 @@ impl OracleStub {
     /// Propagates the fetched universal FX state to the Stacks Testnet contract
     pub async fn push_state_to_contract(&self, state: PppState) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         tracing::info!("Pushing Oracle State on-chain: {:?}", state);
+        // In production, this would use lib-conxian-core to sign and broadcast a Clarity contract call
         Ok("mock_tx_id_0x123abc".to_string())
     }
 }

@@ -6,14 +6,14 @@ use tokio::time::{self, Duration};
 use crate::oracle::ppp_tracker::OracleStub;
 
 pub struct OracleService {
-    _storage: Arc<Storage>,
-    stub: OracleStub,
+    pub storage: Arc<Storage>,
+    pub stub: OracleStub,
 }
 
 impl OracleService {
     pub fn new(storage: Arc<Storage>, endpoint_url: String) -> Self {
         Self {
-            _storage: storage,
+            storage,
             stub: OracleStub::new(endpoint_url),
         }
     }
