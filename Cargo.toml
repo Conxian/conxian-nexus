@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1.43", features = ["full"] }
-axum = "0.7"
+axum = { version = "0.7", features = ["macros"] }
 sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
 redis = { version = "0.25", features = ["tokio-comp"] }
-tonic = "0.11"
-prost = "0.12"
+tonic = "0.12"
+prost = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
@@ -26,7 +26,9 @@ lib-conxian-core = { path = "./lib-conxian-core" }
 prometheus = "0.13"
 lazy_static = "1.4"
 reqwest = { version = "0.11", features = ["json"] }
+http-body-util = "0.1"
+tower = "0.5"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 protoc-bin-vendored = "3.0"

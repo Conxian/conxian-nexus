@@ -30,62 +30,61 @@ pub struct AppState {
 
 #[derive(Deserialize)]
 pub struct ProofParams {
-    key: String,
+    pub key: String,
 }
 
 #[derive(Serialize)]
 pub struct ProofResponse {
-    hash: String,
-    proof: String,
+    pub hash: String,
+    pub proof: String,
 }
 
 #[derive(Deserialize)]
 pub struct VerifyStateRequest {
-    state_root: String,
+    pub state_root: String,
 }
 
 #[derive(Serialize)]
 pub struct VerifyStateResponse {
-    valid: bool,
+    pub valid: bool,
 }
 
 #[derive(Serialize)]
 pub struct StatusResponse {
-    state_root: String,
-    processed_height: u64,
-    safety_mode: bool,
-    drift: u64,
+    pub state_root: String,
+    pub processed_height: u64,
+    pub safety_mode: bool,
+    pub drift: u64,
 }
 
 #[derive(Serialize)]
 pub struct MetricsResponse {
-    total_transactions: u64,
-    total_blocks: u64,
-    safety_mode: bool,
-    drift: u64,
-    uptime_seconds: u64,
+    pub total_transactions: u64,
+    pub total_blocks: u64,
+    pub safety_mode: bool,
+    pub drift: u64,
+    pub uptime_seconds: u64,
 }
 
 #[derive(Serialize)]
 pub struct ExecutionResponse {
-    tx_id: String,
-    status: String,
-    message: String,
+    pub tx_id: String,
+    pub status: String,
+    pub message: String,
 }
 
-pub async fn start_rest_server(
+pub fn app_router(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
-    port: u16,
-) -> anyhow::Result<()> {
+) -> Router {
     let state = AppState {
         storage,
         nexus_state,
         executor,
     };
 
-    let app = Router::new()
+    Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/verify-state", post(verify_state))
         .route("/v1/status", get(get_status))
@@ -95,7 +94,16 @@ pub async fn start_rest_server(
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
         .nest("/v1/billing", crate::api::billing::billing_routes())
-        .with_state(state);
+        .with_state(state)
+}
+
+pub async fn start_rest_server(
+    storage: Arc<Storage>,
+    nexus_state: Arc<NexusState>,
+    executor: Arc<NexusExecutor>,
+    port: u16,
+) -> anyhow::Result<()> {
+    let app = app_router(storage, nexus_state, executor);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("REST server listening on {}", listener.local_addr()?);
