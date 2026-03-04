@@ -1,4 +1,4 @@
-# Conxian Nexus Enhancements Summary (v0.2.0)
+# Conxian Nexus Enhancements Summary (v0.2.0-Superior)
 
 ## 1. Merkle Tree & State Foundations (src/state/mod.rs)
 - **Problem**: Full root recalculation was inefficient and only supported a fixed Merkle tree.
@@ -15,17 +15,18 @@
     - Instrumented validation with **OpenTelemetry tracing** for better operational visibility.
 - **Impact**: Enhanced protection for users against sophisticated MEV strategies and easier debugging of validation decisions.
 
-## 3. Multi-Protocol Gateway Improvements (lib-conxian-core/src/lib.rs)
+## 3. Superior Multi-Protocol Gateway (lib-conxian-core/src/lib.rs)
 - **Problem**: Protocol responses were unstructured strings, and key management was basic.
 - **Solution**:
-    - **Wallet Upgrade**: Added full **BIP-39 mnemonic support**. New wallets generate a 12-word recovery phrase, and existing ones can be reconstructed from mnemonics.
+    - **HD Wallet Upgrade**: Added full **BIP-39 mnemonic support** and **BIP-32 HD derivation** (m/44').
+    - **Native Fingerprinting**: Implemented **HASH160 (SHA256 + RIPEMD160)** for native Stacks address fingerprinting directly in the core library.
     - **Structured API**: Upgraded `ConxianService` trait and all protocol implementations (Bisq, RGB, BitVM) to return a structured `ServiceResponse`.
-- **Impact**: More robust and user-friendly wallet management; programmatic integration of multi-protocol results.
+- **Impact**: Professional-grade wallet foundations for SDK users; cryptographic alignment with Stacks L1; programmatic integration of multi-protocol results.
 
 ## 4. Observability & Operations
 - **Problem**: Difficult to trace complex asynchronous sync and execution paths.
 - **Solution**:
-    - Integrated **OpenTelemetry** dependencies and instrumented core service loops (`NexusExecutor`, `NexusSafety`).
+    - Integrated **OpenTelemetry** dependencies and instrumented core service loops (`NexusExecutor`, `NexusSafety`, `NexusSync`).
     - Added Prometheus metrics for transactions, blocks, drift, and safety mode.
 - **Impact**: Real-time visibility into the "Glass Node" performance and health.
 

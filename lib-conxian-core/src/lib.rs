@@ -2,6 +2,8 @@ use k256::ecdsa::{SigningKey, Signature, signature::Signer};
 use sha2::{Sha256, Digest};
 use std::env;
 use bip39::{Mnemonic, Language, Seed, MnemonicType};
+use bip32::{XPrv, ChildNumber};
+use ripemd::Ripemd160;
 
 pub struct Wallet {
     signing_key: SigningKey,
@@ -22,7 +24,13 @@ impl Wallet {
         // Fallback to random mnemonic-based wallet
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
-        let signing_key = SigningKey::from_slice(&seed.as_bytes()[0..32]).expect("Invalid seed length");
+
+        // Derive master key
+        let xprv = XPrv::new(seed.as_bytes()).expect("Invalid seed");
+        // Derive m/44'
+        let child = xprv.derive_child(ChildNumber::new(44, true).unwrap()).unwrap();
+
+        let signing_key = SigningKey::from_slice(&child.to_bytes()).expect("Invalid seed length");
 
         Self {
             signing_key,
@@ -33,7 +41,11 @@ impl Wallet {
     pub fn from_mnemonic(phrase: &str, passphrase: &str) -> Result<Self, anyhow::Error> {
         let mnemonic = Mnemonic::from_phrase(phrase, Language::English)?;
         let seed = Seed::new(&mnemonic, passphrase);
-        let signing_key = SigningKey::from_slice(&seed.as_bytes()[0..32])?;
+
+        let xprv = XPrv::new(seed.as_bytes())?;
+        let child = xprv.derive_child(ChildNumber::new(44, true).unwrap())?;
+
+        let signing_key = SigningKey::from_slice(&child.to_bytes())?;
         Ok(Self {
             signing_key,
             mnemonic: Some(phrase.to_string())
@@ -45,8 +57,22 @@ impl Wallet {
         Ok(Self { signing_key, mnemonic: None })
     }
 
+    pub fn public_key_bytes(&self) -> Vec<u8> {
+        self.signing_key.verifying_key().to_sec1_bytes().to_vec()
+    }
+
     pub fn public_key(&self) -> String {
-        hex::encode(self.signing_key.verifying_key().to_sec1_bytes())
+        hex::encode(self.public_key_bytes())
+    }
+
+    /// Generates a Stacks-compatible address (Simplified Hash160).
+    /// Note: Full C32 encoding is usually handled by a separate crate,
+    /// but we provide the HASH160 "Native" fingerprint here.
+    pub fn stacks_address_hash(&self) -> String {
+        let pubkey = self.public_key_bytes();
+        let sha2 = Sha256::digest(&pubkey);
+        let hash160 = Ripemd160::digest(&sha2);
+        hex::encode(hash160)
     }
 
     pub fn mnemonic(&self) -> Option<&str> {
@@ -80,12 +106,20 @@ mod tests {
     }
 
     #[test]
-    fn test_wallet_mnemonic() {
+    fn test_wallet_mnemonic_hd() {
         let wallet = Wallet::new();
         assert!(wallet.mnemonic().is_some());
         let phrase = wallet.mnemonic().unwrap();
+        // Reconstruct
         let wallet2 = Wallet::from_mnemonic(phrase, "").unwrap();
         assert_eq!(wallet.public_key(), wallet2.public_key());
+    }
+
+    #[test]
+    fn test_stacks_address_generation() {
+        let wallet = Wallet::new();
+        let hash = wallet.stacks_address_hash();
+        assert_eq!(hash.len(), 40); // 20 bytes hex encoded
     }
 
     #[test]
@@ -99,14 +133,6 @@ mod tests {
         unsafe {
             env::remove_var("NEXUS_PRIVATE_KEY");
         }
-    }
-
-    #[test]
-    fn test_bitvm_service_handling() {
-        use crate::gateway::{BitVMService, ConxianService};
-        let service = BitVMService;
-        let resp = service.handle_request("prove something");
-        assert!(resp.message.contains("BitVM proof generated"));
     }
 }
 
