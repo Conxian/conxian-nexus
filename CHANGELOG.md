@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2024-05-23
+
+### Added
+- **High-Performance Merkle Tree**: Implemented intermediate level caching in `NexusState` for O(logN) proof generation and optimized root calculation.
+- **Enhanced FSOC Sequencer**: Added "Sandwich Attack" detection and refined liquidation front-running heuristics (200ms window).
+- **Asynchronous Sync Ingestion**: Refactored `NexusSync` to use a channel-based event loop, decoupling polling from processing.
+- **Fast-Path Ingestion**: Added `fast_path_ingest` to `NexusSync` for real-time microblock updates via external triggers.
+- **Multi-Protocol Enhancements**:
+    - BitVM: Added state transition root simulation.
+    - RGB: Added schema-specific validation (LNPBP, NIA) and cryptographic state proof verification.
+
+### Fixed
+- Improved Merkle Tree logic to handle odd leaf counts and empty trees more robustly.
+- Corrected SQL parameter bindings in `NexusExecutor` MEV detection queries.
+
 ## [0.2.0] - 2024-05-22
 
 ### Added

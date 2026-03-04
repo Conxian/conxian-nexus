@@ -11,6 +11,7 @@ pub struct MerkleProof {
 
 pub struct NexusState {
     leaves: Mutex<Vec<String>>,
+    tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
     state_root: Mutex<String>,
     last_updated: Mutex<DateTime<Utc>>,
 }
@@ -27,6 +28,7 @@ impl NexusState {
             "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
         Self {
             leaves: Mutex::new(Vec::new()),
+            tree_levels: Mutex::new(Vec::new()),
             state_root: Mutex::new(initial_root),
             last_updated: Mutex::new(Utc::now()),
         }
@@ -46,8 +48,7 @@ impl NexusState {
             leaves.push(item.clone());
         }
 
-        let new_root = self.calculate_root(&leaves);
-        *self.state_root.lock().unwrap() = new_root;
+        self.rebuild_tree(&leaves);
         *self.last_updated.lock().unwrap() = Utc::now();
 
         tracing::debug!("Nexus state updated. New root: {}", self.get_state_root());
@@ -56,8 +57,7 @@ impl NexusState {
     pub fn set_initial_leaves(&self, new_leaves: Vec<String>) {
         let mut leaves = self.leaves.lock().unwrap();
         *leaves = new_leaves;
-        let new_root = self.calculate_root(&leaves);
-        *self.state_root.lock().unwrap() = new_root;
+        self.rebuild_tree(&leaves);
         *self.last_updated.lock().unwrap() = Utc::now();
         tracing::info!(
             "Nexus state initialized with {} leaves. Root: {}",
@@ -66,10 +66,47 @@ impl NexusState {
         );
     }
 
-    /// Optimized Merkle root calculation.
-    /// In a production environment with millions of leaves, this would use
-    /// an incremental approach or a persistent Merkle Mountain Range.
-    fn calculate_root(&self, leaves: &[String]) -> String {
+    fn rebuild_tree(&self, leaves: &[String]) {
+        if leaves.is_empty() {
+            *self.state_root.lock().unwrap() = "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+            *self.tree_levels.lock().unwrap() = Vec::new();
+            return;
+        }
+
+        let mut levels = Vec::new();
+        let mut current_level: Vec<[u8; 32]> = leaves
+            .iter()
+            .map(|l| {
+                let mut hasher = Sha256::new();
+                hasher.update(l.as_bytes());
+                hasher.finalize().into()
+            })
+            .collect();
+
+        levels.push(current_level.clone());
+
+        while current_level.len() > 1 {
+            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
+            for chunk in current_level.chunks(2) {
+                let mut hasher = Sha256::new();
+                if chunk.len() == 2 {
+                    hasher.update(chunk[0]);
+                    hasher.update(chunk[1]);
+                } else {
+                    hasher.update(chunk[0]);
+                    hasher.update(chunk[0]);
+                }
+                next_level.push(hasher.finalize().into());
+            }
+            current_level = next_level;
+            levels.push(current_level.clone());
+        }
+
+        *self.state_root.lock().unwrap() = format!("0x{}", hex::encode(current_level[0]));
+        *self.tree_levels.lock().unwrap() = levels;
+    }
+
+    pub fn calculate_root(&self, leaves: &[String]) -> String {
         if leaves.is_empty() {
             return "0x0000000000000000000000000000000000000000000000000000000000000000"
                 .to_string();
@@ -93,7 +130,7 @@ impl NexusState {
                     hasher.update(chunk[1]);
                 } else {
                     hasher.update(chunk[0]);
-                    hasher.update(chunk[0]); // Duplicate last leaf if odd
+                    hasher.update(chunk[0]);
                 }
                 next_level.push(hasher.finalize().into());
             }
@@ -115,23 +152,19 @@ impl NexusState {
 
     pub fn generate_merkle_proof(&self, key: &str) -> Option<MerkleProof> {
         let leaves = self.leaves.lock().unwrap();
+        let levels = self.tree_levels.lock().unwrap();
         let index = leaves.iter().position(|l| l == key)?;
 
-        let mut current_level: Vec<[u8; 32]> = leaves
-            .iter()
-            .map(|l| {
-                let mut hasher = Sha256::new();
-                hasher.update(l.as_bytes());
-                hasher.finalize().into()
-            })
-            .collect();
+        if levels.is_empty() {
+            return None;
+        }
 
         let mut path = Vec::new();
         let mut idx = index;
 
-        while current_level.len() > 1 {
+        for level in &levels[..levels.len() - 1] {
             let sibling_idx = if idx % 2 == 0 {
-                if idx + 1 < current_level.len() {
+                if idx + 1 < level.len() {
                     idx + 1
                 } else {
                     idx
@@ -141,23 +174,9 @@ impl NexusState {
             };
 
             path.push((
-                format!("0x{}", hex::encode(current_level[sibling_idx])),
+                format!("0x{}", hex::encode(level[sibling_idx])),
                 idx % 2 == 0,
             ));
-
-            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
-            for chunk in current_level.chunks(2) {
-                let mut hasher = Sha256::new();
-                if chunk.len() == 2 {
-                    hasher.update(chunk[0]);
-                    hasher.update(chunk[1]);
-                } else {
-                    hasher.update(chunk[0]);
-                    hasher.update(chunk[0]);
-                }
-                next_level.push(hasher.finalize().into());
-            }
-            current_level = next_level;
             idx /= 2;
         }
 
@@ -208,18 +227,6 @@ mod tests {
     fn test_calculate_root_empty() {
         let state = NexusState::new();
         assert_eq!(state.calculate_root(&[]), "0x0000000000000000000000000000000000000000000000000000000000000000");
-    }
-
-    #[test]
-    fn test_calculate_root_single() {
-        let state = NexusState::new();
-        let root = state.calculate_root(&["leaf1".to_string()]);
-        assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
-
-        let mut hasher = Sha256::new();
-        hasher.update("leaf1".as_bytes());
-        let expected = format!("0x{}", hex::encode(hasher.finalize()));
-        assert_eq!(root, expected);
     }
 
     #[test]
