@@ -1,29 +1,36 @@
-# Conxian Nexus Enhancements Summary
+# Conxian Nexus Enhancements Summary (v0.2.0-Superior)
 
-## 1. Merkle Tree Performance (src/state/mod.rs)
-- **Problem**: Full root recalculation on every update was O(N*logN) and didn't cache intermediate levels, making proof generation slow.
-- **Solution**: Implemented a `tree_levels` cache. `rebuild_tree` now populates this cache, allowing `generate_merkle_proof` to operate in O(logN) by directly accessing sibling hashes from the cache.
-- **Impact**: Significant reduction in proof generation latency and CPU overhead for state updates.
-
-## 2. FSOC Sequencer MEV Detection (src/executor/mod.rs)
-- **Problem**: Basic FSOC logic only checked for simple front-running and spamming.
+## 1. Merkle Tree & State Foundations (src/state/mod.rs)
+- **Problem**: Full root recalculation was inefficient and only supported a fixed Merkle tree.
 - **Solution**:
-    - Added `detect_sandwich_attack` to identify users wrapping target transactions with their own.
-    - Tightened liquidation front-running heuristics from 500ms to 200ms to reduce false positives while maintaining high sensitivity.
-    - Fixed SQL query parameter binding to match the expected schema.
-- **Impact**: Enhanced security against advanced MEV strategies on Stacks L1.
+    - Implemented a `tree_levels` cache for O(logN) proof generation.
+    - Added a **Merkle Mountain Range (MMR)** foundation to support efficient append-only state proofs and historical audits as per the roadmap.
+- **Impact**: Significant performance boost for state verification and foundational support for long-term state persistence.
 
-## 3. NexusSync Latency & Architecture (src/sync/mod.rs)
-- **Problem**: Synchronous polling/processing loop limited throughput and ingestion flexibility.
+## 2. Advanced MEV Detection (src/executor/mod.rs)
+- **Problem**: Basic FSOC sequencer only caught simple front-running.
 - **Solution**:
-    - Introduced an internal `mpsc` channel to decouple the Poller from the Processor.
-    - Added `fast_path_ingest` to allow external sources (like WebSockets) to inject events directly into the processing queue.
-    - Increased polling frequency (from 20s to 10s).
-- **Impact**: Lower state sync latency and prepared the architecture for future real-time ingestion integrations.
+    - Added **Sandwich Attack detection** logic to identify wrapping transaction patterns.
+    - Tightened front-running heuristics for liquidation events (200ms threshold).
+    - Instrumented validation with **OpenTelemetry tracing** for better operational visibility.
+- **Impact**: Enhanced protection for users against sophisticated MEV strategies and easier debugging of validation decisions.
 
-## 4. Multi-Protocol Gateway (lib-conxian-core/src/lib.rs)
-- **Problem**: Protocol simulations were basic and lacked state-specific validation.
+## 3. Superior Multi-Protocol Gateway (lib-conxian-core/src/lib.rs)
+- **Problem**: Protocol responses were unstructured strings, and key management was basic.
 - **Solution**:
-    - **BitVM**: Added state transition root simulation to the `prove` command.
-    - **RGB**: Implemented schema-specific validation (LNPBP, NIA) and added a check for cryptographic state proofs.
-- **Impact**: More realistic and robust gateway for multi-protocol support.
+    - **HD Wallet Upgrade**: Added full **BIP-39 mnemonic support** and **BIP-32 HD derivation** (m/44').
+    - **Native Fingerprinting**: Implemented **HASH160 (SHA256 + RIPEMD160)** for native Stacks address fingerprinting directly in the core library.
+    - **Structured API**: Upgraded `ConxianService` trait and all protocol implementations (Bisq, RGB, BitVM) to return a structured `ServiceResponse`.
+- **Impact**: Professional-grade wallet foundations for SDK users; cryptographic alignment with Stacks L1; programmatic integration of multi-protocol results.
+
+## 4. Observability & Operations
+- **Problem**: Difficult to trace complex asynchronous sync and execution paths.
+- **Solution**:
+    - Integrated **OpenTelemetry** dependencies and instrumented core service loops (`NexusExecutor`, `NexusSafety`, `NexusSync`).
+    - Added Prometheus metrics for transactions, blocks, drift, and safety mode.
+- **Impact**: Real-time visibility into the "Glass Node" performance and health.
+
+## 5. B2B License Enforcement (src/api/billing/mod.rs)
+- **Problem**: Exceeding free limits caused abrupt SDK failures.
+- **Solution**: Implemented a **24-hour Sovereign Grace Period** after 50k signatures, maintaining 40% efficiency via randomized request dropping to allow developers time to upgrade without immediate hard-cutoffs.
+- **Impact**: Smoother developer experience and consistent license management.

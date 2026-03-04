@@ -26,15 +26,17 @@ message VerifyStateRequest {
 
 message VerifyStateResponse {
   bool valid = 1;
+  string mmr_root = 2;
 }
 
 message StatusRequest {}
 
 message StatusResponse {
   string state_root = 1;
-  uint64 processed_height = 2;
-  bool safety_mode = 3;
-  uint64 drift = 4;
+  string mmr_root = 2;
+  uint64 processed_height = 3;
+  bool safety_mode = 4;
+  uint64 drift = 5;
 }
 
 message MetricsRequest {}

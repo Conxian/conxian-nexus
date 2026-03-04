@@ -227,6 +227,7 @@ impl NexusSync {
     }
 
     /// Handles incoming Stacks node events and updates the local state.
+    #[tracing::instrument(skip(self))]
     pub async fn handle_event(&self, event: StacksEvent) -> anyhow::Result<()> {
         match event {
             StacksEvent::Microblock(data) => {
@@ -239,6 +240,7 @@ impl NexusSync {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
         tracing::debug!("Processing microblock: {} (soft-finality)", data.hash);
 
@@ -287,6 +289,7 @@ impl NexusSync {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {} (hard-finality)", data.hash);
 

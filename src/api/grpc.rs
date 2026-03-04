@@ -42,6 +42,7 @@ impl NexusService for MyNexusService {
         let current_root = self.nexus_state.get_state_root();
         Ok(Response::new(VerifyStateResponse {
             valid: current_root == req.state_root,
+            mmr_root: self.nexus_state.get_mmr_root(),
         }))
     }
 
@@ -79,6 +80,7 @@ impl NexusService for MyNexusService {
 
         Ok(Response::new(StatusResponse {
             state_root,
+            mmr_root: self.nexus_state.get_mmr_root(),
             processed_height: processed_height.unwrap_or(0) as u64,
             safety_mode,
             drift,
@@ -103,7 +105,7 @@ impl NexusService for MyNexusService {
 
         let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await
             .map_err(|e| Status::internal(format!("Redis error: {}", e)))?;
-        let safety_mode: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
+        let safety_mode_active: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
         let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
 
         let uptime = crate::api::get_uptime();
@@ -111,7 +113,7 @@ impl NexusService for MyNexusService {
         Ok(Response::new(MetricsResponse {
             total_transactions: tx_count as u64,
             total_blocks: block_count as u64,
-            safety_mode,
+            safety_mode: safety_mode_active,
             drift,
             uptime_seconds: uptime,
         }))

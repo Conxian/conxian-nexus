@@ -90,6 +90,7 @@ impl NexusSafety {
     }
 
     /// Checks the health by comparing local processed height with external L1 height.
+    #[tracing::instrument(skip(self))]
     async fn check_health(&self) -> anyhow::Result<()> {
         let current_burn_height = self.get_external_burn_height().await?;
         let processed_height = self.get_processed_height().await?;
