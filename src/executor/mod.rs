@@ -42,6 +42,7 @@ impl NexusExecutor {
 
     /// FSOC (First-Seen-On-Chain) Sequencer logic.
     /// Validates that a transaction is not attempting to front-run on-chain events.
+    #[tracing::instrument(skip(self))]
     pub async fn validate_transaction(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
         let latest_on_chain_event_time = self.get_cached_or_fetch_latest_event_time().await?;
 

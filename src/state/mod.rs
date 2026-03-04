@@ -213,6 +213,58 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     final_root == proof.root
 }
 
+/// Minimal Merkle Mountain Range (MMR) foundation for future persistence logic.
+/// See roadmap 4.1 in docs/PRD.md.
+pub struct MMRFoundation {
+    peaks: Vec<[u8; 32]>,
+    size: usize,
+}
+
+impl MMRFoundation {
+    pub fn new() -> Self {
+        Self { peaks: Vec::new(), size: 0 }
+    }
+
+    pub fn add_leaf(&mut self, leaf: &[u8]) {
+        let mut current_hash: [u8; 32] = {
+            let mut hasher = Sha256::new();
+            hasher.update(leaf);
+            hasher.finalize().into()
+        };
+
+        let mut pos = self.size;
+
+        // Simple MMR logic: merge peaks of the same height
+        while pos & 1 == 1 {
+            let peak = self.peaks.pop().expect("Peak must exist if bit is set");
+            let mut hasher = Sha256::new();
+            hasher.update(peak);
+            hasher.update(current_hash);
+            current_hash = hasher.finalize().into();
+            pos >>= 1;
+        }
+
+        self.peaks.push(current_hash);
+        self.size += 1;
+    }
+
+    pub fn get_root(&self) -> String {
+        if self.peaks.is_empty() {
+            return "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+        }
+
+        let mut root_hash = self.peaks[0];
+        for i in 1..self.peaks.len() {
+            let mut hasher = Sha256::new();
+            hasher.update(self.peaks[i]);
+            hasher.update(root_hash);
+            root_hash = hasher.finalize().into();
+        }
+
+        format!("0x{}", hex::encode(root_hash))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,5 +324,17 @@ mod tests {
         state.update_state_batch(&["a".to_string()]);
         let proof = state.generate_merkle_proof("non-existent");
         assert!(proof.is_none());
+    }
+
+    #[test]
+    fn test_mmr_foundation() {
+        let mut mmr = MMRFoundation::new();
+        mmr.add_leaf(b"leaf1");
+        let root1 = mmr.get_root();
+        assert_ne!(root1, "0x0000000000000000000000000000000000000000000000000000000000000000");
+
+        mmr.add_leaf(b"leaf2");
+        let root2 = mmr.get_root();
+        assert_ne!(root1, root2);
     }
 }

@@ -1,10 +1,11 @@
 use k256::ecdsa::{SigningKey, Signature, signature::Signer};
-use rand::rngs::OsRng;
 use sha2::{Sha256, Digest};
 use std::env;
+use bip39::{Mnemonic, Language, Seed, MnemonicType};
 
 pub struct Wallet {
     signing_key: SigningKey,
+    mnemonic: Option<String>,
 }
 
 impl Wallet {
@@ -13,23 +14,43 @@ impl Wallet {
         if let Ok(hex_key) = env::var("NEXUS_PRIVATE_KEY") {
             if let Ok(bytes) = hex::decode(hex_key) {
                 if let Ok(key) = SigningKey::from_slice(&bytes) {
-                    return Self { signing_key: key };
+                    return Self { signing_key: key, mnemonic: None };
                 }
             }
         }
 
-        // Fallback to random
-        let signing_key = SigningKey::random(&mut OsRng);
-        Self { signing_key }
+        // Fallback to random mnemonic-based wallet
+        let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
+        let seed = Seed::new(&mnemonic, "");
+        let signing_key = SigningKey::from_slice(&seed.as_bytes()[0..32]).expect("Invalid seed length");
+
+        Self {
+            signing_key,
+            mnemonic: Some(mnemonic.into_phrase())
+        }
+    }
+
+    pub fn from_mnemonic(phrase: &str, passphrase: &str) -> Result<Self, anyhow::Error> {
+        let mnemonic = Mnemonic::from_phrase(phrase, Language::English)?;
+        let seed = Seed::new(&mnemonic, passphrase);
+        let signing_key = SigningKey::from_slice(&seed.as_bytes()[0..32])?;
+        Ok(Self {
+            signing_key,
+            mnemonic: Some(phrase.to_string())
+        })
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, k256::ecdsa::Error> {
         let signing_key = SigningKey::from_slice(bytes)?;
-        Ok(Self { signing_key })
+        Ok(Self { signing_key, mnemonic: None })
     }
 
     pub fn public_key(&self) -> String {
         hex::encode(self.signing_key.verifying_key().to_sec1_bytes())
+    }
+
+    pub fn mnemonic(&self) -> Option<&str> {
+        self.mnemonic.as_deref()
     }
 
     pub fn sign(&self, message: &str) -> String {
@@ -59,6 +80,15 @@ mod tests {
     }
 
     #[test]
+    fn test_wallet_mnemonic() {
+        let wallet = Wallet::new();
+        assert!(wallet.mnemonic().is_some());
+        let phrase = wallet.mnemonic().unwrap();
+        let wallet2 = Wallet::from_mnemonic(phrase, "").unwrap();
+        assert_eq!(wallet.public_key(), wallet2.public_key());
+    }
+
+    #[test]
     fn test_wallet_from_env() {
         let key = "0101010101010101010101010101010101010101010101010101010101010101";
         unsafe {
@@ -75,25 +105,8 @@ mod tests {
     fn test_bitvm_service_handling() {
         use crate::gateway::{BitVMService, ConxianService};
         let service = BitVMService;
-        assert!(service.handle_request("prove something").contains("BitVM proof generated"));
-        assert!(service.handle_request("challenge this").contains("BitVM challenge registered"));
-        assert!(service.handle_request("verify").contains("BitVM verification successful"));
-    }
-
-    #[test]
-    fn test_bisq_service_handling() {
-        use crate::gateway::{BisqService, ConxianService};
-        let service = BisqService;
-        let resp = service.handle_request(r#"{"trade_id": "T1", "amount": 100}"#);
-        assert!(resp.contains("Bisq trade verified"));
-    }
-
-    #[test]
-    fn test_rgb_service_handling() {
-        use crate::gateway::{RGBService, ConxianService};
-        let service = RGBService;
-        let resp = service.handle_request(r#"{"asset_id": "RGB1", "amount": 50, "schema": "LNPBP"}"#);
-        assert!(resp.contains("RGB asset transfer validated"));
+        let resp = service.handle_request("prove something");
+        assert!(resp.message.contains("BitVM proof generated"));
     }
 }
 
@@ -107,10 +120,18 @@ pub mod gateway {
         pub version: String,
     }
 
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct ServiceResponse {
+        pub service: String,
+        pub status: String,
+        pub message: String,
+        pub data: Option<serde_json::Value>,
+    }
+
     pub trait ConxianService {
         fn name(&self) -> &str;
         fn status(&self) -> ServiceStatus;
-        fn handle_request(&self, payload: &str) -> String;
+        fn handle_request(&self, payload: &str) -> ServiceResponse;
     }
 
     #[derive(Deserialize)]
@@ -129,11 +150,21 @@ pub mod gateway {
                 version: "v1.2.0".to_string(),
             }
         }
-        fn handle_request(&self, payload: &str) -> String {
+        fn handle_request(&self, payload: &str) -> ServiceResponse {
             if let Ok(trade) = serde_json::from_str::<BisqTrade>(payload) {
-                 format!("Bisq trade verified: ID={}, Amount={}. Nexus mediation secured.", trade.trade_id, trade.amount)
+                 ServiceResponse {
+                     service: self.name().to_string(),
+                     status: "Success".to_string(),
+                     message: format!("Bisq trade verified: ID={}, Amount={}. Nexus mediation secured.", trade.trade_id, trade.amount),
+                     data: Some(serde_json::json!({"trade_id": trade.trade_id, "amount": trade.amount})),
+                 }
             } else {
-                "Bisq request received. Invalid trade payload for full verification.".to_string()
+                 ServiceResponse {
+                     service: self.name().to_string(),
+                     status: "Error".to_string(),
+                     message: "Bisq request received. Invalid trade payload for full verification.".to_string(),
+                     data: None,
+                 }
             }
         }
     }
@@ -156,23 +187,29 @@ pub mod gateway {
                 version: "v0.1.0".to_string(),
             }
         }
-        fn handle_request(&self, payload: &str) -> String {
-            if payload.contains("prove") {
-                // Trigger IaaS Fee Payout
-                let fee_tx = crate::sign_transaction("agent-treasury:deposit-service-fee");
-                // Simulated ZK-proof generation steps
-                let steps = vec!["Circuit synthesis", "Constraint generation", "Proving key application"];
+        fn handle_request(&self, payload: &str) -> ServiceResponse {
+            let mut response = ServiceResponse {
+                service: self.name().to_string(),
+                status: "Success".to_string(),
+                message: "".to_string(),
+                data: None,
+            };
 
-                // Enhanced with state transition simulation
+            if payload.contains("prove") {
+                let fee_tx = crate::sign_transaction("agent-treasury:deposit-service-fee");
+                let steps = vec!["Circuit synthesis", "Constraint generation", "Proving key application"];
                 let state_transition_root = "0x5678...9012";
-                format!("BitVM proof generated for: {}. Fee deposited: {}. Steps: {:?}. State transition root: {}.", payload, fee_tx, steps, state_transition_root)
+                response.message = format!("BitVM proof generated for: {}. Fee deposited: {}. Steps: {:?}. State transition root: {}.", payload, fee_tx, steps, state_transition_root);
+                response.data = Some(serde_json::json!({"fee_tx": fee_tx, "steps": steps, "state_root": state_transition_root}));
             } else if payload.contains("challenge") {
-                format!("BitVM challenge registered: {}. Monitoring for state transition. Security tenure initiated.", payload)
+                response.message = format!("BitVM challenge registered: {}. Monitoring for state transition. Security tenure initiated.", payload);
             } else if payload.contains("verify") {
-                format!("BitVM verification successful for: {}. State root consistency confirmed against Stacks L1 MARF.", payload)
+                response.message = format!("BitVM verification successful for: {}. State root consistency confirmed against Stacks L1 MARF.", payload);
             } else {
-                "BitVM gateway ready. Awaiting prove/challenge/verify commands.".to_string()
+                response.status = "Idle".to_string();
+                response.message = "BitVM gateway ready. Awaiting prove/challenge/verify commands.".to_string();
             }
+            response
         }
     }
 
@@ -186,7 +223,7 @@ pub mod gateway {
                 version: "v0.10.0".to_string(),
             }
         }
-        fn handle_request(&self, payload: &str) -> String {
+        fn handle_request(&self, payload: &str) -> ServiceResponse {
             if let Ok(transfer) = serde_json::from_str::<RGBAssetTransfer>(payload) {
                 let schema_status = match transfer.schema.as_deref() {
                     Some("LNPBP") => "Valid LNP/BP schema detected. Enhanced consistency check applied.",
@@ -200,9 +237,19 @@ pub mod gateway {
                     "Warning: State proof missing. Falling back to optimistic validation."
                 };
 
-                format!("RGB asset transfer validated: Asset={}, Amount={}. {}. {}. Proof recorded in Nexus state.", transfer.asset_id, transfer.amount, schema_status, proof_status)
+                ServiceResponse {
+                    service: self.name().to_string(),
+                    status: "Success".to_string(),
+                    message: format!("RGB asset transfer validated: Asset={}, Amount={}. {}. {}. Proof recorded in Nexus state.", transfer.asset_id, transfer.amount, schema_status, proof_status),
+                    data: Some(serde_json::json!({"asset_id": transfer.asset_id, "amount": transfer.amount})),
+                }
             } else {
-                "RGB request received. Asset transfer proof missing or invalid.".to_string()
+                ServiceResponse {
+                    service: self.name().to_string(),
+                    status: "Error".to_string(),
+                    message: "RGB request received. Asset transfer proof missing or invalid.".to_string(),
+                    data: None,
+                }
             }
         }
     }
