@@ -56,3 +56,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 4.5 Observability
 - **Status**: Internal Metrics and Prometheus Exporter Complete (`/v1/metrics`, `/metrics`).
 - **Next Step**: Add OpenTelemetry tracing.
+
+### 2.7 B2B License & Billing Enforcement (Sovereign Grace Period)
+- **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
+- **Implementation**: The billing module implements a 24-hour "Sovereign Grace Period" triggered upon exceeding the free tier limit (50k signatures). During this period, the Nexus maintains 40% efficiency (randomized 60% drop rate) to allow critical operations to proceed while signalling the need for payment/license renewal.
