@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use sqlx::Row;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
 use reqwest::Client;
 
@@ -52,15 +53,20 @@ pub struct NexusSync {
     state: Arc<NexusState>,
     rpc_url: String,
     http_client: Client,
+    event_tx: mpsc::Sender<StacksEvent>,
+    event_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<StacksEvent>>>,
 }
 
 impl NexusSync {
     pub fn new(storage: Arc<Storage>, state: Arc<NexusState>, rpc_url: String) -> Self {
+        let (tx, rx) = mpsc::channel(1000);
         Self {
             storage,
             state,
             rpc_url,
             http_client: Client::new(),
+            event_tx: tx,
+            event_rx: Arc::new(tokio::sync::Mutex::new(rx)),
         }
     }
 
@@ -106,16 +112,14 @@ impl NexusSync {
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting NexusSync service (RPC: {})...", self.rpc_url);
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel(100);
-
         // Spawn Poller task
-        let poller_tx = tx.clone();
+        let poller_tx = self.event_tx.clone();
         let rpc_url = self.rpc_url.clone();
         let storage = self.storage.clone();
         let http_client = self.http_client.clone();
 
         tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(20));
+            let mut interval = time::interval(Duration::from_secs(10)); // Increased frequency
             loop {
                 interval.tick().await;
                 if let Err(e) = Self::poll_stacks_node(&poller_tx, &rpc_url, &storage, &http_client).await {
@@ -124,6 +128,8 @@ impl NexusSync {
             }
         });
 
+        // Event Processing Loop
+        let mut rx = self.event_rx.lock().await;
         while let Some(event) = rx.recv().await {
             if let Err(e) = self.handle_event(event).await {
                 tracing::error!("Error handling event: {}", e);
@@ -133,8 +139,14 @@ impl NexusSync {
         Ok(())
     }
 
+    /// Fast-path for external microblock ingestion (e.g., from WebSockets)
+    pub async fn fast_path_ingest(&self, event: StacksEvent) -> anyhow::Result<()> {
+        self.event_tx.send(event).await?;
+        Ok(())
+    }
+
     async fn poll_stacks_node(
-        tx: &tokio::sync::mpsc::Sender<StacksEvent>,
+        tx: &mpsc::Sender<StacksEvent>,
         rpc_url: &str,
         storage: &Storage,
         http_client: &Client,

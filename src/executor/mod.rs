@@ -65,6 +65,12 @@ impl NexusExecutor {
             return Ok(false);
         }
 
+        let sandwich_attack_detected = self.detect_sandwich_attack(request).await?;
+        if sandwich_attack_detected {
+            tracing::warn!("Potential Sandwich Attack detected for tx: {}", request.tx_id);
+            return Ok(false);
+        }
+
         Ok(true)
     }
 
@@ -95,7 +101,7 @@ impl NexusExecutor {
     async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
         // 1. Check for spamming from the same sender
         let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id !=  AND sender =  AND created_at > "
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
         )
         .bind(&request.tx_id)
         .bind(&request.sender)
@@ -115,7 +121,7 @@ impl NexusExecutor {
 
         // 2. Check for identical payloads in a short window (copy-cat front-running)
         let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id !=  AND payload =  AND created_at > "
+            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
         )
         .bind(&request.tx_id)
         .bind(&request.payload)
@@ -136,10 +142,36 @@ impl NexusExecutor {
         if request.payload.contains("liquidate") {
              let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
              if let Some(t) = last_oracle_update {
-                 if request.timestamp.signed_duration_since(t).num_milliseconds() < 500 {
-                     tracing::warn!("Liquidation tx {} arrived within 500ms of latest block. Potential MEV.", request.tx_id);
+                 if request.timestamp.signed_duration_since(t).num_milliseconds() < 200 {
+                     tracing::warn!("Liquidation tx {} arrived within 200ms of latest block. High MEV probability.", request.tx_id);
+                     return Ok(true);
                  }
              }
+        }
+
+        Ok(false)
+    }
+
+    /// Detects sandwich attacks by identifying transactions from the same sender
+    /// that might be wrapping a target transaction.
+    async fn detect_sandwich_attack(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
+        let window = chrono::Duration::seconds(2);
+
+        // Look for other transactions from the same sender within a very tight window
+        let row = sqlx::query(
+            "SELECT COUNT(*) FROM stacks_transactions WHERE sender = $1 AND created_at BETWEEN $2 AND $3"
+        )
+        .bind(&request.sender)
+        .bind(request.timestamp - window)
+        .bind(request.timestamp + window)
+        .fetch_one(&self.storage.pg_pool).await?;
+
+        let burst_count: i64 = row.get(0);
+
+        // If the same user has multiple transactions in a 4-second window, and they contain
+        // swap/liquidity related payloads, it's a high risk of a sandwich.
+        if burst_count >= 2 && (request.payload.contains("swap") || request.payload.contains("liquidity")) {
+            return Ok(true);
         }
 
         Ok(false)
