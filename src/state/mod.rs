@@ -13,6 +13,7 @@ pub struct NexusState {
     leaves: Mutex<Vec<String>>,
     tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
     state_root: Mutex<String>,
+    mmr: Mutex<MMRFoundation>,
     last_updated: Mutex<DateTime<Utc>>,
 }
 
@@ -30,6 +31,7 @@ impl NexusState {
             leaves: Mutex::new(Vec::new()),
             tree_levels: Mutex::new(Vec::new()),
             state_root: Mutex::new(initial_root),
+            mmr: Mutex::new(MMRFoundation::new()),
             last_updated: Mutex::new(Utc::now()),
         }
     }
@@ -38,14 +40,21 @@ impl NexusState {
         self.state_root.lock().unwrap().clone()
     }
 
+    pub fn get_mmr_root(&self) -> String {
+        self.mmr.lock().unwrap().get_root()
+    }
+
     pub fn update_state(&self, data: &str, _tx_count: usize) {
         self.update_state_batch(&[data.to_string()]);
     }
 
     pub fn update_state_batch(&self, data: &[String]) {
         let mut leaves = self.leaves.lock().unwrap();
+        let mut mmr = self.mmr.lock().unwrap();
+
         for item in data {
             leaves.push(item.clone());
+            mmr.add_leaf(item.as_bytes());
         }
 
         self.rebuild_tree(&leaves);
@@ -56,13 +65,21 @@ impl NexusState {
 
     pub fn set_initial_leaves(&self, new_leaves: Vec<String>) {
         let mut leaves = self.leaves.lock().unwrap();
+        let mut mmr = self.mmr.lock().unwrap();
+
         *leaves = new_leaves;
+        *mmr = MMRFoundation::new();
+        for leaf in leaves.iter() {
+            mmr.add_leaf(leaf.as_bytes());
+        }
+
         self.rebuild_tree(&leaves);
         *self.last_updated.lock().unwrap() = Utc::now();
         tracing::info!(
-            "Nexus state initialized with {} leaves. Root: {}",
+            "Nexus state initialized with {} leaves. Root: {}, MMR Root: {}",
             leaves.len(),
-            self.get_state_root()
+            self.get_state_root(),
+            mmr.get_root()
         );
     }
 
@@ -287,6 +304,7 @@ mod tests {
         state.update_state_batch(&["tx1".to_string(), "tx2".to_string()]);
         let root = state.get_state_root();
         assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
+        assert_ne!(state.get_mmr_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
     }
 
     #[test]

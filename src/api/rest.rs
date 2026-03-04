@@ -47,11 +47,13 @@ pub struct VerifyStateRequest {
 #[derive(Serialize)]
 pub struct VerifyStateResponse {
     pub valid: bool,
+    pub mmr_root: String,
 }
 
 #[derive(Serialize)]
 pub struct StatusResponse {
     pub state_root: String,
+    pub mmr_root: String,
     pub processed_height: u64,
     pub safety_mode: bool,
     pub drift: u64,
@@ -126,6 +128,7 @@ async fn verify_state(
     let current_root = state.nexus_state.get_state_root();
     Json(VerifyStateResponse {
         valid: current_root == payload.state_root,
+        mmr_root: state.nexus_state.get_mmr_root(),
     })
 }
 
@@ -166,6 +169,7 @@ async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse
 
     Ok(Json(StatusResponse {
         state_root,
+        mmr_root: state.nexus_state.get_mmr_root(),
         processed_height: processed_height.unwrap_or(0) as u64,
         safety_mode,
         drift,

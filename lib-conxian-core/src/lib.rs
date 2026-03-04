@@ -66,8 +66,6 @@ impl Wallet {
     }
 
     /// Generates a Stacks-compatible address (Simplified Hash160).
-    /// Note: Full C32 encoding is usually handled by a separate crate,
-    /// but we provide the HASH160 "Native" fingerprint here.
     pub fn stacks_address_hash(&self) -> String {
         let pubkey = self.public_key_bytes();
         let sha2 = Sha256::digest(&pubkey);
@@ -96,9 +94,17 @@ pub fn sign_transaction(tx_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use lazy_static::lazy_static;
+
+    lazy_static! {
+        static ref ENV_MUTEX: Mutex<()> = Mutex::new(());
+    }
 
     #[test]
     fn test_wallet_signing() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { env::remove_var("NEXUS_PRIVATE_KEY"); }
         let wallet = Wallet::new();
         let message = "hello world";
         let signature = wallet.sign(message);
@@ -107,8 +113,10 @@ mod tests {
 
     #[test]
     fn test_wallet_mnemonic_hd() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { env::remove_var("NEXUS_PRIVATE_KEY"); }
         let wallet = Wallet::new();
-        assert!(wallet.mnemonic().is_some());
+        assert!(wallet.mnemonic().is_some(), "Mnemonic should be generated when ENV is empty");
         let phrase = wallet.mnemonic().unwrap();
         // Reconstruct
         let wallet2 = Wallet::from_mnemonic(phrase, "").unwrap();
@@ -117,22 +125,31 @@ mod tests {
 
     #[test]
     fn test_stacks_address_generation() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        unsafe { env::remove_var("NEXUS_PRIVATE_KEY"); }
         let wallet = Wallet::new();
         let hash = wallet.stacks_address_hash();
-        assert_eq!(hash.len(), 40); // 20 bytes hex encoded
+        assert_eq!(hash.len(), 40);
     }
 
     #[test]
     fn test_wallet_from_env() {
+        let _guard = ENV_MUTEX.lock().unwrap();
         let key = "0101010101010101010101010101010101010101010101010101010101010101";
-        unsafe {
-            env::set_var("NEXUS_PRIVATE_KEY", key);
-        }
+        unsafe { env::set_var("NEXUS_PRIVATE_KEY", key); }
         let wallet = Wallet::new();
-        assert_eq!(wallet.public_key(), "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f");
-        unsafe {
-            env::remove_var("NEXUS_PRIVATE_KEY");
-        }
+        let pubkey = wallet.public_key();
+        unsafe { env::remove_var("NEXUS_PRIVATE_KEY"); }
+        // Correct expectation for raw key "01...01"
+        assert_eq!(pubkey, "031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f");
+    }
+
+    #[test]
+    fn test_bitvm_service_handling() {
+        use crate::gateway::{BitVMService, ConxianService};
+        let service = BitVMService;
+        let resp = service.handle_request("prove something");
+        assert!(resp.message.contains("BitVM proof generated"));
     }
 }
 
