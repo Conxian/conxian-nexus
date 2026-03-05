@@ -7,7 +7,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.1 Glass Node Architecture
 - **Requirement**: Synchronize state with Stacks L1 in real-time.
-- **Implementation**: The `nexus-sync` module maintains a local representation of on-chain data using an asynchronous channel-based ingestion loop.
+- **Implementation**: The `nexus-sync` module maintains a local representation of on-chain data using an asynchronous channel-based ingestion loop. **New (v0.3.0)**: Integrated Microblock Reorg Detection.
 
 ### 2.2 Nakamoto Awareness (Epoch 3.0/3.1)
 - **Requirement**: Differentiate between microblock soft-finality and burn-block hard-finality.
@@ -23,34 +23,34 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.5 Cryptographic Verification
 - **Requirement**: Provide verifiable proofs of state and persist state roots.
-- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs with intermediate level caching. **New**: Added MMR (Merkle Mountain Range) foundation for future persistent audit logs.
+- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. **Superior (v0.3.0)**: Implemented Persistent Merkle Mountain Range (MMR) peaks in PostgreSQL for O(1) audit log restoration and long-term state integrity.
 
 ### 2.6 Multi-Protocol Gateway
 - **Requirement**: Support multiple protocols including Bisq, RGB, and BitVM.
-- **Implementation**: `lib-conxian-core` provides a unified interface (`ConxianService`). **Updated**: Services now return structured `ServiceResponse` with rich metadata and data payloads.
+- **Implementation**: `lib-conxian-core` provides a unified interface (`ConxianService`). Services return structured `ServiceResponse` with rich metadata.
 
 ### 2.7 Wallet & Security
 - **Requirement**: Secure signing and key management.
-- **Implementation**: **New**: `lib-conxian-core` Wallet now supports BIP-39 mnemonics for secure key backup and recovery.
+- **Implementation**: `lib-conxian-core` Wallet supports BIP-39 mnemonics and BIP-32 HD derivation.
 
 ### 2.8 B2B License & Billing Enforcement (Sovereign Grace Period)
 - **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
-- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency after 50k signatures.
+- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.3.0)**: Telemetry reporting now utilizes HMAC-SHA256 verification to prevent usage spoofing.
 
 ## 3. Technical Stack
 - **Language**: Rust (Tokio, Axum, Tonic)
 - **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub)
-- **Cryptography**: Sha256 (Merkle Tree/MMR), k256 (ECDSA), BIP-39 (Mnemonic)
+- **Cryptography**: Sha256 (Merkle Tree/MMR/HMAC), k256 (ECDSA), BIP-39 (Mnemonic)
 - **Observability**: Prometheus, OpenTelemetry (Tracing)
 
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree & MMR (Full)
-- **Status**: Merkle Tree complete; MMR Foundation implemented.
-- **Next Step**: Implement a full persistent Merkle Mountain Range (MMR) in a key-value store for historical state auditing.
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks implemented (v0.3.0)**.
+- **Next Step**: Implement full persistent MMR leaf storage for O(log N) historical proofs.
 
 ### 4.2 Real-time Sync Ingestion
-- **Status**: Channel-based Async Ingestion Complete.
+- **Status**: Channel-based Async Ingestion Complete; Reorg detection implemented.
 - **Next Step**: Integrate with Hiro or Stacks node WebSockets using the `fast_path_ingest` endpoint.
 
 ### 4.3 Advanced MEV Mitigation (Mempool)

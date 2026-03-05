@@ -1,36 +1,34 @@
-# Conxian Nexus Enhancements Summary (v0.2.0-Superior)
+# Conxian Nexus Enhancements Summary (v0.3.0-Superior)
 
-## 1. Merkle Tree & State Foundations (src/state/mod.rs)
-- **Problem**: Full root recalculation was inefficient and only supported a fixed Merkle tree.
+## 1. Persistent Audit Logs & MMR (src/state/mod.rs, src/sync/mod.rs)
+- **Problem**: MMR state was transient and lost on node restart, requiring full recalculation.
 - **Solution**:
-    - Implemented a `tree_levels` cache for O(logN) proof generation.
-    - Added a **Merkle Mountain Range (MMR)** foundation to support efficient append-only state proofs and historical audits as per the roadmap.
-- **Impact**: Significant performance boost for state verification and foundational support for long-term state persistence.
+    - Implemented **Persistent MMR Peaks** in PostgreSQL (`mmr_peaks` table).
+    - Added automatic state restoration during `load_initial_state`.
+- **Impact**: Instant node recovery and immutable historical state anchoring on-chain.
 
-## 2. Advanced MEV Detection (src/executor/mod.rs)
-- **Problem**: Basic FSOC sequencer only caught simple front-running.
+## 2. Secure B2B Telemetry (src/api/billing/mod.rs)
+- **Problem**: SDK usage reporting was vulnerable to simple replay or spoofing attacks.
 - **Solution**:
-    - Added **Sandwich Attack detection** logic to identify wrapping transaction patterns.
-    - Tightened front-running heuristics for liquidation events (200ms threshold).
-    - Instrumented validation with **OpenTelemetry tracing** for better operational visibility.
-- **Impact**: Enhanced protection for users against sophisticated MEV strategies and easier debugging of validation decisions.
+    - Upgraded billing system to use **HMAC-SHA256 authenticated telemetry**.
+    - Introduced `api_secret` and timestamp-based replay protection.
+- **Impact**: Robust license enforcement and prevention of fraudulent limit bypasses.
 
-## 3. Superior Multi-Protocol Gateway (lib-conxian-core/src/lib.rs)
-- **Problem**: Protocol responses were unstructured strings, and key management was basic.
+## 3. Microblock Reorg Detection (src/sync/mod.rs)
+- **Problem**: Sync process didn't verify the continuity of the microblock stream.
 - **Solution**:
-    - **HD Wallet Upgrade**: Added full **BIP-39 mnemonic support** and **BIP-32 HD derivation** (m/44').
-    - **Native Fingerprinting**: Implemented **HASH160 (SHA256 + RIPEMD160)** for native Stacks address fingerprinting directly in the core library.
-    - **Structured API**: Upgraded `ConxianService` trait and all protocol implementations (Bisq, RGB, BitVM) to return a structured `ServiceResponse`.
-- **Impact**: Professional-grade wallet foundations for SDK users; cryptographic alignment with Stacks L1; programmatic integration of multi-protocol results.
+    - Implemented **Parent-Hash Validation** for every microblock.
+    - Added logging for reorg events to trigger manual or automated state audits.
+- **Impact**: Higher state consistency and earlier detection of L1 consensus forks.
 
-## 4. Observability & Operations
-- **Problem**: Difficult to trace complex asynchronous sync and execution paths.
+## 4. State Management Refinement (src/state/mod.rs)
+- **Problem**: Internal state root management lacked manual override for edge-case recovery.
 - **Solution**:
-    - Integrated **OpenTelemetry** dependencies and instrumented core service loops (`NexusExecutor`, `NexusSafety`, `NexusSync`).
-    - Added Prometheus metrics for transactions, blocks, drift, and safety mode.
-- **Impact**: Real-time visibility into the "Glass Node" performance and health.
+    - Exposed `get_mmr_state` and `set_mmr_state` for administrative control and recovery.
+- **Impact**: Improved operational flexibility for node maintainers.
 
-## 5. B2B License Enforcement (src/api/billing/mod.rs)
-- **Problem**: Exceeding free limits caused abrupt SDK failures.
-- **Solution**: Implemented a **24-hour Sovereign Grace Period** after 50k signatures, maintaining 40% efficiency via randomized request dropping to allow developers time to upgrade without immediate hard-cutoffs.
-- **Impact**: Smoother developer experience and consistent license management.
+## 5. Dependency & Security Alignment
+- **Problem**: Missing cryptographic primitives for enhanced security features.
+- **Solution**:
+    - Integrated `hmac` and `sha2` (via `HmacSha256`) into the core billing module.
+- **Impact**: Modern cryptographic standards applied across the entire system.

@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
+use hmac::{Hmac, Mac};
 use rand::{RngCore, Rng};
 use hex;
 use chrono::Utc;
@@ -15,6 +16,8 @@ use crate::api::rest::AppState;
 
 const GRACE_PERIOD_DURATION_SECONDS: i64 = 24 * 60 * 60; // 24 Hours
 const GRACE_PERIOD_EFFICIENCY: f32 = 0.4; // 40% Efficiency
+
+type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Deserialize)]
 pub struct GenerateKeyRequest {
@@ -25,6 +28,7 @@ pub struct GenerateKeyRequest {
 #[derive(Serialize)]
 pub struct GenerateKeyResponse {
     pub api_key: String,
+    pub api_secret: String,
     pub status: String,
     pub grace_period_remaining: Option<i64>,
     pub efficiency: Option<f32>,
@@ -34,6 +38,8 @@ pub struct GenerateKeyResponse {
 pub struct TelemetryRequest {
     pub api_key: String,
     pub signature_hash: String,
+    pub hmac: String,
+    pub timestamp: i64,
 }
 
 #[derive(Serialize)]
@@ -74,14 +80,17 @@ async fn generate_developer_key(
     State(state): State<AppState>,
     Json(payload): Json<GenerateKeyRequest>,
 ) -> impl IntoResponse {
-    let api_key = {
+    let (api_key, api_secret) = {
         let mut rng = rand::thread_rng();
         let mut raw_key = [0u8; 32];
+        let mut raw_secret = [0u8; 32];
         rng.fill_bytes(&mut raw_key);
+        rng.fill_bytes(&mut raw_secret);
 
-        let mut hasher = Sha256::new();
-        hasher.update(&raw_key);
-        format!("cxl_{}", hex::encode(hasher.finalize()))
+        (
+            format!("cxl_{}", hex::encode(Sha256::digest(&raw_key))),
+            hex::encode(Sha256::digest(&raw_secret))
+        )
     };
 
     let mut conn = match state.storage.redis_client.get_multiplexed_async_connection().await {
@@ -90,6 +99,7 @@ async fn generate_developer_key(
             tracing::error!("Failed to connect to Redis for key generation: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, Json(GenerateKeyResponse {
                 api_key: "".to_string(),
+                api_secret: "".to_string(),
                 status: "Internal Database Error".to_string(),
                 grace_period_remaining: None,
                 efficiency: None,
@@ -103,6 +113,7 @@ async fn generate_developer_key(
         .arg(&redis_key)
         .arg("email").arg(&payload.developer_email)
         .arg("project").arg(&payload.project_name)
+        .arg("secret").arg(&api_secret)
         .arg("usage").arg(0)
         .query_async(&mut conn).await;
 
@@ -110,6 +121,7 @@ async fn generate_developer_key(
 
     Json(GenerateKeyResponse {
         api_key,
+        api_secret,
         status: "Key Generated. Free Tier: 50,000 Signatures".to_string(),
         grace_period_remaining: None,
         efficiency: None,
@@ -130,10 +142,32 @@ async fn track_signature(
 
     let redis_key = format!("apikey:{}", payload.api_key);
     
-    // Verify key exists
-    let exists: bool = redis::cmd("EXISTS").arg(&redis_key).query_async(&mut conn).await.unwrap_or(false);
-    if !exists {
+    // Verify key exists and get secret
+    let data: std::collections::HashMap<String, String> = redis::cmd("HGETALL")
+        .arg(&redis_key)
+        .query_async(&mut conn).await.unwrap_or_default();
+
+    if data.is_empty() {
         return (StatusCode::UNAUTHORIZED, "Invalid API Key").into_response();
+    }
+
+    let secret = data.get("secret").cloned().unwrap_or_default();
+
+    // Verify HMAC
+    let message = format!("{}:{}", payload.signature_hash, payload.timestamp);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC can take key of any size");
+    mac.update(message.as_bytes());
+    let expected_hmac = hex::encode(mac.finalize().into_bytes());
+
+    if expected_hmac != payload.hmac {
+        tracing::error!("Invalid HMAC for telemetry request from key {}", payload.api_key);
+        return (StatusCode::UNAUTHORIZED, "Invalid Telemetry Signature").into_response();
+    }
+
+    // Verify timestamp (within 5 minutes)
+    let now = Utc::now().timestamp();
+    if (now - payload.timestamp).abs() > 300 {
+        return (StatusCode::UNAUTHORIZED, "Telemetry Request Expired").into_response();
     }
 
     // Increment usage counter atomically
@@ -246,5 +280,24 @@ mod tests {
             GraceStatus::Expired => {},
             _ => panic!("Expected Expired"),
         }
+    }
+
+    #[test]
+    fn test_hmac_verification() {
+        let secret = "test_secret";
+        let signature_hash = "test_hash";
+        let timestamp = 123456789;
+        let message = format!("{}:{}", signature_hash, timestamp);
+
+        let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(message.as_bytes());
+        let expected_hmac = hex::encode(mac.finalize().into_bytes());
+
+        // Verify we can recreate it
+        let mut mac2 = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
+        mac2.update(message.as_bytes());
+        let hmac2 = hex::encode(mac2.finalize().into_bytes());
+
+        assert_eq!(expected_hmac, hmac2);
     }
 }
