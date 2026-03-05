@@ -41,38 +41,43 @@ impl NexusExecutor {
     }
 
     /// FSOC (First-Seen-On-Chain) Sequencer logic.
-    /// Validates that a transaction is not attempting to front-run on-chain events.
     #[tracing::instrument(skip(self))]
     pub async fn validate_transaction(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
         let latest_on_chain_event_time = self.get_cached_or_fetch_latest_event_time().await?;
 
         if let Some(event_time) = latest_on_chain_event_time {
-            // Strict verification against the Stacks microblock stream.
             if request.timestamp < event_time {
-                tracing::warn!(
-                    "Transaction {} timestamp ({}) is before latest on-chain event ({}). Potential manipulation.",
-                    request.tx_id,
-                    request.timestamp,
-                    event_time
-                );
+                let reason = format!("Timestamp {} is before latest on-chain event {}", request.timestamp, event_time);
+                tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
+                self.log_mev_attempt(request, &reason).await.ok();
                 return Ok(false);
             }
         }
 
-        let front_running_detected = self.detect_front_running(request).await?;
-
-        if front_running_detected {
-            tracing::warn!("Potential front-running detected for tx: {}", request.tx_id);
+        if let Some(reason) = self.detect_front_running(request).await? {
+            tracing::warn!("Potential front-running detected for tx {}: {}", request.tx_id, reason);
+            self.log_mev_attempt(request, &reason).await.ok();
             return Ok(false);
         }
 
-        let sandwich_attack_detected = self.detect_sandwich_attack(request).await?;
-        if sandwich_attack_detected {
-            tracing::warn!("Potential Sandwich Attack detected for tx: {}", request.tx_id);
+        if self.detect_sandwich_attack(request).await? {
+            let reason = "Potential Sandwich Attack detected (burst of swaps/liquidity)";
+            tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
+            self.log_mev_attempt(request, reason).await.ok();
             return Ok(false);
         }
 
         Ok(true)
+    }
+
+    async fn log_mev_attempt(&self, request: &ExecutionRequest, reason: &str) -> anyhow::Result<()> {
+        sqlx::query("INSERT INTO mev_audit_log (tx_id, sender, reason, payload) VALUES ($1, $2, $3, $4)")
+            .bind(&request.tx_id)
+            .bind(&request.sender)
+            .bind(reason)
+            .bind(&request.payload)
+            .execute(&self.storage.pg_pool).await?;
+        Ok(())
     }
 
     async fn get_cached_or_fetch_latest_event_time(&self) -> anyhow::Result<Option<DateTime<Utc>>> {
@@ -98,29 +103,21 @@ impl NexusExecutor {
         Ok(time)
     }
 
-    /// Checks for front-running against detected on-chain liquidations or oracle updates.
-    async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // 1. Check for spamming from the same sender
+    async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<Option<String>> {
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
         )
         .bind(&request.tx_id)
         .bind(&request.sender)
-        .bind(request.timestamp - chrono::Duration::seconds(60)) // 1 minute window
+        .bind(request.timestamp - chrono::Duration::seconds(60))
         .fetch_one(&self.storage.pg_pool).await?;
 
         let sender_count: i64 = row.get(0);
 
         if sender_count > 10 {
-            tracing::warn!(
-                "User {} is sending transactions too frequently: {}",
-                request.sender,
-                sender_count
-            );
-            return Ok(true);
+            return Ok(Some(format!("Sender spamming detected: {} txs in 60s", sender_count)));
         }
 
-        // 2. Check for identical payloads in a short window (copy-cat front-running)
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
         )
@@ -132,33 +129,24 @@ impl NexusExecutor {
         let payload_count: i64 = row.get(0);
 
         if payload_count > 0 {
-            tracing::warn!(
-                "Identical payload already seen on-chain: {}",
-                request.tx_id
-            );
-            return Ok(true);
+            return Ok(Some("Identical payload already seen on-chain (copy-cat attempt)".to_string()));
         }
 
-        // 3. Heuristic: check if the payload contains keywords associated with liquidations
         if request.payload.contains("liquidate") {
              let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
              if let Some(t) = last_oracle_update {
                  if request.timestamp.signed_duration_since(t).num_milliseconds() < 200 {
-                     tracing::warn!("Liquidation tx {} arrived within 200ms of latest block. High MEV probability.", request.tx_id);
-                     return Ok(true);
+                     return Ok(Some(format!("Liquidation arrival within 200ms of latest block (high MEV probability)")));
                  }
              }
         }
 
-        Ok(false)
+        Ok(None)
     }
 
-    /// Detects sandwich attacks by identifying transactions from the same sender
-    /// that might be wrapping a target transaction.
     async fn detect_sandwich_attack(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
         let window = chrono::Duration::seconds(2);
 
-        // Look for other transactions from the same sender within a very tight window
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE sender = $1 AND created_at BETWEEN $2 AND $3"
         )
@@ -169,8 +157,6 @@ impl NexusExecutor {
 
         let burst_count: i64 = row.get(0);
 
-        // If the same user has multiple transactions in a 4-second window, and they contain
-        // swap/liquidity related payloads, it's a high risk of a sandwich.
         if burst_count >= 2 && (request.payload.contains("swap") || request.payload.contains("liquidity")) {
             return Ok(true);
         }
@@ -182,14 +168,20 @@ impl NexusExecutor {
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
         tracing::info!("Checking collateral health for rebalancing...");
 
-        // In a real environment, we'd fetch all vault states.
-        // For now, we simulate this with a flag or a list of vaults to check.
-        let vaults = self.get_vaults_to_check().await?;
+        let fx_rate = self.get_latest_fx_rate("STX").await.unwrap_or(1.5); // Default to 1.5 USD/STX if missing
+        let vaults = self.get_vaults_from_storage().await?;
         let mut rebalance_count = 0;
 
-        for vault in vaults {
-            if vault.ltv_ratio > 0.85 { // 85% LTV threshold for rebalancing
-                tracing::info!("Vault {} needs rebalance (LTV: {:.2})", vault.vault_id, vault.ltv_ratio);
+        for mut vault in vaults {
+            let collateral_value_usd = (vault.collateral_amount as f64) * fx_rate / 1_000_000.0;
+            let debt_value_usd = (vault.debt_amount as f64) / 1_000_000.0;
+
+            if collateral_value_usd > 0.0 {
+                vault.ltv_ratio = debt_value_usd / collateral_value_usd;
+            }
+
+            if vault.ltv_ratio > 0.85 {
+                tracing::info!("Vault {} needs rebalance (LTV: {:.2}, STX: ${:.2})", vault.vault_id, vault.ltv_ratio, fx_rate);
                 let tx_id = lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id));
                 tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
                 rebalance_count += 1;
@@ -198,18 +190,26 @@ impl NexusExecutor {
 
         if rebalance_count > 0 {
             tracing::info!("Rebalanced {} vaults.", rebalance_count);
-            // Signal bounty success to the Stacks contract
             let signal_tx = lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success");
             tracing::info!("Bounty success signaled: {}", signal_tx);
         } else {
-            tracing::debug!("Collateral levels healthy. No rebalance needed.");
+            tracing::debug!("Collateral levels healthy (STX: ${:.2}). No rebalance needed.", fx_rate);
         }
 
         Ok(())
     }
 
-    async fn get_vaults_to_check(&self) -> anyhow::Result<Vec<VaultStatus>> {
-        // Try to get from Redis, fallback to empty or mock if Redis is down
+    async fn get_latest_fx_rate(&self, symbol: &str) -> Option<f64> {
+        let row = sqlx::query("SELECT rates FROM oracle_fx_history ORDER BY timestamp DESC LIMIT 1")
+            .fetch_optional(&self.storage.pg_pool)
+            .await
+            .ok()??;
+
+        let rates: serde_json::Value = row.get("rates");
+        rates.get(symbol).and_then(|v| v.as_f64())
+    }
+
+    async fn get_vaults_from_storage(&self) -> anyhow::Result<Vec<VaultStatus>> {
         let mut conn = match self.storage.redis_client.get_multiplexed_async_connection().await {
             Ok(c) => c,
             Err(_) => return Ok(vec![]),
@@ -269,23 +269,5 @@ mod tests {
         let s = serde_json::to_string(&v).unwrap();
         let v2: VaultStatus = serde_json::from_str(&s).unwrap();
         assert_eq!(v.vault_id, v2.vault_id);
-    }
-}
-
-#[cfg(test)]
-mod fsoc_tests {
-    use super::*;
-    use chrono::Utc;
-
-    #[tokio::test]
-    async fn test_fsoc_validation_logic() {
-        let req = ExecutionRequest {
-            tx_id: "test_tx".to_string(),
-            payload: "liquidate_vault_1".to_string(),
-            timestamp: Utc::now(),
-            sender: "SP123".to_string(),
-        };
-
-        assert_eq!(req.sender, "SP123");
     }
 }

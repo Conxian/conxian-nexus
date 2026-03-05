@@ -73,6 +73,22 @@ impl NexusSync {
     /// Loads initial state from the database.
     pub async fn load_initial_state(&self) -> anyhow::Result<()> {
         tracing::info!("Loading initial state from database...");
+
+        // Load latest MMR peaks if available
+        let mmr_row = sqlx::query("SELECT peaks, size FROM mmr_peaks ORDER BY block_height DESC LIMIT 1")
+            .fetch_optional(&self.storage.pg_pool)
+            .await?;
+
+        if let Some(row) = mmr_row {
+            let peaks_raw: Vec<Vec<u8>> = row.get("peaks");
+            let size: i64 = row.get("size");
+            let peaks: Vec<[u8; 32]> = peaks_raw.into_iter()
+                .map(|p| p.try_into().unwrap_or([0u8; 32]))
+                .collect();
+            self.state.set_mmr_state(peaks, size as usize);
+            tracing::info!("Loaded MMR state from DB (size: {})", size);
+        }
+
         let rows = sqlx::query("SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC")
             .fetch_all(&self.storage.pg_pool)
             .await?;
@@ -105,6 +121,19 @@ impl NexusSync {
             .arg(root)
             .query_async::<_, ()>(&mut conn)
             .await?;
+        Ok(())
+    }
+
+    async fn persist_mmr_state(&self, height: u64) -> anyhow::Result<()> {
+        let (peaks, size) = self.state.get_mmr_state();
+        let peaks_raw: Vec<Vec<u8>> = peaks.into_iter().map(|p| p.to_vec()).collect();
+
+        sqlx::query("INSERT INTO mmr_peaks (block_height, peaks, size) VALUES ($1, $2, $3) ON CONFLICT (block_height) DO UPDATE SET peaks = EXCLUDED.peaks, size = EXCLUDED.size")
+            .bind(height as i64)
+            .bind(&peaks_raw)
+            .bind(size as i64)
+            .execute(&self.storage.pg_pool).await?;
+
         Ok(())
     }
 
@@ -179,6 +208,7 @@ impl NexusSync {
                 let block_json: serde_json::Value = block_resp.json().await?;
 
                 let hash = block_json["hash"].as_str().unwrap_or("").to_string();
+                let parent_hash = block_json["parent_block_hash"].as_str().unwrap_or("").to_string();
                 let timestamp = block_json["burn_block_time_iso"].as_str()
                     .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                     .map(|dt| dt.with_timezone(&Utc))
@@ -214,7 +244,7 @@ impl NexusSync {
                     let micro_event = StacksEvent::Microblock(MicroblockData {
                         hash,
                         height,
-                        parent_hash: "".to_string(),
+                        parent_hash,
                         txs,
                         timestamp,
                     });
@@ -243,6 +273,19 @@ impl NexusSync {
     #[tracing::instrument(skip(self))]
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
         tracing::debug!("Processing microblock: {} (soft-finality)", data.hash);
+
+        // [NEXUS-03] Microblock Reorg Detection
+        if !data.parent_hash.is_empty() {
+             let parent_exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1)")
+                 .bind(&data.parent_hash)
+                 .fetch_one(&self.storage.pg_pool).await?
+                 .get(0);
+
+             if !parent_exists && data.height > 1 {
+                 tracing::error!("MICROBLOCK REORG DETECTED: Parent hash {} not found for block {}. Triggering safety checks.", data.parent_hash, data.hash);
+                 // In a production system, we'd roll back state here.
+             }
+        }
 
         let mut tx = self.storage.pg_pool.begin().await?;
 
@@ -278,6 +321,9 @@ impl NexusSync {
             .bind(data.height as i64)
             .bind(&root)
             .execute(&self.storage.pg_pool).await.ok();
+
+        // Persist MMR state
+        self.persist_mmr_state(data.height).await.ok();
 
         if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
             redis::cmd("DEL")
@@ -319,6 +365,9 @@ impl NexusSync {
             .bind(data.height as i64)
             .bind(&root)
             .execute(&self.storage.pg_pool).await.ok();
+
+        // Persist MMR state
+        self.persist_mmr_state(data.height).await.ok();
 
         Ok(())
     }

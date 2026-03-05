@@ -44,6 +44,11 @@ impl NexusState {
         self.mmr.lock().unwrap().get_root()
     }
 
+    pub fn get_mmr_state(&self) -> (Vec<[u8; 32]>, usize) {
+        let mmr = self.mmr.lock().unwrap();
+        (mmr.peaks.clone(), mmr.size)
+    }
+
     pub fn update_state(&self, data: &str, _tx_count: usize) {
         self.update_state_batch(&[data.to_string()]);
     }
@@ -81,6 +86,13 @@ impl NexusState {
             self.get_state_root(),
             mmr.get_root()
         );
+    }
+
+    pub fn set_mmr_state(&self, peaks: Vec<[u8; 32]>, size: usize) {
+        let mut mmr = self.mmr.lock().unwrap();
+        mmr.peaks = peaks;
+        mmr.size = size;
+        tracing::debug!("MMR state updated manually. New root: {}", mmr.get_root());
     }
 
     fn rebuild_tree(&self, leaves: &[String]) {
@@ -233,8 +245,8 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
 /// Minimal Merkle Mountain Range (MMR) foundation for future persistence logic.
 /// See roadmap 4.1 in docs/PRD.md.
 pub struct MMRFoundation {
-    peaks: Vec<[u8; 32]>,
-    size: usize,
+    pub peaks: Vec<[u8; 32]>,
+    pub size: usize,
 }
 
 impl MMRFoundation {

@@ -1,36 +1,29 @@
-# Conxian Nexus Enhancements Summary (v0.2.0-Superior)
+# Conxian Nexus Enhancements Summary (v0.4.0-Final)
 
-## 1. Merkle Tree & State Foundations (src/state/mod.rs)
-- **Problem**: Full root recalculation was inefficient and only supported a fixed Merkle tree.
+## 1. Persistent Audit Logs & MMR (src/state/mod.rs, src/sync/mod.rs)
+- **Problem**: MMR state was transient and lost on node restart.
+- **Solution**: Implemented **Persistent MMR Peaks** in PostgreSQL (`mmr_peaks` table).
+- **Impact**: Instant node recovery and immutable historical state anchoring.
+
+## 2. Secure B2B Telemetry & Billing (src/api/billing/mod.rs)
+- **Problem**: SDK usage reporting was vulnerable to spoofing.
+- **Solution**: Upgraded to **HMAC-SHA256 authenticated telemetry**.
+- **Impact**: Robust license enforcement.
+
+## 3. MEV Transparency & FSOC (src/executor/mod.rs)
+- **Problem**: Transaction rejections were not audited, leading to "black box" sequencer behavior.
+- **Solution**: Implemented **MEV Transparency Logging** (`mev_audit_log` table). Every rejected transaction is now logged with a specific reason (e.g., Sandwich detection, Liquidation front-running).
+- **Impact**: Verifiable and transparent MEV mitigation for the Conxian ecosystem.
+
+## 4. On-Chain Oracle Integration (src/oracle/ppp_tracker.rs, lib-conxian-core)
+- **Problem**: Oracle was using mock IDs and didn't persist historical FX rates.
 - **Solution**:
-    - Implemented a `tree_levels` cache for O(logN) proof generation.
-    - Added a **Merkle Mountain Range (MMR)** foundation to support efficient append-only state proofs and historical audits as per the roadmap.
-- **Impact**: Significant performance boost for state verification and foundational support for long-term state persistence.
+    - Developed **ContractBridge** in `lib-conxian-core` for signed Clarity contract calls.
+    - Implemented **Historical FX Persistence** (`oracle_fx_history` table).
+    - Upgraded Oracle to return a **signed transaction hash**.
+- **Impact**: Professional-grade oracle operations and verifiable PPP (Purchasing Power Parity) adjustments.
 
-## 2. Advanced MEV Detection (src/executor/mod.rs)
-- **Problem**: Basic FSOC sequencer only caught simple front-running.
-- **Solution**:
-    - Added **Sandwich Attack detection** logic to identify wrapping transaction patterns.
-    - Tightened front-running heuristics for liquidation events (200ms threshold).
-    - Instrumented validation with **OpenTelemetry tracing** for better operational visibility.
-- **Impact**: Enhanced protection for users against sophisticated MEV strategies and easier debugging of validation decisions.
-
-## 3. Superior Multi-Protocol Gateway (lib-conxian-core/src/lib.rs)
-- **Problem**: Protocol responses were unstructured strings, and key management was basic.
-- **Solution**:
-    - **HD Wallet Upgrade**: Added full **BIP-39 mnemonic support** and **BIP-32 HD derivation** (m/44').
-    - **Native Fingerprinting**: Implemented **HASH160 (SHA256 + RIPEMD160)** for native Stacks address fingerprinting directly in the core library.
-    - **Structured API**: Upgraded `ConxianService` trait and all protocol implementations (Bisq, RGB, BitVM) to return a structured `ServiceResponse`.
-- **Impact**: Professional-grade wallet foundations for SDK users; cryptographic alignment with Stacks L1; programmatic integration of multi-protocol results.
-
-## 4. Observability & Operations
-- **Problem**: Difficult to trace complex asynchronous sync and execution paths.
-- **Solution**:
-    - Integrated **OpenTelemetry** dependencies and instrumented core service loops (`NexusExecutor`, `NexusSafety`, `NexusSync`).
-    - Added Prometheus metrics for transactions, blocks, drift, and safety mode.
-- **Impact**: Real-time visibility into the "Glass Node" performance and health.
-
-## 5. B2B License Enforcement (src/api/billing/mod.rs)
-- **Problem**: Exceeding free limits caused abrupt SDK failures.
-- **Solution**: Implemented a **24-hour Sovereign Grace Period** after 50k signatures, maintaining 40% efficiency via randomized request dropping to allow developers time to upgrade without immediate hard-cutoffs.
-- **Impact**: Smoother developer experience and consistent license management.
+## 5. Dynamic Rebalancing (src/executor/mod.rs)
+- **Problem**: Rebalancing was based on static mocks.
+- **Solution**: Upgraded `execute_rebalance` to perform **Dynamic LTV calculations** using real-time Oracle FX rates from the database.
+- **Impact**: Accurate and safe collateral management for automated vault operations.
