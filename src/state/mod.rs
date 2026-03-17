@@ -49,23 +49,26 @@ impl NexusState {
         (mmr.peaks.clone(), mmr.size)
     }
 
-    pub fn update_state(&self, data: &str, _tx_count: usize) {
-        self.update_state_batch(&[data.to_string()]);
+    pub fn update_state(&self, data: &str, _tx_count: usize) -> Vec<(u64, [u8; 32])> {
+        self.update_state_batch(&[data.to_string()])
     }
 
-    pub fn update_state_batch(&self, data: &[String]) {
+    pub fn update_state_batch(&self, data: &[String]) -> Vec<(u64, [u8; 32])> {
         let mut leaves = self.leaves.lock().unwrap();
         let mut mmr = self.mmr.lock().unwrap();
+        let mut all_added_nodes = Vec::new();
 
         for item in data {
             leaves.push(item.clone());
-            mmr.add_leaf(item.as_bytes());
+            let nodes = mmr.add_leaf(item.as_bytes());
+            all_added_nodes.extend(nodes);
         }
 
         self.rebuild_tree(&leaves);
         *self.last_updated.lock().unwrap() = Utc::now();
 
         tracing::debug!("Nexus state updated. New root: {}", self.get_state_root());
+        all_added_nodes
     }
 
     pub fn set_initial_leaves(&self, new_leaves: Vec<String>) {
@@ -92,6 +95,7 @@ impl NexusState {
         let mut mmr = self.mmr.lock().unwrap();
         mmr.peaks = peaks;
         mmr.size = size;
+        mmr.node_count = 0;
         tracing::debug!("MMR state updated manually. New root: {}", mmr.get_root());
     }
 
@@ -242,39 +246,49 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     final_root == proof.root
 }
 
-/// Minimal Merkle Mountain Range (MMR) foundation for future persistence logic.
-/// See roadmap 4.1 in docs/PRD.md.
+/// Minimal Merkle Mountain Range (MMR) foundation.
 pub struct MMRFoundation {
     pub peaks: Vec<[u8; 32]>,
     pub size: usize,
+    pub node_count: u64,
 }
 
 impl MMRFoundation {
     pub fn new() -> Self {
-        Self { peaks: Vec::new(), size: 0 }
+        Self { peaks: Vec::new(), size: 0, node_count: 0 }
     }
 
-    pub fn add_leaf(&mut self, leaf: &[u8]) {
+    pub fn add_leaf(&mut self, leaf: &[u8]) -> Vec<(u64, [u8; 32])> {
         let mut current_hash: [u8; 32] = {
             let mut hasher = Sha256::new();
             hasher.update(leaf);
             hasher.finalize().into()
         };
 
+        let mut added_nodes = Vec::new();
+        let leaf_pos = self.node_count;
+        added_nodes.push((leaf_pos, current_hash));
+        self.node_count += 1;
+
         let mut pos = self.size;
 
-        // Simple MMR logic: merge peaks of the same height
         while pos & 1 == 1 {
             let peak = self.peaks.pop().expect("Peak must exist if bit is set");
             let mut hasher = Sha256::new();
             hasher.update(peak);
             hasher.update(current_hash);
             current_hash = hasher.finalize().into();
+
+            let internal_pos = self.node_count;
+            added_nodes.push((internal_pos, current_hash));
+            self.node_count += 1;
+
             pos >>= 1;
         }
 
         self.peaks.push(current_hash);
         self.size += 1;
+        added_nodes
     }
 
     pub fn get_root(&self) -> String {
@@ -359,12 +373,23 @@ mod tests {
     #[test]
     fn test_mmr_foundation() {
         let mut mmr = MMRFoundation::new();
-        mmr.add_leaf(b"leaf1");
+        let nodes1 = mmr.add_leaf(b"leaf1");
+        assert_eq!(nodes1.len(), 1);
         let root1 = mmr.get_root();
         assert_ne!(root1, "0x0000000000000000000000000000000000000000000000000000000000000000");
 
-        mmr.add_leaf(b"leaf2");
+        let nodes2 = mmr.add_leaf(b"leaf2");
+        assert_eq!(nodes2.len(), 2); // leaf2 + internal node
         let root2 = mmr.get_root();
         assert_ne!(root1, root2);
+    }
+
+    #[test]
+    fn test_calculate_root_batch() {
+        let state = NexusState::new();
+        let leaves = vec!["tx1".to_string(), "tx2".to_string()];
+        let root = state.calculate_root(&leaves);
+        state.update_state_batch(&leaves);
+        assert_eq!(root, state.get_state_root());
     }
 }
