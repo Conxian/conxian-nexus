@@ -135,7 +135,7 @@ async fn verify_state(
 async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {
     let state_root = state.nexus_state.get_state_root();
 
-    let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
+    let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks WHERE state != 'orphaned'")
         .fetch_one(&state.storage.pg_pool)
         .await
         .map_err(|e| {
@@ -177,13 +177,13 @@ async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse
 }
 
 async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsResponse>, StatusCode> {
-    let tx_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_transactions")
+    let tx_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned'")
         .fetch_one(&state.storage.pg_pool)
         .await
         .map(|r| r.get(0))
         .unwrap_or(0);
 
-    let block_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_blocks")
+    let block_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
         .fetch_one(&state.storage.pg_pool)
         .await
         .map(|r| r.get(0))

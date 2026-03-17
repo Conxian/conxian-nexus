@@ -89,7 +89,7 @@ impl NexusSync {
             tracing::info!("Loaded MMR state from DB (size: {})", size);
         }
 
-        let rows = sqlx::query("SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC")
+        let rows = sqlx::query("SELECT t.tx_id FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned' ORDER BY t.created_at ASC")
             .fetch_all(&self.storage.pg_pool)
             .await?;
 
