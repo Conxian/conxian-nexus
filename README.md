@@ -4,19 +4,21 @@ Conxian Nexus is a high-performance middleware designed to synchronize off-chain
 
 ## Modules
 
-- **nexus-sync**: Ingests Stacks L1 events via RPC polling and updates local state.
-- **nexus-state**: Manages the cryptographic state root using a Merkle tree of transaction IDs.
+- **nexus-sync**: Ingests Stacks L1 events via RPC polling, updates local state, and handles microblock reorgs with automated rollback.
+- **nexus-state**: Manages the cryptographic state root using a Merkle tree of transaction IDs and a persistent Merkle Mountain Range (MMR).
 - **nexus-executor**: specialized execution environment with FSOC (First-Seen-On-Chain) sequencer logic.
 - **nexus-safety**: Monitors sync drift and triggers Safety Mode (Sovereign Handoff).
 - **API (REST & gRPC)**: Interfaces for state verification and transaction execution.
 - **lib-conxian-core**: Shared library for multi-protocol support (Bisq, RGB, BitVM).
+- **oracle**: Multi-source aggregated FX rate provider with on-chain state pushing.
 
 ## Features
 
 - **Nakamoto Ready**: Handles microblocks and burn blocks.
-- **FSOC Sequencer**: Mitigates MEV by validating transaction timestamps against on-chain events.
+- **FSOC Sequencer**: Mitigates MEV by validating transaction timestamps and payloads against on-chain events.
 - **Sovereign Handoff**: Automatic safety mode if sync drift exceeds threshold.
 - **Verifiable Proofs**: Generate and verify Merkle proofs for any transaction.
+- **Persistent MMR**: Full persistence of MMR peaks and nodes in PostgreSQL.
 - **Multi-Protocol**: Unified support for Bisq, RGB, and BitVM.
 - **Observability**: Prometheus metrics exporter and internal JSON metrics.
 

@@ -7,7 +7,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.1 Glass Node Architecture
 - **Requirement**: Synchronize state with Stacks L1 in real-time.
-- **Implementation**: The `nexus-sync` module maintains a local representation of on-chain data using an asynchronous channel-based ingestion loop. **Final (v0.4.0)**: Integrated Microblock Reorg Detection and persistent MMR peaks.
+- **Implementation**: The `nexus-sync` module maintains a local representation of on-chain data using an asynchronous channel-based ingestion loop. **Final (v0.4.0)**: Integrated Microblock Reorg Detection with automated rollback and persistent MMR peaks/leaves.
 
 ### 2.2 Nakamoto Awareness (Epoch 3.0/3.1)
 - **Requirement**: Differentiate between microblock soft-finality and burn-block hard-finality.
@@ -23,7 +23,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.5 Cryptographic Verification
 - **Requirement**: Provide verifiable proofs of state and persist state roots.
-- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. **Superior (v0.4.0)**: Implemented Persistent Merkle Mountain Range (MMR) peaks in PostgreSQL for O(1) audit log restoration.
+- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. **Superior (v0.4.0)**: Implemented Persistent Merkle Mountain Range (MMR) peaks AND full leaf persistence in PostgreSQL (`mmr_nodes`) for O(1) audit log restoration.
 
 ### 2.6 Multi-Protocol Gateway
 - **Requirement**: Support multiple protocols including Bisq, RGB, and BitVM.
@@ -45,12 +45,12 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ## 4. Roadmap & Status
 
-### 4.1 Persistent Merkle Tree & MMR (Full)
-- **Status**: Merkle Tree complete; **Persistent MMR Peaks implemented (v0.4.0)**.
-- **Next Step**: Implement full persistent MMR leaf storage.
+### 4.1 Persistent Merkle Tree & MMR (Complete)
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks and Leaf Nodes implemented (v0.4.0)**.
+- **Next Step**: Implement full MMR inclusion proof generation API.
 
 ### 4.2 Real-time Sync Ingestion
-- **Status**: Channel-based Async Ingestion Complete; Reorg detection implemented.
+- **Status**: Channel-based Async Ingestion Complete; Reorg detection with automated rollback implemented.
 - **Next Step**: Integrate with Hiro or Stacks node WebSockets.
 
 ### 4.3 Advanced MEV Mitigation (Mempool)
@@ -62,5 +62,5 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Integrate with a real BitVM prover/verifier library.
 
 ### 4.5 Oracle & Rebalancing
-- **Status**: **Historical FX Persistence** and **Dynamic LTV Rebalancing** Complete (v0.4.0).
-- **Next Step**: Multi-source Oracle aggregation.
+- **Status**: **Historical FX Persistence**, **Dynamic LTV Rebalancing**, and **Multi-source Aggregated Oracle** Complete (v0.4.0).
+- **Next Step**: Implement confidence interval weights for oracle sources.
