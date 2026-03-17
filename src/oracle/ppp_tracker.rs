@@ -18,32 +18,64 @@ struct ExchangeRateResponse {
 
 pub struct OracleStub {
     client: Client,
-    endpoint_url: String, 
+    endpoint_urls: Vec<String>,
 }
 
 impl OracleStub {
     pub fn new(endpoint_url: String) -> Self {
         Self {
             client: Client::new(),
-            endpoint_url,
+            endpoint_urls: vec![
+                endpoint_url,
+                "https://open.er-api.com/v6/latest/USD".to_string(),
+                "https://api.exchangerate.host/latest?base=USD".to_string(),
+            ],
         }
     }
 
     pub async fn fetch_universal_fx(&self) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
-        let resp = self.client.get(&self.endpoint_url).send().await?;
-        
-        let mut rates = if resp.status().is_success() {
-            let data: ExchangeRateResponse = resp.json().await?;
-            data.rates
-        } else {
+        let mut all_rates: Vec<HashMap<String, f64>> = Vec::new();
+
+        for url in &self.endpoint_urls {
+            match self.client.get(url).send().await {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        if let Ok(data) = resp.json::<ExchangeRateResponse>().await {
+                            all_rates.push(data.rates);
+                        }
+                    }
+                }
+                Err(e) => tracing::warn!("Failed to fetch from {}: {}", url, e),
+            }
+        }
+
+        if all_rates.is_empty() {
             let mut fallback = HashMap::new();
             fallback.insert("EUR".to_string(), 0.92);
-            fallback
-        };
+            all_rates.push(fallback);
+        }
 
-        rates.entry("ZAR".to_string()).or_insert(18.5);
-        rates.entry("NGN".to_string()).or_insert(1500.0);
-        rates.entry("BRL".to_string()).or_insert(5.0);
+        let mut aggregated_rates = HashMap::new();
+        let mut keys: std::collections::HashSet<String> = all_rates[0].keys().cloned().collect();
+        for r in &all_rates[1..] {
+            keys.extend(r.keys().cloned());
+        }
+
+        for key in keys {
+            let mut values: Vec<f64> = all_rates.iter()
+                .filter_map(|r| r.get(&key).copied())
+                .collect();
+
+            if !values.is_empty() {
+                values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                let median = values[values.len() / 2];
+                aggregated_rates.insert(key, median);
+            }
+        }
+
+        aggregated_rates.entry("ZAR".to_string()).or_insert(18.5);
+        aggregated_rates.entry("NGN".to_string()).or_insert(1500.0);
+        aggregated_rates.entry("BRL".to_string()).or_insert(5.0);
 
         let mut ppp_indices = HashMap::new();
         ppp_indices.insert("ZAR".to_string(), 0.45);
@@ -53,7 +85,7 @@ impl OracleStub {
 
         Ok(PppState {
             base_currency: "USD".to_string(),
-            rates,
+            rates: aggregated_rates,
             ppp_indices,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

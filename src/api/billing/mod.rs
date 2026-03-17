@@ -88,8 +88,8 @@ async fn generate_developer_key(
         rng.fill_bytes(&mut raw_secret);
 
         (
-            format!("cxl_{}", hex::encode(Sha256::digest(&raw_key))),
-            hex::encode(Sha256::digest(&raw_secret))
+            format!("cxl_{}", hex::encode(Sha256::digest(raw_key))),
+            hex::encode(Sha256::digest(raw_secret))
         )
     };
 

@@ -89,7 +89,7 @@ impl NexusSync {
             tracing::info!("Loaded MMR state from DB (size: {})", size);
         }
 
-        let rows = sqlx::query("SELECT tx_id FROM stacks_transactions ORDER BY created_at ASC")
+        let rows = sqlx::query("SELECT t.tx_id FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned' ORDER BY t.created_at ASC")
             .fetch_all(&self.storage.pg_pool)
             .await?;
 
@@ -124,15 +124,27 @@ impl NexusSync {
         Ok(())
     }
 
-    async fn persist_mmr_state(&self, height: u64) -> anyhow::Result<()> {
+    async fn persist_mmr_state(&self, height: u64, added_nodes: &[(u64, [u8; 32])]) -> anyhow::Result<()> {
         let (peaks, size) = self.state.get_mmr_state();
         let peaks_raw: Vec<Vec<u8>> = peaks.into_iter().map(|p| p.to_vec()).collect();
+
+        let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query("INSERT INTO mmr_peaks (block_height, peaks, size) VALUES ($1, $2, $3) ON CONFLICT (block_height) DO UPDATE SET peaks = EXCLUDED.peaks, size = EXCLUDED.size")
             .bind(height as i64)
             .bind(&peaks_raw)
             .bind(size as i64)
-            .execute(&self.storage.pg_pool).await?;
+            .execute(&mut *tx).await?;
+
+        for (pos, hash) in added_nodes {
+            sqlx::query("INSERT INTO mmr_nodes (pos, hash, block_height) VALUES ($1, $2, $3) ON CONFLICT (pos) DO NOTHING")
+                .bind(*pos as i64)
+                .bind(hash.as_slice())
+                .bind(height as i64)
+                .execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
 
         Ok(())
     }
@@ -270,27 +282,40 @@ impl NexusSync {
         Ok(())
     }
 
+    async fn handle_microblock_reorg(&self, data: &MicroblockData) -> anyhow::Result<()> {
+        tracing::error!("MICROBLOCK REORG DETECTED: Parent hash {} not found for block {}. Initiating rollback.", data.parent_hash, data.hash);
+
+        // 1. Mark all soft blocks at this height or higher as 'orphaned'
+        sqlx::query("UPDATE stacks_blocks SET state = 'orphaned' WHERE height >= $1 AND state = 'soft'")
+            .bind(data.height as i64)
+            .execute(&self.storage.pg_pool).await?;
+
+        // 2. Re-load state from database (excluding orphaned transactions)
+        self.load_initial_state().await?;
+
+        Ok(())
+    }
+
     #[tracing::instrument(skip(self))]
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
         tracing::debug!("Processing microblock: {} (soft-finality)", data.hash);
 
         // [NEXUS-03] Microblock Reorg Detection
         if !data.parent_hash.is_empty() {
-             let parent_exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1)")
+             let parent_exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1 AND state != 'orphaned')")
                  .bind(&data.parent_hash)
                  .fetch_one(&self.storage.pg_pool).await?
                  .get(0);
 
              if !parent_exists && data.height > 1 {
-                 tracing::error!("MICROBLOCK REORG DETECTED: Parent hash {} not found for block {}. Triggering safety checks.", data.parent_hash, data.hash);
-                 // In a production system, we'd roll back state here.
+                 self.handle_microblock_reorg(&data).await?;
              }
         }
 
         let mut tx = self.storage.pg_pool.begin().await?;
 
         sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING"
+            "INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO UPDATE SET state = 'soft' WHERE stacks_blocks.state = 'orphaned'"
         )
         .bind(&data.hash)
         .bind(data.height as i64)
@@ -312,7 +337,7 @@ impl NexusSync {
         tx.commit().await?;
 
         let tx_ids: Vec<String> = data.txs.iter().map(|t| t.tx_id.clone()).collect();
-        self.state.update_state_batch(&tx_ids);
+        let added_nodes = self.state.update_state_batch(&tx_ids);
 
         let root = self.state.get_state_root();
         self.persist_root_to_redis(&root).await.ok();
@@ -323,7 +348,7 @@ impl NexusSync {
             .execute(&self.storage.pg_pool).await.ok();
 
         // Persist MMR state
-        self.persist_mmr_state(data.height).await.ok();
+        self.persist_mmr_state(data.height, &added_nodes).await.ok();
 
         if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
             redis::cmd("DEL")
@@ -366,8 +391,8 @@ impl NexusSync {
             .bind(&root)
             .execute(&self.storage.pg_pool).await.ok();
 
-        // Persist MMR state
-        self.persist_mmr_state(data.height).await.ok();
+        // Persist MMR state (empty added nodes for burn block if not already processed by microblock)
+        self.persist_mmr_state(data.height, &[]).await.ok();
 
         Ok(())
     }

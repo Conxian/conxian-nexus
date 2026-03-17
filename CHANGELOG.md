@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-03-17
+
+### Added
+- **Full MMR Persistence**: Implemented `mmr_nodes` table in PostgreSQL to store all Merkle Mountain Range nodes, enabling exhaustive cryptographic audit trails.
+- **Automated Reorg Rollback**: Enhanced `NexusSync` with a robust rollback mechanism for microblock reorgs. It now marks orphaned blocks and reconstructs state from the last valid hard-finality tip.
+- **Multi-Source Aggregated Oracle**: Upgraded `OracleStub` to fetch FX rates from multiple providers and apply median-based aggregation for increased reliability.
+- **State Consistency Fixes**: Updated API endpoints (`/v1/status`, `/v1/metrics`) and state loading to strictly ignore orphaned block data.
+
+### Fixed
+- Resolved multiple Clippy warnings including needless borrows, useless formats, and manual `div_ceil` reimplementations.
+- Updated `build.rs` to use the modern `compile_protos` method instead of the deprecated `compile`.
+
 ## [0.3.0] - 2024-05-23
 
 ### Added
