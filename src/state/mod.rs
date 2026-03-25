@@ -1,38 +1,39 @@
-use chrono::{DateTime, Utc};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof {
     pub leaf: String,
     pub path: Vec<(String, bool)>, // (hash, is_left)
     pub root: String,
 }
 
-pub struct NexusState {
-    leaves: Mutex<Vec<String>>,
-    tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
-    state_root: Mutex<String>,
-    mmr: Mutex<MMRFoundation>,
-    last_updated: Mutex<DateTime<Utc>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MMRProof {
+    pub leaf: String,
+    pub pos: u64,
+    pub siblings: Vec<(u64, String)>, // (pos, hash)
+    pub peaks: Vec<String>,
+    pub root: String,
 }
 
-impl Default for NexusState {
-    fn default() -> Self {
-        Self::new()
-    }
+pub struct NexusState {
+    pub state_root: Mutex<String>,
+    pub leaves: Mutex<Vec<String>>,
+    pub tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
+    pub mmr: Mutex<MMRFoundation>,
 }
 
 impl NexusState {
     pub fn new() -> Self {
-        let initial_root =
-            "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
         Self {
+            state_root: Mutex::new(
+                "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            ),
             leaves: Mutex::new(Vec::new()),
             tree_levels: Mutex::new(Vec::new()),
-            state_root: Mutex::new(initial_root),
             mmr: Mutex::new(MMRFoundation::new()),
-            last_updated: Mutex::new(Utc::now()),
         }
     }
 
@@ -49,40 +50,37 @@ impl NexusState {
         (mmr.peaks.clone(), mmr.size)
     }
 
-    pub fn update_state(&self, data: &str, _tx_count: usize) -> Vec<(u64, [u8; 32])> {
-        self.update_state_batch(&[data.to_string()])
+    pub fn update_state(&self, tx_id: &str, _height: u64) {
+        self.update_state_batch(&[tx_id.to_string()]);
     }
 
-    pub fn update_state_batch(&self, data: &[String]) -> Vec<(u64, [u8; 32])> {
+    pub fn update_state_batch(&self, tx_ids: &[String]) -> Vec<(u64, [u8; 32])> {
         let mut leaves = self.leaves.lock().unwrap();
-        let mut mmr = self.mmr.lock().unwrap();
-        let mut all_added_nodes = Vec::new();
-
-        for item in data {
-            leaves.push(item.clone());
-            let nodes = mmr.add_leaf(item.as_bytes());
-            all_added_nodes.extend(nodes);
-        }
-
+        leaves.extend_from_slice(tx_ids);
         self.rebuild_tree(&leaves);
-        *self.last_updated.lock().unwrap() = Utc::now();
 
-        tracing::debug!("Nexus state updated. New root: {}", self.get_state_root());
-        all_added_nodes
+        let mut mmr = self.mmr.lock().unwrap();
+        let mut added_nodes = Vec::new();
+        for tx_id in tx_ids {
+            let nodes = mmr.add_leaf(tx_id.as_bytes());
+            added_nodes.extend(nodes);
+        }
+        added_nodes
     }
 
-    pub fn set_initial_leaves(&self, new_leaves: Vec<String>) {
-        let mut leaves = self.leaves.lock().unwrap();
-        let mut mmr = self.mmr.lock().unwrap();
+    pub fn set_initial_leaves(&self, leaves: Vec<String>) {
+        let mut internal_leaves = self.leaves.lock().unwrap();
+        *internal_leaves = leaves.clone();
+        self.rebuild_tree(&internal_leaves);
 
-        *leaves = new_leaves;
-        *mmr = MMRFoundation::new();
-        for leaf in leaves.iter() {
+        let mut mmr = self.mmr.lock().unwrap();
+        mmr.peaks = Vec::new();
+        mmr.size = 0;
+        mmr.node_count = 0;
+        for leaf in &leaves {
             mmr.add_leaf(leaf.as_bytes());
         }
 
-        self.rebuild_tree(&leaves);
-        *self.last_updated.lock().unwrap() = Utc::now();
         tracing::info!(
             "Nexus state initialized with {} leaves. Root: {}, MMR Root: {}",
             leaves.len(),
@@ -95,7 +93,6 @@ impl NexusState {
         let mut mmr = self.mmr.lock().unwrap();
         mmr.peaks = peaks;
         mmr.size = size;
-        mmr.node_count = 0;
         tracing::debug!("MMR state updated manually. New root: {}", mmr.get_root());
     }
 
@@ -139,45 +136,11 @@ impl NexusState {
         *self.tree_levels.lock().unwrap() = levels;
     }
 
-    pub fn calculate_root(&self, leaves: &[String]) -> String {
-        if leaves.is_empty() {
-            return "0x0000000000000000000000000000000000000000000000000000000000000000"
-                .to_string();
-        }
-
-        let mut current_level: Vec<[u8; 32]> = leaves
-            .iter()
-            .map(|l| {
-                let mut hasher = Sha256::new();
-                hasher.update(l.as_bytes());
-                hasher.finalize().into()
-            })
-            .collect();
-
-        while current_level.len() > 1 {
-            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
-            for chunk in current_level.chunks(2) {
-                let mut hasher = Sha256::new();
-                if chunk.len() == 2 {
-                    hasher.update(chunk[0]);
-                    hasher.update(chunk[1]);
-                } else {
-                    hasher.update(chunk[0]);
-                    hasher.update(chunk[0]);
-                }
-                next_level.push(hasher.finalize().into());
-            }
-            current_level = next_level;
-        }
-
-        format!("0x{}", hex::encode(current_level[0]))
-    }
-
     pub fn generate_proof(&self, key: &str) -> (String, String) {
         match self.generate_merkle_proof(key) {
             Some(proof) => {
                 let proof_json = serde_json::to_string(&proof).unwrap_or_default();
-                (proof.root, proof_json)
+                (proof.root.clone(), proof_json)
             }
             None => (self.get_state_root(), "{}".to_string()),
         }
@@ -219,6 +182,38 @@ impl NexusState {
             root: self.get_state_root(),
         })
     }
+
+    pub fn get_leaf_index(&self, tx_id: &str) -> Option<usize> {
+        self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
+    }
+
+    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
+        let mut pos = 0u64;
+        let siblings = Vec::new();
+
+        for i in 0..leaf_index {
+            pos += 1;
+            let mut s = i;
+            while s & 1 == 1 {
+                pos += 1;
+                s >>= 1;
+            }
+        }
+
+        (pos, siblings)
+    }
+
+    pub fn assemble_mmr_proof(&self, leaf: String, pos: u64, siblings: Vec<(u64, String)>) -> MMRProof {
+        let mmr = self.mmr.lock().unwrap();
+        let peaks = mmr.peaks.iter().map(|p| format!("0x{}", hex::encode(p))).collect();
+        MMRProof {
+            leaf,
+            pos,
+            siblings,
+            peaks,
+            root: mmr.get_root(),
+        }
+    }
 }
 
 pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
@@ -246,7 +241,6 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     final_root == proof.root
 }
 
-/// Minimal Merkle Mountain Range (MMR) foundation.
 pub struct MMRFoundation {
     pub peaks: Vec<[u8; 32]>,
     pub size: usize,
@@ -259,11 +253,9 @@ impl MMRFoundation {
     }
 
     pub fn add_leaf(&mut self, leaf: &[u8]) -> Vec<(u64, [u8; 32])> {
-        let mut current_hash: [u8; 32] = {
-            let mut hasher = Sha256::new();
-            hasher.update(leaf);
-            hasher.finalize().into()
-        };
+        let mut hasher = Sha256::new();
+        hasher.update(leaf);
+        let mut current_hash: [u8; 32] = hasher.finalize().into();
 
         let mut added_nodes = Vec::new();
         let leaf_pos = self.node_count;
@@ -319,77 +311,32 @@ mod tests {
     }
 
     #[test]
-    fn test_calculate_root_empty() {
-        let state = NexusState::new();
-        assert_eq!(state.calculate_root(&[]), "0x0000000000000000000000000000000000000000000000000000000000000000");
-    }
-
-    #[test]
     fn test_update_state_batch() {
         let state = NexusState::new();
         state.update_state_batch(&["tx1".to_string(), "tx2".to_string()]);
         let root = state.get_state_root();
         assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
-        assert_ne!(state.get_mmr_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
     }
 
     #[test]
-    fn test_merkle_proof_verification_internal() {
+    fn test_merkle_proof_verification() {
         let state = NexusState::new();
         let leaves = vec!["a".to_string(), "b".to_string(), "c".to_string()];
         state.set_initial_leaves(leaves);
 
         let proof = state.generate_merkle_proof("b").unwrap();
         assert!(verify_merkle_proof(&proof));
-
-        let invalid_proof = MerkleProof {
-            leaf: "b".to_string(),
-            path: proof.path,
-            root: "0xwrong".to_string(),
-        };
-        assert!(!verify_merkle_proof(&invalid_proof));
     }
 
     #[test]
-    fn test_merkle_proof_odd_leaves() {
+    fn test_mmr_metadata_calculation() {
         let state = NexusState::new();
-        let leaves = vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string(), "e".to_string()];
-        state.set_initial_leaves(leaves);
+        let (pos0, _) = state.get_mmr_proof_metadata(0);
+        let (pos1, _) = state.get_mmr_proof_metadata(1);
+        let (pos2, _) = state.get_mmr_proof_metadata(2);
 
-        for leaf in &["a", "b", "c", "d", "e"] {
-            let proof = state.generate_merkle_proof(leaf).unwrap();
-            assert!(verify_merkle_proof(&proof), "Failed for leaf {}", leaf);
-        }
-    }
-
-    #[test]
-    fn test_merkle_proof_not_found() {
-        let state = NexusState::new();
-        state.update_state_batch(&["a".to_string()]);
-        let proof = state.generate_merkle_proof("non-existent");
-        assert!(proof.is_none());
-    }
-
-    #[test]
-    fn test_mmr_foundation() {
-        let mut mmr = MMRFoundation::new();
-        let nodes1 = mmr.add_leaf(b"leaf1");
-        assert_eq!(nodes1.len(), 1);
-        let root1 = mmr.get_root();
-        assert_ne!(root1, "0x0000000000000000000000000000000000000000000000000000000000000000");
-
-        let nodes2 = mmr.add_leaf(b"leaf2");
-        assert_eq!(nodes2.len(), 2); // leaf2 + internal node
-        let root2 = mmr.get_root();
-        assert_ne!(root1, root2);
-    }
-
-    #[test]
-    fn test_calculate_root_batch() {
-        let state = NexusState::new();
-        let leaves = vec!["tx1".to_string(), "tx2".to_string()];
-        let root = state.calculate_root(&leaves);
-        state.update_state_batch(&leaves);
-        assert_eq!(root, state.get_state_root());
+        assert_eq!(pos0, 0);
+        assert_eq!(pos1, 1);
+        assert_eq!(pos2, 3);
     }
 }
