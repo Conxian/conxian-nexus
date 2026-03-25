@@ -40,6 +40,12 @@ pub struct ProofResponse {
 }
 
 #[derive(Deserialize)]
+pub struct MMRProofParams {
+    pub tx_id: Option<String>,
+    pub index: Option<usize>,
+}
+
+#[derive(Deserialize)]
 pub struct VerifyStateRequest {
     pub state_root: String,
 }
@@ -88,6 +94,7 @@ pub fn app_router(
 
     Router::new()
         .route("/v1/proof", get(get_proof))
+        .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
         .route("/v1/status", get(get_status))
         .route("/v1/metrics", get(get_metrics))
@@ -117,8 +124,48 @@ async fn get_proof(
     State(state): State<AppState>,
     Query(params): Query<ProofParams>,
 ) -> impl IntoResponse {
-    let (hash, proof) = state.nexus_state.generate_proof(&params.key);
+    let (hash, proof) = state.nexus_state.generate_merkle_proof(&params.key)
+        .map(|p| (p.root.clone(), serde_json::to_string(&p).unwrap_or_default()))
+        .unwrap_or_else(|| (state.nexus_state.get_state_root(), "{}".to_string()));
     Json(ProofResponse { hash, proof })
+}
+
+async fn get_mmr_proof(
+    State(state): State<AppState>,
+    Query(params): Query<MMRProofParams>,
+) -> Result<Json<crate::state::MMRProof>, StatusCode> {
+    let index = match (params.index, params.tx_id) {
+        (Some(i), _) => Some(i),
+        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    let leaf_index = index.ok_or(StatusCode::NOT_FOUND)?;
+    let (leaf_pos, sibling_positions) = state.nexus_state.get_mmr_proof_metadata(leaf_index);
+
+    let mut siblings = Vec::new();
+    for pos in sibling_positions {
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+            .bind(pos as i64)
+            .fetch_optional(&state.storage.pg_pool)
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error fetching MMR node: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        if let Some(r) = row {
+            let hash_bytes: Vec<u8> = r.get(0);
+            siblings.push((pos, format!("0x{}", hex::encode(hash_bytes))));
+        }
+    }
+
+    let leaf = state.nexus_state.leaves.lock().unwrap()
+        .get(leaf_index).cloned()
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let proof = state.nexus_state.assemble_mmr_proof(leaf, leaf_pos, siblings);
+    Ok(Json(proof))
 }
 
 async fn verify_state(
