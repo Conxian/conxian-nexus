@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
 use std::sync::Mutex;
+use sha2::{Sha256, Digest};
 
 /// A request for off-chain execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +50,7 @@ impl NexusExecutor {
             if request.timestamp < event_time {
                 let reason = format!("Timestamp {} is before latest on-chain event {}", request.timestamp, event_time);
                 tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
+                self.log_revenue_intelligence(request).await.ok();
                 self.log_mev_attempt(request, &reason).await.ok();
                 return Ok(false);
             }
@@ -63,6 +65,7 @@ impl NexusExecutor {
         if self.detect_sandwich_attack(request).await? {
             let reason = "Potential Sandwich Attack detected (burst of swaps/liquidity)";
             tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
+            self.log_revenue_intelligence(request).await.ok();
             self.log_mev_attempt(request, reason).await.ok();
             return Ok(false);
         }
@@ -77,6 +80,24 @@ impl NexusExecutor {
             .bind(reason)
             .bind(&request.payload)
             .execute(&self.storage.pg_pool).await?;
+        Ok(())
+    }
+
+    /// [CON-68] Revenue Intelligence mapping.
+    /// Maps every signature/settlement to a Customer ID for ARR/MRR/Churn metrics.
+    async fn log_revenue_intelligence(&self, request: &ExecutionRequest) -> anyhow::Result<()> {
+        let customer_id = format!("cust_{}", hex::encode(&Sha256::digest(request.sender.as_bytes())[..8]));
+        tracing::debug!("Mapping revenue for customer: {}", customer_id);
+
+        // [STUB] Update ARR/MRR/Churn metrics in Supabase/Redis.
+        if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
+            let _: redis::RedisResult<()> = redis::cmd("HINCRBY")
+                .arg(format!("metrics:customer:{}", customer_id))
+                .arg("total_volume")
+                .arg(1)
+                .query_async(&mut conn).await;
+        }
+
         Ok(())
     }
 

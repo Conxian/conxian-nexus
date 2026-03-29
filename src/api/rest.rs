@@ -102,6 +102,10 @@ pub fn app_router(
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
+        .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
+        .route("/v1/zkml/verify", post(crate::api::zkml::verify_zkml_handler))
+        .route("/v1/identity/resolve", post(crate::api::identity::resolve_identity_handler))
+        .route("/v1/dlc/create-bond", post(crate::api::dlc::create_dlc_bond_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .with_state(state)
 }

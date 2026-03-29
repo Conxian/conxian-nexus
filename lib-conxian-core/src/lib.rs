@@ -169,6 +169,14 @@ pub mod gateway {
     }
 
     pub struct BitVMService;
+    impl BitVMService {
+        /// [CON-75] BitVM2 verification floor for Job Card settlement.
+        pub fn verify_job_card(&self, job_card: &crate::cjcs::JobCard) -> bool {
+            // [STUB] Verify against BitVM2 state root.
+            !job_card.work_intent.task_id.is_empty()
+        }
+    }
+
     impl ConxianService for BitVMService {
         fn name(&self) -> &str { "BitVM" }
         fn status(&self) -> ServiceStatus {
@@ -206,5 +214,27 @@ pub mod gateway {
                 data: None,
             }
         }
+    }
+}
+
+/// [CON-73] CJCS v2.0 JSON-LD machine-readable definition.
+pub mod cjcs {
+    use serde::{Serialize, Deserialize};
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct JobCard {
+        #[serde(rename = "@context")]
+        pub context: String,
+        #[serde(rename = "@type")]
+        pub r#type: String,
+        pub work_intent: WorkIntent,
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    pub struct WorkIntent {
+        pub sender_address: String,
+        pub receiver_address: String,
+        pub task_id: String,
+        pub amount_sbtc: u64,
     }
 }
