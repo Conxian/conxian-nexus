@@ -14,14 +14,14 @@ pub struct TablelandStateCommitment {
 
 /// [NEXUS-STATE-01] Tableland persistence layer.
 pub struct TablelandAdapter {
-    storage: Arc<Storage>,
+    _storage: Arc<Storage>,
     _base_url: String,
 }
 
 impl TablelandAdapter {
     pub fn new(storage: Arc<Storage>) -> Self {
         Self {
-            storage,
+            _storage: storage,
             _base_url: "https://validator.tableland.xyz".to_string(),
         }
     }
