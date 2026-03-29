@@ -102,6 +102,8 @@ pub fn app_router(
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
+        .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
+        .route("/v1/zkml/verify", post(crate::api::zkml::verify_zkml_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .with_state(state)
 }
