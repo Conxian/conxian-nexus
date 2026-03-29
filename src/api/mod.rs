@@ -17,3 +17,5 @@ pub fn get_uptime() -> u64 {
 }
 pub mod erp;
 pub mod zkml;
+pub mod identity;
+pub mod dlc;
