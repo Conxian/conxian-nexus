@@ -157,7 +157,7 @@ impl NexusExecutor {
              let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
              if let Some(t) = last_oracle_update {
                  if request.timestamp.signed_duration_since(t).num_milliseconds() < 200 {
-                     return Ok(Some(format!("Liquidation arrival within 200ms of latest block (high MEV probability)")));
+                     return Ok(Some("Liquidation arrival within 200ms of latest block (high MEV probability)".to_string()));
                  }
              }
         }

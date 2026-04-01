@@ -25,6 +25,12 @@ pub struct NexusState {
     pub mmr: Mutex<MMRFoundation>,
 }
 
+impl Default for NexusState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NexusState {
     pub fn new() -> Self {
         Self {
@@ -116,7 +122,7 @@ impl NexusState {
         levels.push(current_level.clone());
 
         while current_level.len() > 1 {
-            let mut next_level = Vec::with_capacity((current_level.len() + 1) / 2);
+            let mut next_level = Vec::with_capacity(current_level.len().div_ceil(2));
             for chunk in current_level.chunks(2) {
                 let mut hasher = Sha256::new();
                 if chunk.len() == 2 {
@@ -239,6 +245,12 @@ pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
 
     let final_root = format!("0x{}", hex::encode(current_hash));
     final_root == proof.root
+}
+
+impl Default for MMRFoundation {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 pub struct MMRFoundation {
