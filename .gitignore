@@ -1,3 +1,28 @@
+# Rust
 /target
 target/
+**/*.rs.bk
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# SQLx
+.sqlx/
+
+# Testing
+tests/output/
+*.log
+
+# Submodules
 lib-conxian-core/target/

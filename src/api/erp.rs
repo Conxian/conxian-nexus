@@ -1,14 +1,9 @@
 //! [CON-63] OData/ERP Translation Layer for Conxian Gateway.
 //! Bridges SAP/Oracle OData payloads to x402 mandates.
 
-use axum::{
-    extract::State,
-
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
 use crate::api::rest::AppState;
+use axum::{extract::State, response::IntoResponse, Json};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct ErpSyncRequest {
@@ -39,8 +34,11 @@ pub async fn erp_sync_handler(
     };
 
     let mandate_hash = format!("x402_{}", uuid::Uuid::new_v4());
-    
-    tracing::info!("Translated OData to x402 Mandate. Action: {}. Requesting Enclave Signature...", action);
+
+    tracing::info!(
+        "Translated OData to x402 Mandate. Action: {}. Requesting Enclave Signature...",
+        action
+    );
 
     // Mocking Enclave Attestation
     let attestation = format!("enclave_sig_{}", uuid::Uuid::new_v4());

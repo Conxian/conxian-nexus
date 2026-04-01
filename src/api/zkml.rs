@@ -2,14 +2,9 @@
 //! Full implementation of ZKML verification for the compliance module.
 //! Requirement: Zero Secret Egress (ZSE) compliance.
 
-use axum::{
-    extract::State,
-
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
 use crate::api::rest::AppState;
+use axum::{extract::State, response::IntoResponse, Json};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct ZkmlVerifyRequest {
@@ -29,7 +24,10 @@ pub async fn verify_zkml_handler(
     State(_state): State<AppState>,
     Json(payload): Json<ZkmlVerifyRequest>,
 ) -> impl IntoResponse {
-    tracing::info!("Received ZKML Verification request for model {}", payload.model_id);
+    tracing::info!(
+        "Received ZKML Verification request for model {}",
+        payload.model_id
+    );
 
     // [STUB] Implement actual ZKML verification (Groth16/PlonK) here.
     // Ensure all Job Card completions are verified before yield distribution.

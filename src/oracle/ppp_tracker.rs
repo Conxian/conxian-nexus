@@ -1,7 +1,7 @@
+use lib_conxian_core::{ContractBridge, Wallet};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use lib_conxian_core::{Wallet, ContractBridge};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PppState {
@@ -33,7 +33,9 @@ impl OracleStub {
         }
     }
 
-    pub async fn fetch_universal_fx(&self) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn fetch_universal_fx(
+        &self,
+    ) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
         let mut all_rates: Vec<HashMap<String, f64>> = Vec::new();
 
         for url in &self.endpoint_urls {
@@ -62,7 +64,8 @@ impl OracleStub {
         }
 
         for key in keys {
-            let mut values: Vec<f64> = all_rates.iter()
+            let mut values: Vec<f64> = all_rates
+                .iter()
                 .filter_map(|r| r.get(&key).copied())
                 .collect();
 
@@ -94,7 +97,10 @@ impl OracleStub {
         })
     }
 
-    pub async fn push_state_to_contract(&self, state: PppState) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn push_state_to_contract(
+        &self,
+        state: PppState,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let wallet = Wallet::new();
         let state_json = serde_json::to_string(&state).unwrap_or_default();
 
@@ -102,7 +108,7 @@ impl OracleStub {
             &wallet,
             "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.oracle-v1",
             "update-fx-rates",
-            vec![state_json]
+            vec![state_json],
         );
 
         tracing::info!("Pushing Signed Oracle Call: {:?}", signed_call.payload);

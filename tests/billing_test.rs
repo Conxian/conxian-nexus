@@ -3,13 +3,13 @@ use axum::{
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
+use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
-use conxian_nexus::executor::NexusExecutor;
+use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
-use http_body_util::BodyExt;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     dotenvy::dotenv().ok();
@@ -26,16 +26,20 @@ async fn test_billing_flow() {
     let (app, storage) = setup_test_app().await;
 
     // 1. Generate Key
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/billing/generate-key")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "developer_email": "test@example.com",
-                    "project_name": "Test Project"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "developer_email": "test@example.com",
+                        "project_name": "Test Project"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -47,16 +51,20 @@ async fn test_billing_flow() {
     let api_key = res_json["api_key"].as_str().unwrap().to_string();
 
     // 2. Track Signature (Under Limit)
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/billing/telemetry/track-signature")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "api_key": api_key,
-                    "signature_hash": "0xabc"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "api_key": api_key,
+                        "signature_hash": "0xabc"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -69,21 +77,35 @@ async fn test_billing_flow() {
     assert_eq!(res_json["current_usage"], 1);
 
     // 3. Manually inflate usage in Redis to exceed limit (50,000)
-    let mut conn = storage.redis_client.get_multiplexed_async_connection().await.unwrap();
+    let mut conn = storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .unwrap();
     let redis_key = format!("apikey:{}", api_key);
-    let _: () = redis::cmd("HSET").arg(&redis_key).arg("usage").arg(50_000).query_async(&mut conn).await.unwrap();
+    let _: () = redis::cmd("HSET")
+        .arg(&redis_key)
+        .arg("usage")
+        .arg(50_000)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
 
     // 4. Track Signature (First time exceeding limit -> Triggers Grace Period)
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/billing/telemetry/track-signature")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "api_key": api_key,
-                    "signature_hash": "0xdef"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "api_key": api_key,
+                        "signature_hash": "0xdef"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -103,18 +125,28 @@ async fn test_billing_flow() {
 
     // 5. Simulate Grace Period Expiry
     let expired_start = chrono::Utc::now().timestamp() - (25 * 60 * 60); // 25 hours ago
-    let _: () = redis::cmd("HSET").arg(&redis_key).arg("grace_period_start").arg(expired_start).query_async(&mut conn).await.unwrap();
+    let _: () = redis::cmd("HSET")
+        .arg(&redis_key)
+        .arg("grace_period_start")
+        .arg(expired_start)
+        .query_async(&mut conn)
+        .await
+        .unwrap();
 
-    let response = app.clone()
+    let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method("POST")
                 .uri("/v1/billing/telemetry/track-signature")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "api_key": api_key,
-                    "signature_hash": "0xexpired"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "api_key": api_key,
+                        "signature_hash": "0xexpired"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await

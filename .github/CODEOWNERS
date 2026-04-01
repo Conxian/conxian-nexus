@@ -1,0 +1,16 @@
+# Conxian Nexus Code Owners
+# This file is used to specify individuals or teams that are responsible for code in the repository.
+
+# Default owners for all files
+*       @Conxian/core-devs
+
+# API specific owners
+/src/api/       @Conxian/api-team
+/proto/         @Conxian/api-team
+
+# Billing and Security sensitive
+/src/api/billing/   @Conxian/security-team
+/src/safety/        @Conxian/security-team
+
+# Documentation
+/docs/          @Conxian/docs-team

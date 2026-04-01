@@ -6,11 +6,11 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use reqwest::Client;
 use sqlx::Row;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
-use reqwest::Client;
 
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,14 +75,16 @@ impl NexusSync {
         tracing::info!("Loading initial state from database...");
 
         // Load latest MMR peaks if available
-        let mmr_row = sqlx::query("SELECT peaks, size FROM mmr_peaks ORDER BY block_height DESC LIMIT 1")
-            .fetch_optional(&self.storage.pg_pool)
-            .await?;
+        let mmr_row =
+            sqlx::query("SELECT peaks, size FROM mmr_peaks ORDER BY block_height DESC LIMIT 1")
+                .fetch_optional(&self.storage.pg_pool)
+                .await?;
 
         if let Some(row) = mmr_row {
             let peaks_raw: Vec<Vec<u8>> = row.get("peaks");
             let size: i64 = row.get("size");
-            let peaks: Vec<[u8; 32]> = peaks_raw.into_iter()
+            let peaks: Vec<[u8; 32]> = peaks_raw
+                .into_iter()
                 .map(|p| p.try_into().unwrap_or([0u8; 32]))
                 .collect();
             self.state.set_mmr_state(peaks, size as usize);
@@ -93,7 +95,10 @@ impl NexusSync {
             .fetch_all(&self.storage.pg_pool)
             .await?;
 
-        let leaves: Vec<String> = rows.into_iter().map(|r| r.get::<String, _>("tx_id")).collect();
+        let leaves: Vec<String> = rows
+            .into_iter()
+            .map(|r| r.get::<String, _>("tx_id"))
+            .collect();
         let count = leaves.len();
         self.state.set_initial_leaves(leaves);
 
@@ -103,7 +108,8 @@ impl NexusSync {
         self.persist_root_to_redis(&root).await.ok();
 
         let max_height_row = sqlx::query("SELECT MAX(height) as h FROM stacks_blocks")
-            .fetch_one(&self.storage.pg_pool).await?;
+            .fetch_one(&self.storage.pg_pool)
+            .await?;
         let max_height: i64 = max_height_row.get::<Option<i64>, _>("h").unwrap_or(0);
 
         sqlx::query("INSERT INTO nexus_state_roots (block_height, state_root) VALUES ($1, $2) ON CONFLICT (block_height) DO UPDATE SET state_root = EXCLUDED.state_root")
@@ -115,7 +121,11 @@ impl NexusSync {
     }
 
     async fn persist_root_to_redis(&self, root: &str) -> anyhow::Result<()> {
-        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await?;
         redis::cmd("SET")
             .arg("nexus:state_root")
             .arg(root)
@@ -124,7 +134,11 @@ impl NexusSync {
         Ok(())
     }
 
-    async fn persist_mmr_state(&self, height: u64, added_nodes: &[(u64, [u8; 32])]) -> anyhow::Result<()> {
+    async fn persist_mmr_state(
+        &self,
+        height: u64,
+        added_nodes: &[(u64, [u8; 32])],
+    ) -> anyhow::Result<()> {
         let (peaks, size) = self.state.get_mmr_state();
         let peaks_raw: Vec<Vec<u8>> = peaks.into_iter().map(|p| p.to_vec()).collect();
 
@@ -163,7 +177,9 @@ impl NexusSync {
             let mut interval = time::interval(Duration::from_secs(10)); // Increased frequency
             loop {
                 interval.tick().await;
-                if let Err(e) = Self::poll_stacks_node(&poller_tx, &rpc_url, &storage, &http_client).await {
+                if let Err(e) =
+                    Self::poll_stacks_node(&poller_tx, &rpc_url, &storage, &http_client).await
+                {
                     tracing::error!("Sync polling error: {}", e);
                 }
             }
@@ -196,7 +212,10 @@ impl NexusSync {
         let url = format!("{}/extended/v1/block?limit=1", rpc_url);
         let resp = http_client.get(&url).send().await?;
         if !resp.status().is_success() {
-            return Err(anyhow::anyhow!("Stacks RPC returned error: {}", resp.status()));
+            return Err(anyhow::anyhow!(
+                "Stacks RPC returned error: {}",
+                resp.status()
+            ));
         }
         let json: serde_json::Value = resp.json().await?;
         let latest_l1_height = json["results"][0]["height"].as_u64().unwrap_or(0);
@@ -214,14 +233,22 @@ impl NexusSync {
                 let block_url = format!("{}/extended/v1/block/by_height/{}", rpc_url, height);
                 let block_resp = http_client.get(&block_url).send().await?;
                 if !block_resp.status().is_success() {
-                    tracing::warn!("Failed to fetch block at height {}: {}", height, block_resp.status());
+                    tracing::warn!(
+                        "Failed to fetch block at height {}: {}",
+                        height,
+                        block_resp.status()
+                    );
                     continue;
                 }
                 let block_json: serde_json::Value = block_resp.json().await?;
 
                 let hash = block_json["hash"].as_str().unwrap_or("").to_string();
-                let parent_hash = block_json["parent_block_hash"].as_str().unwrap_or("").to_string();
-                let timestamp = block_json["burn_block_time_iso"].as_str()
+                let parent_hash = block_json["parent_block_hash"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string();
+                let timestamp = block_json["burn_block_time_iso"]
+                    .as_str()
                     .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                     .map(|dt| dt.with_timezone(&Utc))
                     .unwrap_or_else(Utc::now);
@@ -286,9 +313,12 @@ impl NexusSync {
         tracing::error!("MICROBLOCK REORG DETECTED: Parent hash {} not found for block {}. Initiating rollback.", data.parent_hash, data.hash);
 
         // 1. Mark all soft blocks at this height or higher as 'orphaned'
-        sqlx::query("UPDATE stacks_blocks SET state = 'orphaned' WHERE height >= $1 AND state = 'soft'")
-            .bind(data.height as i64)
-            .execute(&self.storage.pg_pool).await?;
+        sqlx::query(
+            "UPDATE stacks_blocks SET state = 'orphaned' WHERE height >= $1 AND state = 'soft'",
+        )
+        .bind(data.height as i64)
+        .execute(&self.storage.pg_pool)
+        .await?;
 
         // 2. Re-load state from database (excluding orphaned transactions)
         self.load_initial_state().await?;
@@ -302,14 +332,14 @@ impl NexusSync {
 
         // [NEXUS-03] Microblock Reorg Detection
         if !data.parent_hash.is_empty() {
-             let parent_exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1 AND state != 'orphaned')")
+            let parent_exists: bool = sqlx::query("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1 AND state != 'orphaned')")
                  .bind(&data.parent_hash)
                  .fetch_one(&self.storage.pg_pool).await?
                  .get(0);
 
-             if !parent_exists && data.height > 1 {
-                 self.handle_microblock_reorg(&data).await?;
-             }
+            if !parent_exists && data.height > 1 {
+                self.handle_microblock_reorg(&data).await?;
+            }
         }
 
         let mut tx = self.storage.pg_pool.begin().await?;
@@ -350,11 +380,17 @@ impl NexusSync {
         // Persist MMR state
         self.persist_mmr_state(data.height, &added_nodes).await.ok();
 
-        if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
+        if let Ok(mut conn) = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+        {
             redis::cmd("DEL")
                 .arg("cache:vaults:all")
                 .query_async::<_, ()>(&mut conn)
-                .await.ok();
+                .await
+                .ok();
         }
 
         Ok(())
