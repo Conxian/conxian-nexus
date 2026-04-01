@@ -2,8 +2,8 @@
 //! Bridges off-shore yield routing state to decentralized Tableland tables.
 
 use crate::storage::Storage;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TablelandStateCommitment {
@@ -27,7 +27,10 @@ impl TablelandAdapter {
     }
 
     /// Commit state to Tableland to bypass jurisdictional risks and ensure sovereign persistence.
-    pub async fn commit_state(&self, commitment: TablelandStateCommitment) -> anyhow::Result<String> {
+    pub async fn commit_state(
+        &self,
+        commitment: TablelandStateCommitment,
+    ) -> anyhow::Result<String> {
         tracing::info!("Committing state to Tableland: {}", commitment.table_id);
 
         // [STUB] Implement actual Tableland REST/Validator API calls here.

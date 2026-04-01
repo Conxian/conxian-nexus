@@ -1,13 +1,9 @@
 //! [CON-62/72] Bitcoin DLC Bond Orchestrator.
 //! Finalizes lifecycle contracts for Bitcoin-native DLC bonds.
 
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    Json,
-};
-use serde::{Deserialize, Serialize};
 use crate::api::rest::AppState;
+use axum::{extract::State, response::IntoResponse, Json};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct DlcBondRequest {

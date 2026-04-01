@@ -4,10 +4,10 @@
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::Arc;
 use std::sync::Mutex;
-use sha2::{Sha256, Digest};
 
 /// A request for off-chain execution.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,7 +48,10 @@ impl NexusExecutor {
 
         if let Some(event_time) = latest_on_chain_event_time {
             if request.timestamp < event_time {
-                let reason = format!("Timestamp {} is before latest on-chain event {}", request.timestamp, event_time);
+                let reason = format!(
+                    "Timestamp {} is before latest on-chain event {}",
+                    request.timestamp, event_time
+                );
                 tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
                 self.log_revenue_intelligence(request).await.ok();
                 self.log_mev_attempt(request, &reason).await.ok();
@@ -57,7 +60,11 @@ impl NexusExecutor {
         }
 
         if let Some(reason) = self.detect_front_running(request).await? {
-            tracing::warn!("Potential front-running detected for tx {}: {}", request.tx_id, reason);
+            tracing::warn!(
+                "Potential front-running detected for tx {}: {}",
+                request.tx_id,
+                reason
+            );
             self.log_mev_attempt(request, &reason).await.ok();
             return Ok(false);
         }
@@ -73,29 +80,45 @@ impl NexusExecutor {
         Ok(true)
     }
 
-    async fn log_mev_attempt(&self, request: &ExecutionRequest, reason: &str) -> anyhow::Result<()> {
-        sqlx::query("INSERT INTO mev_audit_log (tx_id, sender, reason, payload) VALUES ($1, $2, $3, $4)")
-            .bind(&request.tx_id)
-            .bind(&request.sender)
-            .bind(reason)
-            .bind(&request.payload)
-            .execute(&self.storage.pg_pool).await?;
+    async fn log_mev_attempt(
+        &self,
+        request: &ExecutionRequest,
+        reason: &str,
+    ) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO mev_audit_log (tx_id, sender, reason, payload) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&request.tx_id)
+        .bind(&request.sender)
+        .bind(reason)
+        .bind(&request.payload)
+        .execute(&self.storage.pg_pool)
+        .await?;
         Ok(())
     }
 
     /// [CON-68] Revenue Intelligence mapping.
     /// Maps every signature/settlement to a Customer ID for ARR/MRR/Churn metrics.
     async fn log_revenue_intelligence(&self, request: &ExecutionRequest) -> anyhow::Result<()> {
-        let customer_id = format!("cust_{}", hex::encode(&Sha256::digest(request.sender.as_bytes())[..8]));
+        let customer_id = format!(
+            "cust_{}",
+            hex::encode(&Sha256::digest(request.sender.as_bytes())[..8])
+        );
         tracing::debug!("Mapping revenue for customer: {}", customer_id);
 
         // [STUB] Update ARR/MRR/Churn metrics in Supabase/Redis.
-        if let Ok(mut conn) = self.storage.redis_client.get_multiplexed_async_connection().await {
+        if let Ok(mut conn) = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+        {
             let _: redis::RedisResult<()> = redis::cmd("HINCRBY")
                 .arg(format!("metrics:customer:{}", customer_id))
                 .arg("total_volume")
                 .arg(1)
-                .query_async(&mut conn).await;
+                .query_async(&mut conn)
+                .await;
         }
 
         Ok(())
@@ -124,7 +147,10 @@ impl NexusExecutor {
         Ok(time)
     }
 
-    async fn detect_front_running(&self, request: &ExecutionRequest) -> anyhow::Result<Option<String>> {
+    async fn detect_front_running(
+        &self,
+        request: &ExecutionRequest,
+    ) -> anyhow::Result<Option<String>> {
         let row = sqlx::query(
             "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
         )
@@ -136,7 +162,10 @@ impl NexusExecutor {
         let sender_count: i64 = row.get(0);
 
         if sender_count > 10 {
-            return Ok(Some(format!("Sender spamming detected: {} txs in 60s", sender_count)));
+            return Ok(Some(format!(
+                "Sender spamming detected: {} txs in 60s",
+                sender_count
+            )));
         }
 
         let row = sqlx::query(
@@ -150,16 +179,26 @@ impl NexusExecutor {
         let payload_count: i64 = row.get(0);
 
         if payload_count > 0 {
-            return Ok(Some("Identical payload already seen on-chain (copy-cat attempt)".to_string()));
+            return Ok(Some(
+                "Identical payload already seen on-chain (copy-cat attempt)".to_string(),
+            ));
         }
 
         if request.payload.contains("liquidate") {
-             let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
-             if let Some(t) = last_oracle_update {
-                 if request.timestamp.signed_duration_since(t).num_milliseconds() < 200 {
-                     return Ok(Some("Liquidation arrival within 200ms of latest block (high MEV probability)".to_string()));
-                 }
-             }
+            let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
+            if let Some(t) = last_oracle_update {
+                if request
+                    .timestamp
+                    .signed_duration_since(t)
+                    .num_milliseconds()
+                    < 200
+                {
+                    return Ok(Some(
+                        "Liquidation arrival within 200ms of latest block (high MEV probability)"
+                            .to_string(),
+                    ));
+                }
+            }
         }
 
         Ok(None)
@@ -178,7 +217,9 @@ impl NexusExecutor {
 
         let burst_count: i64 = row.get(0);
 
-        if burst_count >= 2 && (request.payload.contains("swap") || request.payload.contains("liquidity")) {
+        if burst_count >= 2
+            && (request.payload.contains("swap") || request.payload.contains("liquidity"))
+        {
             return Ok(true);
         }
 
@@ -202,8 +243,14 @@ impl NexusExecutor {
             }
 
             if vault.ltv_ratio > 0.85 {
-                tracing::info!("Vault {} needs rebalance (LTV: {:.2}, STX: ${:.2})", vault.vault_id, vault.ltv_ratio, fx_rate);
-                let tx_id = lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id));
+                tracing::info!(
+                    "Vault {} needs rebalance (LTV: {:.2}, STX: ${:.2})",
+                    vault.vault_id,
+                    vault.ltv_ratio,
+                    fx_rate
+                );
+                let tx_id =
+                    lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id));
                 tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
                 rebalance_count += 1;
             }
@@ -214,24 +261,33 @@ impl NexusExecutor {
             let signal_tx = lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success");
             tracing::info!("Bounty success signaled: {}", signal_tx);
         } else {
-            tracing::debug!("Collateral levels healthy (STX: ${:.2}). No rebalance needed.", fx_rate);
+            tracing::debug!(
+                "Collateral levels healthy (STX: ${:.2}). No rebalance needed.",
+                fx_rate
+            );
         }
 
         Ok(())
     }
 
     async fn get_latest_fx_rate(&self, symbol: &str) -> Option<f64> {
-        let row = sqlx::query("SELECT rates FROM oracle_fx_history ORDER BY timestamp DESC LIMIT 1")
-            .fetch_optional(&self.storage.pg_pool)
-            .await
-            .ok()??;
+        let row =
+            sqlx::query("SELECT rates FROM oracle_fx_history ORDER BY timestamp DESC LIMIT 1")
+                .fetch_optional(&self.storage.pg_pool)
+                .await
+                .ok()??;
 
         let rates: serde_json::Value = row.get("rates");
         rates.get(symbol).and_then(|v| v.as_f64())
     }
 
     async fn get_vaults_from_storage(&self) -> anyhow::Result<Vec<VaultStatus>> {
-        let mut conn = match self.storage.redis_client.get_multiplexed_async_connection().await {
+        let mut conn = match self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+        {
             Ok(c) => c,
             Err(_) => return Ok(vec![]),
         };

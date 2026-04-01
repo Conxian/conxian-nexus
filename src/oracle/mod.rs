@@ -1,9 +1,9 @@
 pub mod ppp_tracker;
 
+use crate::oracle::ppp_tracker::{OracleStub, PppState};
 use crate::storage::Storage;
 use std::sync::Arc;
 use tokio::time::{self, Duration};
-use crate::oracle::ppp_tracker::{OracleStub, PppState};
 
 pub struct OracleService {
     pub storage: Arc<Storage>,
@@ -45,7 +45,11 @@ impl OracleService {
         }
     }
 
-    async fn persist_fx_history(&self, state: PppState, tx_id: Option<String>) -> anyhow::Result<()> {
+    async fn persist_fx_history(
+        &self,
+        state: PppState,
+        tx_id: Option<String>,
+    ) -> anyhow::Result<()> {
         let rates_json = serde_json::to_value(&state.rates)?;
         let ppp_json = serde_json::to_value(&state.ppp_indices)?;
 

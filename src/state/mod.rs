@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MerkleProof {
@@ -104,7 +104,8 @@ impl NexusState {
 
     fn rebuild_tree(&self, leaves: &[String]) {
         if leaves.is_empty() {
-            *self.state_root.lock().unwrap() = "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+            *self.state_root.lock().unwrap() =
+                "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
             *self.tree_levels.lock().unwrap() = Vec::new();
             return;
         }
@@ -209,9 +210,18 @@ impl NexusState {
         (pos, siblings)
     }
 
-    pub fn assemble_mmr_proof(&self, leaf: String, pos: u64, siblings: Vec<(u64, String)>) -> MMRProof {
+    pub fn assemble_mmr_proof(
+        &self,
+        leaf: String,
+        pos: u64,
+        siblings: Vec<(u64, String)>,
+    ) -> MMRProof {
         let mmr = self.mmr.lock().unwrap();
-        let peaks = mmr.peaks.iter().map(|p| format!("0x{}", hex::encode(p))).collect();
+        let peaks = mmr
+            .peaks
+            .iter()
+            .map(|p| format!("0x{}", hex::encode(p)))
+            .collect();
         MMRProof {
             leaf,
             pos,
@@ -261,7 +271,11 @@ pub struct MMRFoundation {
 
 impl MMRFoundation {
     pub fn new() -> Self {
-        Self { peaks: Vec::new(), size: 0, node_count: 0 }
+        Self {
+            peaks: Vec::new(),
+            size: 0,
+            node_count: 0,
+        }
     }
 
     pub fn add_leaf(&mut self, leaf: &[u8]) -> Vec<(u64, [u8; 32])> {
@@ -297,7 +311,8 @@ impl MMRFoundation {
 
     pub fn get_root(&self) -> String {
         if self.peaks.is_empty() {
-            return "0x0000000000000000000000000000000000000000000000000000000000000000".to_string();
+            return "0x0000000000000000000000000000000000000000000000000000000000000000"
+                .to_string();
         }
 
         let mut root_hash = self.peaks[0];
@@ -319,7 +334,10 @@ mod tests {
     #[test]
     fn test_new_nexus_state() {
         let state = NexusState::new();
-        assert_eq!(state.get_state_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
+        assert_eq!(
+            state.get_state_root(),
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+        );
     }
 
     #[test]
@@ -327,7 +345,10 @@ mod tests {
         let state = NexusState::new();
         state.update_state_batch(&["tx1".to_string(), "tx2".to_string()]);
         let root = state.get_state_root();
-        assert_ne!(root, "0x0000000000000000000000000000000000000000000000000000000000000000");
+        assert_ne!(
+            root,
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+        );
     }
 
     #[test]

@@ -56,20 +56,24 @@ impl NexusSafety {
     async fn ingest_gateway_telemetry(&self) -> anyhow::Result<()> {
         let url = format!("{}/api/v1/state", self.gateway_url);
         let resp = self.http_client.get(&url).send().await?;
-        
+
         if !resp.status().is_success() {
             tracing::warn!("Failed to fetch Gateway state: {}", resp.status());
             return Ok(());
         }
 
         let json: Value = resp.json().await?;
-        
-        let success_count = json["metrics"]["verification_success"].as_u64().unwrap_or(0);
-        let failure_count = json["metrics"]["verification_failure"].as_u64().unwrap_or(0);
-        
+
+        let success_count = json["metrics"]["verification_success"]
+            .as_u64()
+            .unwrap_or(0);
+        let failure_count = json["metrics"]["verification_failure"]
+            .as_u64()
+            .unwrap_or(0);
+
         // Define a simple circuit breaker logic based on failures
         let total_verifications = success_count + failure_count;
-        
+
         if total_verifications > 100 {
             let failure_rate = (failure_count as f64) / (total_verifications as f64);
             // If more than 10% of verifications are failing, trigger an infrastructure-level safety alert
@@ -80,12 +84,12 @@ impl NexusSafety {
                     success_count,
                     failure_count
                 );
-                
+
                 // We reuse the existing safety mode broadcast but flag it as a telemetry alert
                 self.trigger_safety_mode(999).await?; // 999 is a synthetic drift indicating a telemetry fault
             }
         }
-        
+
         Ok(())
     }
 

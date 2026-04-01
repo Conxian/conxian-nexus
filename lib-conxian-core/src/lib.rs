@@ -1,10 +1,10 @@
-use k256::ecdsa::{SigningKey, Signature, signature::Signer};
-use sha2::{Sha256, Digest};
-use std::env;
-use bip39::{Mnemonic, Language, Seed, MnemonicType};
-use bip32::{XPrv, ChildNumber};
+use bip32::{ChildNumber, XPrv};
+use bip39::{Language, Mnemonic, MnemonicType, Seed};
+use k256::ecdsa::{Signature, SigningKey, signature::Signer};
 use ripemd::Ripemd160;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::env;
 
 pub struct Wallet {
     signing_key: SigningKey,
@@ -16,7 +16,10 @@ impl Wallet {
         if let Ok(hex_key) = env::var("NEXUS_PRIVATE_KEY") {
             if let Ok(bytes) = hex::decode(hex_key) {
                 if let Ok(key) = SigningKey::from_slice(&bytes) {
-                    return Self { signing_key: key, _mnemonic: None };
+                    return Self {
+                        signing_key: key,
+                        _mnemonic: None,
+                    };
                 }
             }
         }
@@ -24,12 +27,14 @@ impl Wallet {
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
         let xprv = XPrv::new(seed.as_bytes()).expect("Invalid seed");
-        let child = xprv.derive_child(ChildNumber::new(44, true).unwrap()).unwrap();
+        let child = xprv
+            .derive_child(ChildNumber::new(44, true).unwrap())
+            .unwrap();
         let signing_key = SigningKey::from_slice(&child.to_bytes()).expect("Invalid seed length");
 
         Self {
             signing_key,
-            _mnemonic: Some(mnemonic.into_phrase())
+            _mnemonic: Some(mnemonic.into_phrase()),
         }
     }
 
@@ -41,7 +46,7 @@ impl Wallet {
         let signing_key = SigningKey::from_slice(&child.to_bytes())?;
         Ok(Self {
             signing_key,
-            _mnemonic: Some(phrase.to_string())
+            _mnemonic: Some(phrase.to_string()),
         })
     }
 
@@ -96,7 +101,7 @@ impl ContractBridge {
         wallet: &Wallet,
         contract: &str,
         function: &str,
-        args: Vec<String>
+        args: Vec<String>,
     ) -> SignedContractCall {
         let parts: Vec<&str> = contract.split('.').collect();
         let (addr, name) = if parts.len() == 2 {
@@ -125,7 +130,7 @@ impl ContractBridge {
 }
 
 pub mod gateway {
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct ServiceStatus {
@@ -150,7 +155,9 @@ pub mod gateway {
 
     pub struct BisqService;
     impl ConxianService for BisqService {
-        fn name(&self) -> &str { "Bisq" }
+        fn name(&self) -> &str {
+            "Bisq"
+        }
         fn status(&self) -> ServiceStatus {
             ServiceStatus {
                 service_name: self.name().to_string(),
@@ -178,7 +185,9 @@ pub mod gateway {
     }
 
     impl ConxianService for BitVMService {
-        fn name(&self) -> &str { "BitVM" }
+        fn name(&self) -> &str {
+            "BitVM"
+        }
         fn status(&self) -> ServiceStatus {
             ServiceStatus {
                 service_name: self.name().to_string(),
@@ -198,7 +207,9 @@ pub mod gateway {
 
     pub struct RGBService;
     impl ConxianService for RGBService {
-        fn name(&self) -> &str { "RGB" }
+        fn name(&self) -> &str {
+            "RGB"
+        }
         fn status(&self) -> ServiceStatus {
             ServiceStatus {
                 service_name: self.name().to_string(),
@@ -219,7 +230,7 @@ pub mod gateway {
 
 /// [CON-73] CJCS v2.0 JSON-LD machine-readable definition.
 pub mod cjcs {
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct JobCard {
