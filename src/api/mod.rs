@@ -1,6 +1,6 @@
+pub mod billing;
 pub mod grpc;
 pub mod rest;
-pub mod billing;
 pub mod services;
 
 use std::sync::OnceLock;
@@ -15,7 +15,7 @@ pub fn init_start_time() {
 pub fn get_uptime() -> u64 {
     START_TIME.get().map(|t| t.elapsed().as_secs()).unwrap_or(0)
 }
-pub mod erp;
-pub mod zkml;
-pub mod identity;
 pub mod dlc;
+pub mod erp;
+pub mod identity;
+pub mod zkml;

@@ -1,24 +1,34 @@
+use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::state::NexusState;
 use crate::storage::Storage;
-use crate::executor::{NexusExecutor, ExecutionRequest};
 use axum::{
-    Router,
     extract::{Json, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
+    Router,
 };
+use lazy_static::lazy_static;
+use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
-use prometheus::{Encoder, TextEncoder, IntGauge, register_int_gauge};
-use lazy_static::lazy_static;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!("nexus_transactions_total", "Total number of transactions processed").unwrap();
-    pub static ref TOTAL_BLOCKS: IntGauge = register_int_gauge!("nexus_blocks_total", "Total number of blocks processed").unwrap();
-    pub static ref SYNC_DRIFT: IntGauge = register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
-    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!("nexus_safety_mode", "Safety mode status (1 = active, 0 = inactive)").unwrap();
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
+        "nexus_transactions_total",
+        "Total number of transactions processed"
+    )
+    .unwrap();
+    pub static ref TOTAL_BLOCKS: IntGauge =
+        register_int_gauge!("nexus_blocks_total", "Total number of blocks processed").unwrap();
+    pub static ref SYNC_DRIFT: IntGauge =
+        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
+    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
+        "nexus_safety_mode",
+        "Safety mode status (1 = active, 0 = inactive)"
+    )
+    .unwrap();
 }
 
 #[derive(Clone)]
@@ -103,9 +113,18 @@ pub fn app_router(
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
         .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
-        .route("/v1/zkml/verify", post(crate::api::zkml::verify_zkml_handler))
-        .route("/v1/identity/resolve", post(crate::api::identity::resolve_identity_handler))
-        .route("/v1/dlc/create-bond", post(crate::api::dlc::create_dlc_bond_handler))
+        .route(
+            "/v1/zkml/verify",
+            post(crate::api::zkml::verify_zkml_handler),
+        )
+        .route(
+            "/v1/identity/resolve",
+            post(crate::api::identity::resolve_identity_handler),
+        )
+        .route(
+            "/v1/dlc/create-bond",
+            post(crate::api::dlc::create_dlc_bond_handler),
+        )
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .with_state(state)
 }
@@ -128,8 +147,15 @@ async fn get_proof(
     State(state): State<AppState>,
     Query(params): Query<ProofParams>,
 ) -> impl IntoResponse {
-    let (hash, proof) = state.nexus_state.generate_merkle_proof(&params.key)
-        .map(|p| (p.root.clone(), serde_json::to_string(&p).unwrap_or_default()))
+    let (hash, proof) = state
+        .nexus_state
+        .generate_merkle_proof(&params.key)
+        .map(|p| {
+            (
+                p.root.clone(),
+                serde_json::to_string(&p).unwrap_or_default(),
+            )
+        })
         .unwrap_or_else(|| (state.nexus_state.get_state_root(), "{}".to_string()));
     Json(ProofResponse { hash, proof })
 }
@@ -149,7 +175,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -164,11 +190,18 @@ async fn get_mmr_proof(
         }
     }
 
-    let leaf = state.nexus_state.leaves.lock().unwrap()
-        .get(leaf_index).cloned()
+    let leaf = state
+        .nexus_state
+        .leaves
+        .lock()
+        .unwrap()
+        .get(leaf_index)
+        .cloned()
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    let proof = state.nexus_state.assemble_mmr_proof(leaf, leaf_pos, siblings);
+    let proof = state
+        .nexus_state
+        .assemble_mmr_proof(leaf, leaf_pos, siblings);
     Ok(Json(proof))
 }
 
@@ -186,13 +219,15 @@ async fn verify_state(
 async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {
     let state_root = state.nexus_state.get_state_root();
 
-    let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks WHERE state != 'orphaned'")
-        .fetch_one(&state.storage.pg_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!("Database error in get_status: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let row = sqlx::query(
+        "SELECT MAX(height) as max_height FROM stacks_blocks WHERE state != 'orphaned'",
+    )
+    .fetch_one(&state.storage.pg_pool)
+    .await
+    .map_err(|e| {
+        tracing::error!("Database error in get_status: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     let processed_height: Option<i64> = row.get("max_height");
 
@@ -234,15 +269,29 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .map(|r| r.get(0))
         .unwrap_or(0);
 
-    let block_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
-        .fetch_one(&state.storage.pg_pool)
-        .await
-        .map(|r| r.get(0))
-        .unwrap_or(0);
+    let block_count: i64 =
+        sqlx::query("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
+            .fetch_one(&state.storage.pg_pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
 
-    let mut conn = state.storage.redis_client.get_multiplexed_async_connection().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let safety_mode_active: bool = redis::cmd("GET").arg("nexus:safety_mode").query_async(&mut conn).await.unwrap_or(false);
-    let drift: u64 = redis::cmd("GET").arg("nexus:drift").query_async(&mut conn).await.unwrap_or(0);
+    let mut conn = state
+        .storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let safety_mode_active: bool = redis::cmd("GET")
+        .arg("nexus:safety_mode")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(false);
+    let drift: u64 = redis::cmd("GET")
+        .arg("nexus:drift")
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(0);
 
     // Update Prometheus metrics
     TOTAL_TRANSACTIONS.set(tx_count);
@@ -282,22 +331,28 @@ async fn execute_tx(
                 tx_id: request.tx_id,
                 status: "Success".to_string(),
                 message: "Transaction validated by FSOC Sequencer and executed.".to_string(),
-            }).into_response()
+            })
+            .into_response()
         }
-        Ok(false) => {
-            (StatusCode::BAD_REQUEST, Json(ExecutionResponse {
+        Ok(false) => (
+            StatusCode::BAD_REQUEST,
+            Json(ExecutionResponse {
                 tx_id: request.tx_id,
                 status: "Rejected".to_string(),
-                message: "Transaction rejected by FSOC Sequencer (Potential MEV/Front-running).".to_string(),
-            })).into_response()
-        }
-        Err(e) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(ExecutionResponse {
+                message: "Transaction rejected by FSOC Sequencer (Potential MEV/Front-running)."
+                    .to_string(),
+            }),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ExecutionResponse {
                 tx_id: request.tx_id,
                 status: "Error".to_string(),
                 message: format!("Internal error during validation: {}", e),
-            })).into_response()
-        }
+            }),
+        )
+            .into_response(),
     }
 }
 

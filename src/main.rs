@@ -1,11 +1,11 @@
 use conxian_nexus::api;
 use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
-use conxian_nexus::oracle::OracleService;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
@@ -41,13 +41,20 @@ async fn main() -> anyhow::Result<()> {
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
     // Initialize Services
-    let sync_service = Arc::new(NexusSync::new(storage.clone(), state_tracker.clone(), config.stacks_node_rpc_url.clone()));
+    let sync_service = Arc::new(NexusSync::new(
+        storage.clone(),
+        state_tracker.clone(),
+        config.stacks_node_rpc_url.clone(),
+    ));
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),
         config.stacks_node_rpc_url.clone(),
         config.gateway_url.clone(),
     ));
-    let oracle_service = Arc::new(OracleService::new(storage.clone(), "https://api.exchangerate-api.com/v4/latest/USD".to_string()));
+    let oracle_service = Arc::new(OracleService::new(
+        storage.clone(),
+        "https://api.exchangerate-api.com/v4/latest/USD".to_string(),
+    ));
 
     // Load Initial State from DB
     sync_service.load_initial_state().await?;
@@ -100,7 +107,9 @@ async fn main() -> anyhow::Result<()> {
     let rest_executor = executor.clone();
     let rest_port = config.rest_port;
     let rest_handle = tokio::spawn(async move {
-        if let Err(e) = api::rest::start_rest_server(rest_storage, rest_state, rest_executor, rest_port).await {
+        if let Err(e) =
+            api::rest::start_rest_server(rest_storage, rest_state, rest_executor, rest_port).await
+        {
             tracing::error!("REST API server failed: {}", e);
         }
     });
@@ -111,7 +120,9 @@ async fn main() -> anyhow::Result<()> {
     let grpc_executor = executor.clone();
     let grpc_port = config.grpc_port;
     let grpc_handle = tokio::spawn(async move {
-        if let Err(e) = api::grpc::start_grpc_server(grpc_storage, grpc_state, grpc_executor, grpc_port).await {
+        if let Err(e) =
+            api::grpc::start_grpc_server(grpc_storage, grpc_state, grpc_executor, grpc_port).await
+        {
             tracing::error!("gRPC API server failed: {}", e);
         }
     });

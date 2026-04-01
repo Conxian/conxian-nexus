@@ -1,9 +1,31 @@
-target/
-**/*.rs.bk
-Cargo.lock
-.env
+# Git
 .git
 .gitignore
-docker-compose.yml
-Dockerfile
+.gitmodules
+
+# Rust artifacts
+target/
+lib-conxian-core/target/
+
+# Documentation
 README.md
+CHANGELOG.md
+CONTRIBUTING.md
+LICENSE
+SECURITY.md
+docs/
+
+# Environment
+.env
+.env.example
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Testing
+tests/
+*.log
+
+# Scripts and metadata
+.github/

@@ -1,9 +1,9 @@
+use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::state::NexusState;
 use crate::storage::Storage;
-use crate::executor::{NexusExecutor, ExecutionRequest};
+use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
-use chrono::{DateTime, Utc};
 
 // Proto generated code
 pub mod proto {
@@ -26,14 +26,18 @@ impl NexusService for NexusGrpcService {
         request: Request<ProofRequest>,
     ) -> Result<Response<ProofResponse>, Status> {
         let req = request.into_inner();
-        let (hash, proof) = self.nexus_state.generate_merkle_proof(&req.key)
-            .map(|p| (p.root.clone(), serde_json::to_string(&p).unwrap_or_default()))
+        let (hash, proof) = self
+            .nexus_state
+            .generate_merkle_proof(&req.key)
+            .map(|p| {
+                (
+                    p.root.clone(),
+                    serde_json::to_string(&p).unwrap_or_default(),
+                )
+            })
             .unwrap_or_else(|| (self.nexus_state.get_state_root(), "{}".to_string()));
 
-        Ok(Response::new(ProofResponse {
-            hash,
-            proof,
-        }))
+        Ok(Response::new(ProofResponse { hash, proof }))
     }
 
     async fn verify_state(
@@ -82,7 +86,9 @@ impl NexusService for NexusGrpcService {
         let timestamp = if req.timestamp.is_empty() {
             Utc::now()
         } else {
-            req.timestamp.parse::<DateTime<Utc>>().unwrap_or_else(|_| Utc::now())
+            req.timestamp
+                .parse::<DateTime<Utc>>()
+                .unwrap_or_else(|_| Utc::now())
         };
 
         let exec_req = ExecutionRequest {
@@ -111,7 +117,8 @@ impl NexusService for NexusGrpcService {
         _request: Request<ServicesRequest>,
     ) -> Result<Response<ServicesResponse>, Status> {
         let multi_status = crate::api::services::get_all_services_status();
-        let services = multi_status.services
+        let services = multi_status
+            .services
             .into_iter()
             .map(|s| ServiceStatus {
                 service_name: s.service_name,
@@ -139,7 +146,9 @@ pub async fn start_grpc_server(
     tracing::info!("gRPC server listening on {}", addr);
 
     tonic::transport::Server::builder()
-        .add_service(proto::nexus_service_server::NexusServiceServer::new(nexus_service))
+        .add_service(proto::nexus_service_server::NexusServiceServer::new(
+            nexus_service,
+        ))
         .serve(addr)
         .await?;
 

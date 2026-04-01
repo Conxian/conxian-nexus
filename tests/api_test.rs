@@ -5,12 +5,18 @@ async fn test_merkle_logic_edge_cases() {
     let state = NexusState::new();
 
     // Test empty
-    assert_eq!(state.get_state_root(), "0x0000000000000000000000000000000000000000000000000000000000000000");
+    assert_eq!(
+        state.get_state_root(),
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+    );
 
     // Test single
     state.update_state_batch(&["tx1".to_string()]);
     let root1 = state.get_state_root();
-    assert_ne!(root1, "0x0000000000000000000000000000000000000000000000000000000000000000");
+    assert_ne!(
+        root1,
+        "0x0000000000000000000000000000000000000000000000000000000000000000"
+    );
 
     // Test odd number of leaves
     state.update_state_batch(&["tx2".to_string(), "tx3".to_string()]);
