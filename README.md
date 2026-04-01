@@ -2,6 +2,25 @@
 
 Conxian Nexus is a high-performance middleware designed to synchronize off-chain state with Stacks L1, providing cryptographic proofs and enforcing transaction ordering.
 
+## Purpose
+
+Provide a verifiable synchronization and proof layer between off-chain state and Stacks L1, with ordering guarantees and safety-mode controls.
+
+## Status
+
+Active development. Module boundaries and APIs may change as the stack converges on shared primitives.
+
+## Audience
+
+- Backend engineers working on state sync, proof generation, and ordering.
+- Protocol engineers integrating L1 events into higher-level execution flows.
+- Infrastructure operators running Nexus for observability and safety monitoring.
+
+## Relationship to the Conxian stack
+
+- Complements Conxian Gateway by focusing on ordering, proofs, and state-root integrity.
+- Can be used as an execution-adjacent component for systems that require FSOC-style validation.
+
 ## Modules
 
 - **nexus-sync**: Ingests Stacks L1 events via RPC polling, updates local state, and handles microblock reorgs with automated rollback.
