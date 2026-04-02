@@ -22,6 +22,16 @@ impl Storage {
         })
     }
 
+    pub fn new_lazy(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
+        let pg_pool = sqlx::postgres::PgPoolOptions::new().connect_lazy(database_url)?;
+        let redis_client = RedisClient::open(redis_url)?;
+
+        Ok(Self {
+            pg_pool,
+            redis_client,
+        })
+    }
+
     /// Run database migrations
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
         sqlx::migrate!("./migrations").run(&self.pg_pool).await?;

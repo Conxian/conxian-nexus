@@ -139,7 +139,8 @@ fn encode_payload_value(value: &str) -> String {
 
 pub fn canonical_block_payload(commitment: &KwilBlockCommitment) -> String {
     format!(
-        "v1|hash={}|height={}|type={}|state={}",
+        "{}|hash={}|height={}|type={}|state={}",
+        "nexus:kwil:block:v1",
         encode_payload_value(&commitment.hash),
         commitment.height,
         encode_payload_value(&commitment.block_type),
@@ -149,8 +150,45 @@ pub fn canonical_block_payload(commitment: &KwilBlockCommitment) -> String {
 
 pub fn canonical_state_root_payload(commitment: &KwilStateRootCommitment) -> String {
     format!(
-        "v1|block_height={}|state_root={}",
+        "{}|block_height={}|state_root={}",
+        "nexus:kwil:state_root:v1",
         commitment.block_height,
         encode_payload_value(&commitment.state_root)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_payload_value_escapes_reserved_chars() {
+        let encoded = encode_payload_value("a%b|c=d");
+        assert_eq!(encoded, "a%25b%7Cc%3Dd");
+    }
+
+    #[test]
+    fn canonical_payloads_include_domain_and_are_delimiter_safe() {
+        let block = KwilBlockCommitment {
+            hash: "a%b|c=d".to_string(),
+            height: 1,
+            block_type: "micro|block".to_string(),
+            state: "soft=maybe".to_string(),
+        };
+
+        let payload = canonical_block_payload(&block);
+        assert!(payload.starts_with("nexus:kwil:block:v1|"));
+        assert!(payload.contains("hash=a%25b%7Cc%3Dd"));
+        assert!(payload.contains("type=micro%7Cblock"));
+        assert!(payload.contains("state=soft%3Dmaybe"));
+
+        let state_root = KwilStateRootCommitment {
+            block_height: 2,
+            state_root: "root|v1".to_string(),
+        };
+
+        let payload = canonical_state_root_payload(&state_root);
+        assert!(payload.starts_with("nexus:kwil:state_root:v1|"));
+        assert!(payload.contains("state_root=root%7Cv1"));
+    }
 }

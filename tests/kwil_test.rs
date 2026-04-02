@@ -4,7 +4,6 @@ use conxian_nexus::storage::kwil::{
 };
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
-use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
 fn is_hex(s: &str) -> bool {
@@ -12,17 +11,10 @@ fn is_hex(s: &str) -> bool {
 }
 
 fn make_test_storage() -> Arc<Storage> {
-    let pg_pool = PgPoolOptions::new()
-        .connect_lazy("postgres://localhost/nexus")
-        .expect("connect_lazy should not require a live DB");
-
-    let redis_client = redis::Client::open("redis://127.0.0.1/")
-        .expect("redis client construction should not require a live server");
-
-    Arc::new(Storage {
-        pg_pool,
-        redis_client,
-    })
+    Arc::new(
+        Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/")
+            .expect("new_lazy should not require live services"),
+    )
 }
 
 fn make_test_cfg() -> KwilConfig {
