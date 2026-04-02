@@ -1,12 +1,13 @@
-use conxian_nexus::storage::kwil::{KwilBlockCommitment, KwilStateRootCommitment};
+use conxian_nexus::storage::kwil::{KwilBlockCommitment, KwilReceipt, KwilStateRootCommitment};
 use lib_conxian_core::Wallet;
-use tokio;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn test_kwil_block_persistence_pilot_signed() {
     // Manual setup for logic verification without live Storage/DB
+    let wallet = Arc::new(Wallet::new());
     let adapter_mock = KwilAdapterMock {
-        wallet: Wallet::new(),
+        wallet: Arc::clone(&wallet),
     };
 
     let commitment = KwilBlockCommitment {
@@ -18,16 +19,20 @@ async fn test_kwil_block_persistence_pilot_signed() {
 
     let result = adapter_mock.persist_block(commitment).await;
     assert!(result.is_ok());
-    let tx_hash = result.unwrap();
-    assert!(tx_hash.starts_with("kwil_tx_"));
-    // Signature should be 128 hex chars (64 bytes for Secp256k1)
-    assert_eq!(tx_hash.len(), 8 + 128);
+    let receipt = result.unwrap();
+    assert_eq!(receipt.tx_hash, "kwil_tx_stub");
+    assert!(!receipt.payload_signature.is_empty());
+    assert!(receipt
+        .payload_signature
+        .chars()
+        .all(|c| c.is_ascii_hexdigit()));
 }
 
 #[tokio::test]
 async fn test_kwil_state_root_persistence_pilot_signed() {
+    let wallet = Arc::new(Wallet::new());
     let adapter_mock = KwilAdapterMock {
-        wallet: Wallet::new(),
+        wallet: Arc::clone(&wallet),
     };
 
     let commitment = KwilStateRootCommitment {
@@ -37,25 +42,38 @@ async fn test_kwil_state_root_persistence_pilot_signed() {
 
     let result = adapter_mock.persist_state_root(commitment).await;
     assert!(result.is_ok());
-    let tx_hash = result.unwrap();
-    assert!(tx_hash.starts_with("kwil_tx_"));
-    assert_eq!(tx_hash.len(), 8 + 128);
+    let receipt = result.unwrap();
+    assert_eq!(receipt.tx_hash, "kwil_tx_stub");
+    assert!(!receipt.payload_signature.is_empty());
+    assert!(receipt
+        .payload_signature
+        .chars()
+        .all(|c| c.is_ascii_hexdigit()));
 }
 
 struct KwilAdapterMock {
-    wallet: Wallet,
+    wallet: Arc<Wallet>,
 }
 
 impl KwilAdapterMock {
-    async fn persist_block(&self, commitment: KwilBlockCommitment) -> anyhow::Result<String> {
+    async fn persist_block(&self, commitment: KwilBlockCommitment) -> anyhow::Result<KwilReceipt> {
         let payload = serde_json::to_string(&commitment)?;
         let signature = self.wallet.sign(&payload);
-        Ok(format!("kwil_tx_{}", signature))
+        Ok(KwilReceipt {
+            tx_hash: "kwil_tx_stub".to_string(),
+            payload_signature: signature,
+        })
     }
 
-    async fn persist_state_root(&self, commitment: KwilStateRootCommitment) -> anyhow::Result<String> {
+    async fn persist_state_root(
+        &self,
+        commitment: KwilStateRootCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
         let payload = serde_json::to_string(&commitment)?;
         let signature = self.wallet.sign(&payload);
-        Ok(format!("kwil_tx_{}", signature))
+        Ok(KwilReceipt {
+            tx_hash: "kwil_tx_stub".to_string(),
+            payload_signature: signature,
+        })
     }
 }

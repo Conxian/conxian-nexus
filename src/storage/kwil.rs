@@ -2,9 +2,9 @@
 //! Bridges application state to Kwil's decentralized relational database.
 
 use crate::storage::Storage;
+use lib_conxian_core::Wallet;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use lib_conxian_core::Wallet;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilBlockCommitment {
@@ -20,6 +20,12 @@ pub struct KwilStateRootCommitment {
     pub state_root: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KwilReceipt {
+    pub tx_hash: String,
+    pub payload_signature: String,
+}
+
 /// [NEXUS-SQL-01] Kwil persistence layer.
 pub struct KwilAdapter {
     _storage: Arc<Storage>,
@@ -32,15 +38,23 @@ impl KwilAdapter {
     pub fn new(storage: Arc<Storage>, wallet: Arc<Wallet>) -> Self {
         Self {
             _storage: storage,
-            _provider_url: std::env::var("KWIL_PROVIDER_URL").unwrap_or_else(|_| "https://provider.kwil.com".to_string()),
+            _provider_url: std::env::var("KWIL_PROVIDER_URL")
+                .unwrap_or_else(|_| "https://provider.kwil.com".to_string()),
             _db_id: std::env::var("KWIL_DB_ID").unwrap_or_else(|_| "nexus_pilot".to_string()),
             wallet,
         }
     }
 
     /// Pilot: Persist block to Kwil with cryptographic signature.
-    pub async fn persist_block(&self, commitment: KwilBlockCommitment) -> anyhow::Result<String> {
-        tracing::info!("Pilot: Committing block to Kwil: {} at height {}", commitment.hash, commitment.height);
+    pub async fn persist_block(
+        &self,
+        commitment: KwilBlockCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
+        tracing::info!(
+            "Pilot: Committing block to Kwil: {} at height {}",
+            commitment.hash,
+            commitment.height
+        );
 
         let payload = serde_json::to_string(&commitment)?;
         let signature = self.wallet.sign(&payload);
@@ -48,24 +62,36 @@ impl KwilAdapter {
         // [STUB] Implement Kwil gRPC/REST call: insert_block action.
         // The signature ensures that the action is authenticated by the Nexus identity.
 
-        let txn_hash = format!("kwil_tx_{}", signature);
-        tracing::debug!("Kwil action 'insert_block' broadcasted with signature: {}", txn_hash);
+        let tx_hash = "kwil_tx_stub".to_string();
+        tracing::debug!("Kwil action 'insert_block' broadcasted");
 
-        Ok(txn_hash)
+        Ok(KwilReceipt {
+            tx_hash,
+            payload_signature: signature,
+        })
     }
 
     /// Pilot: Persist state root to Kwil with cryptographic signature.
-    pub async fn persist_state_root(&self, commitment: KwilStateRootCommitment) -> anyhow::Result<String> {
-        tracing::info!("Pilot: Committing state root to Kwil for height {}", commitment.block_height);
+    pub async fn persist_state_root(
+        &self,
+        commitment: KwilStateRootCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
+        tracing::info!(
+            "Pilot: Committing state root to Kwil for height {}",
+            commitment.block_height
+        );
 
         let payload = serde_json::to_string(&commitment)?;
         let signature = self.wallet.sign(&payload);
 
         // [STUB] Implement Kwil gRPC/REST call: upsert_state_root action.
 
-        let txn_hash = format!("kwil_tx_{}", signature);
-        tracing::debug!("Kwil action 'upsert_state_root' broadcasted with signature: {}", txn_hash);
+        let tx_hash = "kwil_tx_stub".to_string();
+        tracing::debug!("Kwil action 'upsert_state_root' broadcasted");
 
-        Ok(txn_hash)
+        Ok(KwilReceipt {
+            tx_hash,
+            payload_signature: signature,
+        })
     }
 }
