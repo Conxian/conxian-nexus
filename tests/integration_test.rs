@@ -79,7 +79,12 @@ async fn test_root_to_leaf_consistency() {
 #[tokio::test]
 async fn test_mmr_proof_consistency() {
     let state = Arc::new(NexusState::new());
-    let leaves = vec!["tx1".to_string(), "tx2".to_string(), "tx3".to_string(), "tx4".to_string()];
+    let leaves = vec![
+        "tx1".to_string(),
+        "tx2".to_string(),
+        "tx3".to_string(),
+        "tx4".to_string(),
+    ];
     state.update_state_batch(&leaves);
 
     // Leaf 0 in 4-leaf MMR (all in one tree, pos 6 is peak)
