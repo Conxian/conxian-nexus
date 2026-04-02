@@ -70,6 +70,14 @@ action orphan_soft_blocks_from_height($from_height) public {
     where height >= $from_height and state = 'soft';
 }
 
+-- Deprecated: use set_block_state_by_hash / finalize_soft_blocks_through_height /
+-- orphan_soft_blocks_from_height. Kept to avoid breaking early pilot clients.
+action update_block_state($height, $state) public {
+    update stacks_blocks
+    set state = $state
+    where height = $height and state = 'soft';
+}
+
 -- Action to insert/update state root
 action upsert_state_root($block_height, $state_root, $created_at) public {
     insert into nexus_state_roots (block_height, state_root, created_at)

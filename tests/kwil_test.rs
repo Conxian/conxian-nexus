@@ -86,7 +86,7 @@ fn canonical_block_payload_escapes_reserved_chars() {
     let payload = canonical_block_payload(&commitment);
     assert_eq!(
         payload,
-        "v1|hash=0x%7C%3D%25|height=1|type=micro%7Cblock|state=so%3Dft"
+        "nexus:kwil:block:v1|hash=0x%7C%3D%25|height=1|type=micro%7Cblock|state=so%3Dft"
     );
 }
 
@@ -98,5 +98,8 @@ fn canonical_state_root_payload_escapes_reserved_chars() {
     };
 
     let payload = canonical_state_root_payload(&commitment);
-    assert_eq!(payload, "v1|block_height=42|state_root=0xroot%7C%3D%25");
+    assert_eq!(
+        payload,
+        "nexus:kwil:state_root:v1|block_height=42|state_root=0xroot%7C%3D%25"
+    );
 }
