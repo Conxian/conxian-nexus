@@ -94,13 +94,23 @@ async fn test_mmr_proof_consistency() {
     // Siblings for 0 are [1, 5].
     assert_eq!(siblings, vec![1, 5]);
 
+    // Leaf 2 in 4-leaf MMR: pos 3, siblings [4, 2].
+    let (pos2, siblings2) = state.get_mmr_proof_metadata(2);
+    assert_eq!(pos2, 3);
+    assert_eq!(siblings2, vec![4, 2]);
+
+    // Leaf 3 in 4-leaf MMR: pos 4, siblings [3, 2].
+    let (pos3, siblings3) = state.get_mmr_proof_metadata(3);
+    assert_eq!(pos3, 4);
+    assert_eq!(siblings3, vec![3, 2]);
+
     // Check with 3 leaves
     let state3 = Arc::new(NexusState::new());
     state3.update_state_batch(&vec!["a".into(), "b".into(), "c".into()]);
     // 0, 1 -> 2
     // 3 (leaf 2)
     // Peaks: 2, 3
-    let (pos2, siblings2) = state3.get_mmr_proof_metadata(2);
-    assert_eq!(pos2, 3);
-    assert!(siblings2.is_empty()); // It is a peak
+    let (pos4, siblings4) = state3.get_mmr_proof_metadata(2);
+    assert_eq!(pos4, 3);
+    assert!(siblings4.is_empty()); // It is a peak
 }

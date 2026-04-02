@@ -266,34 +266,37 @@ fn get_mmr_path(pos: u64, leaf_count: u64) -> Vec<u64> {
     let peaks = get_mmr_peaks(leaf_count);
     let mut path = Vec::new();
 
-    let mut target_peak = 0;
-    let mut found = false;
-    let mut peak_offset = 0;
-    for &p in &peaks {
-        if pos <= p {
-            target_peak = p;
-            found = true;
+    let mut peak_start = 0u64;
+    let mut target_peak = None;
+    for &peak_pos in &peaks {
+        if pos <= peak_pos {
+            target_peak = Some(peak_pos);
             break;
         }
-        peak_offset = p + 1;
+        peak_start = peak_pos + 1;
     }
 
-    if found {
-        let mut p = target_peak;
-        while p > pos {
-            let h = get_mmr_node_height(p - peak_offset);
-            let left_child = p - (1 << h);
-            let right_child = p - 1;
-            if pos <= left_child {
-                path.push(right_child);
-                p = left_child;
-            } else {
-                path.push(left_child);
-                p = right_child;
-            }
+    let Some(mut p) = target_peak else {
+        return path;
+    };
+
+    let mut subtree_start = peak_start;
+    while p > pos {
+        let h = get_mmr_node_height(p - subtree_start);
+        let left_child = p - (1u64 << h);
+        let right_child = p - 1;
+
+        if pos <= left_child {
+            path.push(right_child);
+            p = left_child;
+        } else {
+            path.push(left_child);
+            p = right_child;
+            subtree_start = left_child + 1;
         }
-        path.reverse();
     }
+
+    path.reverse();
     path
 }
 
