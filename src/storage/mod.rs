@@ -30,3 +30,4 @@ impl Storage {
 }
 
 pub mod tableland;
+pub mod kwil;
