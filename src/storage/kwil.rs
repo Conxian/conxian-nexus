@@ -25,16 +25,16 @@ pub struct KwilAdapter {
     _storage: Arc<Storage>,
     _provider_url: String,
     _db_id: String,
-    wallet: Wallet,
+    wallet: Arc<Wallet>,
 }
 
 impl KwilAdapter {
-    pub fn new(storage: Arc<Storage>) -> Self {
+    pub fn new(storage: Arc<Storage>, wallet: Arc<Wallet>) -> Self {
         Self {
             _storage: storage,
             _provider_url: std::env::var("KWIL_PROVIDER_URL").unwrap_or_else(|_| "https://provider.kwil.com".to_string()),
             _db_id: std::env::var("KWIL_DB_ID").unwrap_or_else(|_| "nexus_pilot".to_string()),
-            wallet: Wallet::new(),
+            wallet,
         }
     }
 
