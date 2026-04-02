@@ -46,8 +46,8 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree & MMR (Complete)
-- **Status**: Merkle Tree complete; **Persistent MMR Peaks and Leaf Nodes implemented (v0.4.0)**.
-- **Next Step**: Implement full MMR inclusion proof generation API.
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**.
+- **Next Step**: Implement full MMR audit trail visualization.
 
 ### 4.2 Real-time Sync Ingestion
 - **Status**: Channel-based Async Ingestion Complete; Reorg detection with automated rollback implemented.
