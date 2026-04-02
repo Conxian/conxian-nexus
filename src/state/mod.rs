@@ -227,6 +227,8 @@ impl NexusState {
 }
 
 /// Helper to get MMR node position for a given leaf index.
+///
+/// Uses the postorder MMR leaf-position identity: `pos = 2 * leaf_index - popcount(leaf_index)`.
 fn get_mmr_node_pos(leaf_index: u64) -> u64 {
     leaf_index * 2 - leaf_index.count_ones() as u64
 }
