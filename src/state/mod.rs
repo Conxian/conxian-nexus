@@ -228,16 +228,7 @@ impl NexusState {
 
 /// Helper to get MMR node position for a given leaf index.
 fn get_mmr_node_pos(leaf_index: u64) -> u64 {
-    let mut pos = 0u64;
-    for i in 0..leaf_index {
-        pos += 1;
-        let mut s = i;
-        while s & 1 == 1 {
-            pos += 1;
-            s >>= 1;
-        }
-    }
-    pos
+    leaf_index * 2 - leaf_index.count_ones() as u64
 }
 
 /// Helper to get height of a node at given position in MMR.
