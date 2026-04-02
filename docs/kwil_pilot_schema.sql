@@ -27,7 +27,7 @@ table stacks_transactions {
 table nexus_state_roots {
     block_height int primary key,
     state_root text not null,
-    created_at text not null -- ISO-8601
+    created_at text not null -- ISO-8601 write time (updated on reorg/repair)
 }
 
 -- MMR Nodes: Persist full MMR tree for O(1) audit restoration
