@@ -89,7 +89,12 @@ impl KwilAdapter {
         // The signature ensures that the action is authenticated by the Nexus identity.
 
         let tx_hash = Self::stub_tx_hash(&payload);
-        tracing::debug!(tx_hash = %tx_hash, "Kwil action 'insert_block' broadcasted");
+        tracing::debug!(
+            tx_hash = %tx_hash,
+            db_id = %self._db_id,
+            provider = %self._provider_url,
+            "Kwil action 'insert_block' broadcasted"
+        );
 
         Ok(KwilReceipt {
             tx_hash,
@@ -113,7 +118,12 @@ impl KwilAdapter {
         // [STUB] Implement Kwil gRPC/REST call: upsert_state_root action.
 
         let tx_hash = Self::stub_tx_hash(&payload);
-        tracing::debug!(tx_hash = %tx_hash, "Kwil action 'upsert_state_root' broadcasted");
+        tracing::debug!(
+            tx_hash = %tx_hash,
+            db_id = %self._db_id,
+            provider = %self._provider_url,
+            "Kwil action 'upsert_state_root' broadcasted"
+        );
 
         Ok(KwilReceipt {
             tx_hash,

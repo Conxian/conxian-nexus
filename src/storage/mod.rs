@@ -1,6 +1,6 @@
 use redis::Client as RedisClient;
-use sqlx::postgres::PgPool;
-use std::env;
+use sqlx::postgres::{PgPool, PgPoolOptions};
+use std::{env, sync::Arc};
 
 pub struct Storage {
     pub pg_pool: PgPool,
@@ -36,6 +36,20 @@ impl Storage {
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
         sqlx::migrate!("./migrations").run(&self.pg_pool).await?;
         Ok(())
+    }
+
+    pub fn for_tests() -> Arc<Self> {
+        let pg_pool = PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/nexus")
+            .expect("connect_lazy should not require a live DB");
+
+        let redis_client = RedisClient::open("redis://127.0.0.1/")
+            .expect("redis client construction should not require a live server");
+
+        Arc::new(Self {
+            pg_pool,
+            redis_client,
+        })
     }
 }
 

@@ -10,13 +10,6 @@ fn is_hex(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-fn make_test_storage() -> Arc<Storage> {
-    Arc::new(
-        Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/")
-            .expect("new_lazy should not require live services"),
-    )
-}
-
 fn make_test_cfg() -> KwilConfig {
     KwilConfig {
         provider_url: "http://127.0.0.1:0".to_string(),
@@ -26,7 +19,7 @@ fn make_test_cfg() -> KwilConfig {
 
 #[tokio::test]
 async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
-    let storage = make_test_storage();
+    let storage = Storage::for_tests();
     let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilBlockCommitment {
@@ -46,13 +39,14 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
     assert_eq!(stub_digest.len(), 64);
     assert!(is_hex(stub_digest));
     assert!(is_hex(&receipt.payload_signature));
+    assert_eq!(receipt.payload_signature.len(), 128);
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
-    let storage = make_test_storage();
+    let storage = Storage::for_tests();
     let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilStateRootCommitment {
@@ -70,6 +64,7 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     assert_eq!(stub_digest.len(), 64);
     assert!(is_hex(stub_digest));
     assert!(is_hex(&receipt.payload_signature));
+    assert_eq!(receipt.payload_signature.len(), 128);
 
     Ok(())
 }
