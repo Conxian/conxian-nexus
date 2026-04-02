@@ -4,6 +4,7 @@
 use crate::storage::Storage;
 use lib_conxian_core::Wallet;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,6 +63,11 @@ impl KwilAdapter {
         }
     }
 
+    fn stub_tx_hash(payload: &str) -> String {
+        let digest = Sha256::digest(payload.as_bytes());
+        format!("kwil_tx_stub_{}", hex::encode(digest))
+    }
+
     /// Pilot: Persist block to Kwil with cryptographic signature.
     pub async fn persist_block(
         &self,
@@ -79,7 +85,7 @@ impl KwilAdapter {
         // [STUB] Implement Kwil gRPC/REST call: insert_block action.
         // The signature ensures that the action is authenticated by the Nexus identity.
 
-        let tx_hash = "kwil_tx_stub".to_string();
+        let tx_hash = Self::stub_tx_hash(&payload);
         tracing::debug!(tx_hash = %tx_hash, "Kwil action 'insert_block' broadcasted");
 
         Ok(KwilReceipt {
@@ -103,7 +109,7 @@ impl KwilAdapter {
 
         // [STUB] Implement Kwil gRPC/REST call: upsert_state_root action.
 
-        let tx_hash = "kwil_tx_stub".to_string();
+        let tx_hash = Self::stub_tx_hash(&payload);
         tracing::debug!(tx_hash = %tx_hash, "Kwil action 'upsert_state_root' broadcasted");
 
         Ok(KwilReceipt {

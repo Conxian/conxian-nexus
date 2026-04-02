@@ -1,16 +1,40 @@
 use conxian_nexus::storage::kwil::{
-    canonical_block_payload, canonical_state_root_payload, KwilBlockCommitment, KwilReceipt,
-    KwilStateRootCommitment,
+    KwilAdapter, KwilBlockCommitment, KwilConfig, KwilStateRootCommitment,
 };
+use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
+use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 
+fn is_hex(s: &str) -> bool {
+    !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn make_test_storage() -> Arc<Storage> {
+    let pg_pool = PgPoolOptions::new()
+        .connect_lazy("postgres://localhost/nexus")
+        .expect("connect_lazy should not require a live DB");
+
+    let redis_client = redis::Client::open("redis://127.0.0.1/")
+        .expect("redis client construction should not require a live server");
+
+    Arc::new(Storage {
+        pg_pool,
+        redis_client,
+    })
+}
+
+fn make_test_cfg() -> KwilConfig {
+    KwilConfig {
+        provider_url: "http://127.0.0.1:0".to_string(),
+        db_id: "nexus_pilot".to_string(),
+    }
+}
+
 #[tokio::test]
-async fn test_kwil_block_persistence_pilot_signed() {
-    // Manual setup for logic verification without live Storage/DB
-    let adapter_mock = KwilAdapterMock {
-        wallet: Arc::new(Wallet::new()),
-    };
+async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage();
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilBlockCommitment {
         hash: "0xabc123".to_string(),
@@ -19,58 +43,40 @@ async fn test_kwil_block_persistence_pilot_signed() {
         state: "soft".to_string(),
     };
 
-    let receipt = adapter_mock.persist_block(commitment).await.unwrap();
-    assert_eq!(receipt.tx_hash, "kwil_tx_stub");
-    assert!(!receipt.payload_signature.is_empty());
-    assert!(receipt
-        .payload_signature
-        .chars()
-        .all(|c| c.is_ascii_hexdigit()));
+    let receipt = adapter.persist_block(commitment).await?;
+    assert!(receipt.tx_hash.starts_with("kwil_tx_stub_"));
+
+    let stub_digest = receipt
+        .tx_hash
+        .strip_prefix("kwil_tx_stub_")
+        .expect("stub prefix");
+    assert_eq!(stub_digest.len(), 64);
+    assert!(is_hex(stub_digest));
+    assert!(is_hex(&receipt.payload_signature));
+
+    Ok(())
 }
 
 #[tokio::test]
-async fn test_kwil_state_root_persistence_pilot_signed() {
-    let adapter_mock = KwilAdapterMock {
-        wallet: Arc::new(Wallet::new()),
-    };
+async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage();
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilStateRootCommitment {
         block_height: 1000,
         state_root: "0xroot123".to_string(),
     };
 
-    let receipt = adapter_mock.persist_state_root(commitment).await.unwrap();
-    assert_eq!(receipt.tx_hash, "kwil_tx_stub");
-    assert!(!receipt.payload_signature.is_empty());
-    assert!(receipt
-        .payload_signature
-        .chars()
-        .all(|c| c.is_ascii_hexdigit()));
-}
+    let receipt = adapter.persist_state_root(commitment).await?;
+    assert!(receipt.tx_hash.starts_with("kwil_tx_stub_"));
 
-struct KwilAdapterMock {
-    wallet: Arc<Wallet>,
-}
+    let stub_digest = receipt
+        .tx_hash
+        .strip_prefix("kwil_tx_stub_")
+        .expect("stub prefix");
+    assert_eq!(stub_digest.len(), 64);
+    assert!(is_hex(stub_digest));
+    assert!(is_hex(&receipt.payload_signature));
 
-impl KwilAdapterMock {
-    async fn persist_block(&self, commitment: KwilBlockCommitment) -> anyhow::Result<KwilReceipt> {
-        let payload = canonical_block_payload(&commitment);
-        let signature = self.wallet.sign(&payload);
-        Ok(KwilReceipt {
-            tx_hash: "kwil_tx_stub".to_string(),
-            payload_signature: signature,
-        })
-    }
-
-    async fn persist_state_root(
-        &self,
-        commitment: KwilStateRootCommitment,
-    ) -> anyhow::Result<KwilReceipt> {
-        let payload = canonical_state_root_payload(&commitment);
-        let signature = self.wallet.sign(&payload);
-        Ok(KwilReceipt {
-            tx_hash: "kwil_tx_stub".to_string(),
-            payload_signature: signature,
-        })
-    }
+    Ok(())
 }
