@@ -75,7 +75,8 @@ action upsert_state_root($block_height, $state_root, $created_at) public {
     insert into nexus_state_roots (block_height, state_root, created_at)
     values ($block_height, $state_root, $created_at)
     on conflict (block_height) do update set
-        state_root = $state_root;
+        state_root = $state_root,
+        created_at = $created_at;
 }
 
 -- Action to insert transactions
