@@ -1,26 +1,12 @@
-use conxian_nexus::storage::kwil::{KwilAdapter, KwilBlockCommitment, KwilStateRootCommitment};
-use conxian_nexus::storage::Storage;
-use std::sync::Arc;
+use conxian_nexus::storage::kwil::{KwilBlockCommitment, KwilStateRootCommitment};
+use lib_conxian_core::Wallet;
 use tokio;
-use std::env;
 
 #[tokio::test]
-async fn test_kwil_block_persistence_pilot() {
-    // Setup environment
-    env::set_var("DATABASE_URL", "postgres://localhost/nexus");
-    env::set_var("REDIS_URL", "redis://127.0.0.1/");
-
-    // Mock storage (requires live PG/Redis for Storage::new, so we use a mock if possible or ignore in CI)
-    // For pilot validation, we'll test the adapter logic directly if Storage::new fails in restricted environments.
-
-    // In this environment, Storage::new() might fail, so we skip live DB connection for logic check
-    // let storage = Arc::new(Storage::new().await.unwrap());
-    // let adapter = KwilAdapter::new(storage);
-
-    // Manual setup for logic verification without live DB
+async fn test_kwil_block_persistence_pilot_signed() {
+    // Manual setup for logic verification without live Storage/DB
     let adapter_mock = KwilAdapterMock {
-        provider_url: "https://provider.kwil.com".to_string(),
-        db_id: "nexus_pilot".to_string(),
+        wallet: Wallet::new(),
     };
 
     let commitment = KwilBlockCommitment {
@@ -32,14 +18,16 @@ async fn test_kwil_block_persistence_pilot() {
 
     let result = adapter_mock.persist_block(commitment).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().starts_with("kwil_tx_"));
+    let tx_hash = result.unwrap();
+    assert!(tx_hash.starts_with("kwil_tx_"));
+    // Signature should be 128 hex chars (64 bytes for Secp256k1)
+    assert_eq!(tx_hash.len(), 8 + 128);
 }
 
 #[tokio::test]
-async fn test_kwil_state_root_persistence_pilot() {
+async fn test_kwil_state_root_persistence_pilot_signed() {
     let adapter_mock = KwilAdapterMock {
-        provider_url: "https://provider.kwil.com".to_string(),
-        db_id: "nexus_pilot".to_string(),
+        wallet: Wallet::new(),
     };
 
     let commitment = KwilStateRootCommitment {
@@ -49,22 +37,25 @@ async fn test_kwil_state_root_persistence_pilot() {
 
     let result = adapter_mock.persist_state_root(commitment).await;
     assert!(result.is_ok());
-    assert!(result.unwrap().starts_with("kwil_tx_"));
+    let tx_hash = result.unwrap();
+    assert!(tx_hash.starts_with("kwil_tx_"));
+    assert_eq!(tx_hash.len(), 8 + 128);
 }
 
 struct KwilAdapterMock {
-    provider_url: String,
-    db_id: String,
+    wallet: Wallet,
 }
 
 impl KwilAdapterMock {
     async fn persist_block(&self, commitment: KwilBlockCommitment) -> anyhow::Result<String> {
-        let txn_hash = format!("kwil_tx_{}", hex::encode(rand::random::<[u8; 32]>()));
-        Ok(txn_hash)
+        let payload = serde_json::to_string(&commitment)?;
+        let signature = self.wallet.sign(&payload);
+        Ok(format!("kwil_tx_{}", signature))
     }
 
     async fn persist_state_root(&self, commitment: KwilStateRootCommitment) -> anyhow::Result<String> {
-        let txn_hash = format!("kwil_tx_{}", hex::encode(rand::random::<[u8; 32]>()));
-        Ok(txn_hash)
+        let payload = serde_json::to_string(&commitment)?;
+        let signature = self.wallet.sign(&payload);
+        Ok(format!("kwil_tx_{}", signature))
     }
 }
