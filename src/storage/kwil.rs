@@ -20,6 +20,24 @@ pub struct KwilStateRootCommitment {
     pub state_root: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct KwilConfig {
+    pub provider_url: String,
+    pub db_id: String,
+}
+
+impl KwilConfig {
+    pub fn from_env() -> anyhow::Result<Self> {
+        use anyhow::Context;
+
+        let provider_url = std::env::var("KWIL_PROVIDER_URL")
+            .context("Missing env var: KWIL_PROVIDER_URL")?;
+        let db_id = std::env::var("KWIL_DB_ID").context("Missing env var: KWIL_DB_ID")?;
+
+        Ok(Self { provider_url, db_id })
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilReceipt {
     pub tx_hash: String,
@@ -35,12 +53,11 @@ pub struct KwilAdapter {
 }
 
 impl KwilAdapter {
-    pub fn new(storage: Arc<Storage>, wallet: Arc<Wallet>) -> Self {
+    pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> Self {
         Self {
             _storage: storage,
-            _provider_url: std::env::var("KWIL_PROVIDER_URL")
-                .unwrap_or_else(|_| "https://provider.kwil.com".to_string()),
-            _db_id: std::env::var("KWIL_DB_ID").unwrap_or_else(|_| "nexus_pilot".to_string()),
+            _provider_url: cfg.provider_url,
+            _db_id: cfg.db_id,
             wallet,
         }
     }
@@ -56,14 +73,14 @@ impl KwilAdapter {
             commitment.height
         );
 
-        let payload = serde_json::to_string(&commitment)?;
+        let payload = canonical_block_payload(&commitment);
         let signature = self.wallet.sign(&payload);
 
         // [STUB] Implement Kwil gRPC/REST call: insert_block action.
         // The signature ensures that the action is authenticated by the Nexus identity.
 
         let tx_hash = "kwil_tx_stub".to_string();
-        tracing::debug!("Kwil action 'insert_block' broadcasted");
+        tracing::debug!(tx_hash = %tx_hash, "Kwil action 'insert_block' broadcasted");
 
         Ok(KwilReceipt {
             tx_hash,
@@ -81,17 +98,42 @@ impl KwilAdapter {
             commitment.block_height
         );
 
-        let payload = serde_json::to_string(&commitment)?;
+        let payload = canonical_state_root_payload(&commitment);
         let signature = self.wallet.sign(&payload);
 
         // [STUB] Implement Kwil gRPC/REST call: upsert_state_root action.
 
         let tx_hash = "kwil_tx_stub".to_string();
-        tracing::debug!("Kwil action 'upsert_state_root' broadcasted");
+        tracing::debug!(tx_hash = %tx_hash, "Kwil action 'upsert_state_root' broadcasted");
 
         Ok(KwilReceipt {
             tx_hash,
             payload_signature: signature,
         })
     }
+}
+
+fn encode_payload_value(value: &str) -> String {
+    value
+        .replace('%', "%25")
+        .replace('|', "%7C")
+        .replace('=', "%3D")
+}
+
+pub fn canonical_block_payload(commitment: &KwilBlockCommitment) -> String {
+    format!(
+        "v1|hash={}|height={}|type={}|state={}",
+        encode_payload_value(&commitment.hash),
+        commitment.height,
+        encode_payload_value(&commitment.block_type),
+        encode_payload_value(&commitment.state)
+    )
+}
+
+pub fn canonical_state_root_payload(commitment: &KwilStateRootCommitment) -> String {
+    format!(
+        "v1|block_height={}|state_root={}",
+        commitment.block_height,
+        encode_payload_value(&commitment.state_root)
+    )
 }
