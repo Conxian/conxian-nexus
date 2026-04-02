@@ -53,7 +53,7 @@ action insert_block($hash, $height, $type, $state, $created_at) public {
 action set_block_state_by_hash($hash, $state) public {
     update stacks_blocks
     set state = $state
-    where hash = $hash;
+    where hash = $hash and state = 'soft';
 }
 
 -- Finality: promote soft blocks up to a given height to hard
@@ -75,8 +75,7 @@ action upsert_state_root($block_height, $state_root, $created_at) public {
     insert into nexus_state_roots (block_height, state_root, created_at)
     values ($block_height, $state_root, $created_at)
     on conflict (block_height) do update set
-        state_root = $state_root,
-        created_at = $created_at;
+        state_root = $state_root;
 }
 
 -- Action to insert transactions
