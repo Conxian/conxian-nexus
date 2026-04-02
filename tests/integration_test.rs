@@ -88,19 +88,19 @@ async fn test_mmr_proof_consistency() {
     state.update_state_batch(&leaves);
 
     // Leaf 0 in 4-leaf MMR (all in one tree, pos 6 is peak)
-    let (pos, siblings) = state.get_mmr_proof_metadata(0);
+    let (pos, siblings) = state.get_mmr_proof_metadata(0).unwrap();
     assert_eq!(pos, 0);
     // For 4 leaves, nodes are 0,1->2, 3,4->5, 2,5->6.
     // Siblings for 0 are [1, 5].
     assert_eq!(siblings, vec![1, 5]);
 
     // Leaf 2 in 4-leaf MMR: pos 3, siblings [4, 2].
-    let (pos2, siblings2) = state.get_mmr_proof_metadata(2);
+    let (pos2, siblings2) = state.get_mmr_proof_metadata(2).unwrap();
     assert_eq!(pos2, 3);
     assert_eq!(siblings2, vec![4, 2]);
 
     // Leaf 3 in 4-leaf MMR: pos 4, siblings [3, 2].
-    let (pos3, siblings3) = state.get_mmr_proof_metadata(3);
+    let (pos3, siblings3) = state.get_mmr_proof_metadata(3).unwrap();
     assert_eq!(pos3, 4);
     assert_eq!(siblings3, vec![3, 2]);
 
@@ -110,7 +110,7 @@ async fn test_mmr_proof_consistency() {
     // 0, 1 -> 2
     // 3 (leaf 2)
     // Peaks: 2, 3
-    let (pos4, siblings4) = state3.get_mmr_proof_metadata(2);
-    assert_eq!(pos4, 3);
-    assert!(siblings4.is_empty()); // It is a peak
+    let (pos_peak, siblings_peak) = state3.get_mmr_proof_metadata(2).unwrap();
+    assert_eq!(pos_peak, 3);
+    assert!(siblings_peak.is_empty()); // It is a peak
 }

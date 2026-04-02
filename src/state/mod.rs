@@ -194,14 +194,16 @@ impl NexusState {
         self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
     }
 
-    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
+    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> anyhow::Result<(u64, Vec<u64>)> {
         let mmr = self.mmr.lock().unwrap();
         let leaf_count = mmr.size as u64;
+
+        anyhow::ensure!((leaf_index as u64) < leaf_count, "leaf_index out of range");
 
         let pos = get_mmr_node_pos(leaf_index as u64);
         let siblings = get_mmr_path(pos, leaf_count);
 
-        (pos, siblings)
+        Ok((pos, siblings))
     }
 
     pub fn assemble_mmr_proof(
@@ -435,7 +437,7 @@ mod tests {
     fn test_mmr_metadata_calculation() {
         let state = NexusState::new();
         state.update_state_batch(&["a".to_string(), "b".to_string(), "c".to_string()]);
-        let (pos, siblings) = state.get_mmr_proof_metadata(2);
+        let (pos, siblings) = state.get_mmr_proof_metadata(2).unwrap();
 
         // Leaf 2 in MMR with 3 leaves:
         // Leaves: 0, 1 -> 2
@@ -444,9 +446,11 @@ mod tests {
         // Sibling for 3 in [2, 3] peaks is empty (it is a peak itself).
         assert_eq!(siblings.len(), 0);
 
-        let (pos0, siblings0) = state.get_mmr_proof_metadata(0);
+        let (pos0, siblings0) = state.get_mmr_proof_metadata(0).unwrap();
         assert_eq!(pos0, 0);
         assert_eq!(siblings0, vec![1]);
+
+        assert!(state.get_mmr_proof_metadata(3).is_err());
     }
 }
 
