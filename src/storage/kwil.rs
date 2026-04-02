@@ -123,10 +123,18 @@ impl KwilAdapter {
 }
 
 fn encode_payload_value(value: &str) -> String {
-    value
-        .replace('%', "%25")
-        .replace('|', "%7C")
-        .replace('=', "%3D")
+    let mut out = String::with_capacity(value.len());
+
+    for ch in value.chars() {
+        match ch {
+            '%' => out.push_str("%25"),
+            '|' => out.push_str("%7C"),
+            '=' => out.push_str("%3D"),
+            _ => out.push(ch),
+        }
+    }
+
+    out
 }
 
 pub fn canonical_block_payload(commitment: &KwilBlockCommitment) -> String {

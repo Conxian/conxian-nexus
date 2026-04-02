@@ -1,5 +1,6 @@
 use conxian_nexus::storage::kwil::{
-    KwilAdapter, KwilBlockCommitment, KwilConfig, KwilStateRootCommitment,
+    canonical_block_payload, canonical_state_root_payload, KwilAdapter, KwilBlockCommitment,
+    KwilConfig, KwilStateRootCommitment,
 };
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
@@ -79,4 +80,31 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     assert!(is_hex(&receipt.payload_signature));
 
     Ok(())
+}
+
+#[test]
+fn canonical_block_payload_escapes_reserved_chars() {
+    let commitment = KwilBlockCommitment {
+        hash: "0x|=%".into(),
+        height: 1,
+        block_type: "micro|block".into(),
+        state: "so=ft".into(),
+    };
+
+    let payload = canonical_block_payload(&commitment);
+    assert_eq!(
+        payload,
+        "v1|hash=0x%7C%3D%25|height=1|type=micro%7Cblock|state=so%3Dft"
+    );
+}
+
+#[test]
+fn canonical_state_root_payload_escapes_reserved_chars() {
+    let commitment = KwilStateRootCommitment {
+        block_height: 42,
+        state_root: "0xroot|=%".into(),
+    };
+
+    let payload = canonical_state_root_payload(&commitment);
+    assert_eq!(payload, "v1|block_height=42|state_root=0xroot%7C%3D%25");
 }
