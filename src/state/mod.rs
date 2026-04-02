@@ -25,6 +25,12 @@ pub struct NexusState {
     pub mmr: Mutex<MMRFoundation>,
 }
 
+impl Default for NexusState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NexusState {
     pub fn new() -> Self {
         Self {
