@@ -47,11 +47,27 @@ action insert_block($hash, $height, $type, $state, $created_at) public {
     values ($hash, $height, $type, $state, $created_at);
 }
 
--- Action to update block state (for reorgs or finality)
-action update_block_state($height, $state) public {
+-- Block state transitions
+
+-- Mark a single block (identified by hash)
+action set_block_state_by_hash($hash, $state) public {
     update stacks_blocks
     set state = $state
-    where height >= $height and state = 'soft';
+    where hash = $hash;
+}
+
+-- Finality: promote soft blocks up to a given height to hard
+action finalize_soft_blocks_through_height($through_height) public {
+    update stacks_blocks
+    set state = 'hard'
+    where height <= $through_height and state = 'soft';
+}
+
+-- Reorg: orphan soft blocks from a given height onward
+action orphan_soft_blocks_from_height($from_height) public {
+    update stacks_blocks
+    set state = 'orphaned'
+    where height >= $from_height and state = 'soft';
 }
 
 -- Action to insert/update state root
