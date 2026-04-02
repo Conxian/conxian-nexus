@@ -19,15 +19,13 @@ async fn test_kwil_block_persistence_pilot_signed() {
         state: "soft".to_string(),
     };
 
-    let receipt = adapter_mock.persist_block(commitment).await?;
+    let receipt = adapter_mock.persist_block(commitment).await.unwrap();
     assert_eq!(receipt.tx_hash, "kwil_tx_stub");
     assert!(!receipt.payload_signature.is_empty());
     assert!(receipt
         .payload_signature
         .chars()
         .all(|c| c.is_ascii_hexdigit()));
-
-    Ok(())
 }
 
 #[tokio::test]
@@ -41,15 +39,13 @@ async fn test_kwil_state_root_persistence_pilot_signed() {
         state_root: "0xroot123".to_string(),
     };
 
-    let receipt = adapter_mock.persist_state_root(commitment).await?;
+    let receipt = adapter_mock.persist_state_root(commitment).await.unwrap();
     assert_eq!(receipt.tx_hash, "kwil_tx_stub");
     assert!(!receipt.payload_signature.is_empty());
     assert!(receipt
         .payload_signature
         .chars()
         .all(|c| c.is_ascii_hexdigit()));
-
-    Ok(())
 }
 
 struct KwilAdapterMock {
