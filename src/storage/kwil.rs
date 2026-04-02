@@ -132,6 +132,12 @@ impl KwilAdapter {
     }
 }
 
+/// Percent-encodes payload values so canonical payloads are delimiter-safe.
+///
+/// Encoding rules:
+/// - `%` => `%25`
+/// - `|` => `%7C`
+/// - `=` => `%3D`
 fn encode_payload_value(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
 

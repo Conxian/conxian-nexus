@@ -75,7 +75,7 @@ action orphan_soft_blocks_from_height($from_height) public {
 action update_block_state($height, $state) public {
     update stacks_blocks
     set state = $state
-    where height = $height and state = 'soft';
+    where height >= $height and state = 'soft';
 }
 
 -- Action to insert/update state root
