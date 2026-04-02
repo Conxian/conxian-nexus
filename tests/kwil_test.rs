@@ -17,9 +17,16 @@ fn make_test_cfg() -> KwilConfig {
     }
 }
 
+fn make_test_storage() -> anyhow::Result<Arc<Storage>> {
+    Ok(Arc::new(Storage::new_lazy(
+        "postgres://localhost/nexus",
+        "redis://127.0.0.1/",
+    )?))
+}
+
 #[tokio::test]
 async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
-    let storage = Storage::for_tests();
+    let storage = make_test_storage()?;
     let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilBlockCommitment {
@@ -46,7 +53,7 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
-    let storage = Storage::for_tests();
+    let storage = make_test_storage()?;
     let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
 
     let commitment = KwilStateRootCommitment {

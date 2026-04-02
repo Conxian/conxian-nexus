@@ -38,6 +38,7 @@ impl Storage {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn for_tests() -> Arc<Self> {
         let pg_pool = PgPoolOptions::new()
             .connect_lazy("postgres://localhost/nexus")
