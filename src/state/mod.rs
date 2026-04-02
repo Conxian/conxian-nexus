@@ -2,18 +2,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MerkleProof {
     pub leaf: String,
     pub path: Vec<(String, bool)>, // (hash, is_left)
     pub root: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MMRProof {
     pub leaf: String,
     pub pos: u64,
-    pub siblings: Vec<(u64, String)>, // (pos, hash)
+    pub siblings: Vec<(u64, String)>,
     pub peaks: Vec<String>,
     pub root: String,
 }
@@ -23,12 +23,6 @@ pub struct NexusState {
     pub leaves: Mutex<Vec<String>>,
     pub tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
     pub mmr: Mutex<MMRFoundation>,
-}
-
-impl Default for NexusState {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl NexusState {
@@ -195,17 +189,11 @@ impl NexusState {
     }
 
     pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
-        let mut pos = 0u64;
-        let siblings = Vec::new();
+        let mmr = self.mmr.lock().unwrap();
+        let leaf_count = mmr.size as u64;
 
-        for i in 0..leaf_index {
-            pos += 1;
-            let mut s = i;
-            while s & 1 == 1 {
-                pos += 1;
-                s >>= 1;
-            }
-        }
+        let pos = get_mmr_node_pos(leaf_index as u64);
+        let siblings = get_mmr_path(pos, leaf_count);
 
         (pos, siblings)
     }
@@ -230,6 +218,86 @@ impl NexusState {
             root: mmr.get_root(),
         }
     }
+}
+
+/// Helper to get MMR node position for a given leaf index.
+fn get_mmr_node_pos(leaf_index: u64) -> u64 {
+    let mut pos = 0u64;
+    for i in 0..leaf_index {
+        pos += 1;
+        let mut s = i;
+        while s & 1 == 1 {
+            pos += 1;
+            s >>= 1;
+        }
+    }
+    pos
+}
+
+/// Helper to get height of a node at given position in MMR.
+fn get_mmr_node_height(pos: u64) -> u32 {
+    let mut h = 0;
+    let mut p = pos;
+    loop {
+        let full_tree_size = (1u64 << (h + 1)) - 1;
+        if p < full_tree_size {
+            return h;
+        }
+        p -= full_tree_size;
+        h += 1;
+    }
+}
+
+/// Helper to get peak positions for a given leaf count.
+fn get_mmr_peaks(mut leaf_count: u64) -> Vec<u64> {
+    let mut peaks = Vec::new();
+    let mut offset = 0;
+    while leaf_count > 0 {
+        let h = 63 - leaf_count.leading_zeros();
+        let full_tree_leaves = 1u64 << h;
+        let full_tree_size = (1u64 << (h + 1)) - 1;
+
+        peaks.push(offset + full_tree_size - 1);
+        offset += full_tree_size;
+        leaf_count -= full_tree_leaves;
+    }
+    peaks
+}
+
+/// Helper to get internal siblings path for a position in MMR.
+fn get_mmr_path(pos: u64, leaf_count: u64) -> Vec<u64> {
+    let peaks = get_mmr_peaks(leaf_count);
+    let mut path = Vec::new();
+
+    let mut target_peak = 0;
+    let mut found = false;
+    let mut peak_offset = 0;
+    for &p in &peaks {
+        if pos <= p {
+            target_peak = p;
+            found = true;
+            break;
+        }
+        peak_offset = p + 1;
+    }
+
+    if found {
+        let mut p = target_peak;
+        while p > pos {
+            let h = get_mmr_node_height(p - peak_offset);
+            let left_child = p - (1 << h);
+            let right_child = p - 1;
+            if pos <= left_child {
+                path.push(right_child);
+                p = left_child;
+            } else {
+                path.push(left_child);
+                p = right_child;
+            }
+        }
+        path.reverse();
+    }
+    path
 }
 
 pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
@@ -265,7 +333,7 @@ impl Default for MMRFoundation {
 
 pub struct MMRFoundation {
     pub peaks: Vec<[u8; 32]>,
-    pub size: usize,
+    pub size: usize, // leaf count
     pub node_count: u64,
 }
 
@@ -364,12 +432,28 @@ mod tests {
     #[test]
     fn test_mmr_metadata_calculation() {
         let state = NexusState::new();
-        let (pos0, _) = state.get_mmr_proof_metadata(0);
-        let (pos1, _) = state.get_mmr_proof_metadata(1);
-        let (pos2, _) = state.get_mmr_proof_metadata(2);
+        state.update_state_batch(&["a".to_string(), "b".to_string(), "c".to_string()]);
+        let (pos, siblings) = state.get_mmr_proof_metadata(2);
 
+        // Leaf 2 in MMR with 3 leaves:
+        // Leaves: 0, 1 -> 2
+        // Leaf index 2 is pos 3.
+        assert_eq!(pos, 3);
+        // Sibling for 3 in [2, 3] peaks is empty (it is a peak itself).
+        assert_eq!(siblings.len(), 0);
+
+        let (pos0, siblings0) = state.get_mmr_proof_metadata(0);
         assert_eq!(pos0, 0);
-        assert_eq!(pos1, 1);
-        assert_eq!(pos2, 3);
+        assert_eq!(siblings0, vec![1]);
+    }
+}
+
+impl Clone for MMRFoundation {
+    fn clone(&self) -> Self {
+        Self {
+            peaks: self.peaks.clone(),
+            size: self.size,
+            node_count: self.node_count,
+        }
     }
 }
