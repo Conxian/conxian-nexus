@@ -462,6 +462,17 @@ impl MMRFoundation {
 mod tests {
     use super::*;
 
+    fn assert_mmr_metadata(
+        state: &NexusState,
+        leaf_index: usize,
+        expected_pos: u64,
+        expected_sibs: &[u64],
+    ) {
+        let (pos, sibs) = state.get_mmr_proof_metadata(leaf_index).unwrap();
+        assert_eq!(pos, expected_pos);
+        assert_eq!(sibs.as_slice(), expected_sibs);
+    }
+
     #[test]
     fn test_new_nexus_state() {
         let state = NexusState::new();
@@ -498,25 +509,69 @@ mod tests {
 
         // Size 1
         state.update_state_batch(&["a".to_string()]);
-        let (pos0, sibs0) = state.get_mmr_proof_metadata(0).unwrap();
-        assert_eq!(pos0, 0);
-        assert_eq!(sibs0, Vec::<u64>::new());
+        assert_mmr_metadata(&state, 0, 0, &[]);
 
         // Size 2
         state.update_state_batch(&["b".to_string()]);
-        let (pos1, sibs1) = state.get_mmr_proof_metadata(1).unwrap();
-        assert_eq!(pos1, 1);
-        assert_eq!(sibs1, vec![0]);
+        assert_mmr_metadata(&state, 0, 0, &[1]);
+        assert_mmr_metadata(&state, 1, 1, &[0]);
+
+        // Size 3
+        state.update_state_batch(&["c".to_string()]);
+        assert_mmr_metadata(&state, 0, 0, &[1]);
+        assert_mmr_metadata(&state, 1, 1, &[0]);
+        assert_mmr_metadata(&state, 2, 3, &[]);
 
         // Size 4
-        state.update_state_batch(&["c".to_string(), "d".to_string()]);
-        let (pos2, sibs2) = state.get_mmr_proof_metadata(2).unwrap();
-        assert_eq!(pos2, 3);
-        assert_eq!(sibs2, vec![4, 2]); // leaf 2 (pos 3) has leaf 3 (pos 4) as sibling, then pos 5 has pos 2 as sibling
+        state.update_state_batch(&["d".to_string()]);
+        assert_mmr_metadata(&state, 0, 0, &[1, 5]);
+        assert_mmr_metadata(&state, 1, 1, &[0, 5]);
+        assert_mmr_metadata(&state, 2, 3, &[4, 2]);
+        assert_mmr_metadata(&state, 3, 4, &[3, 2]);
 
-        let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
-        assert_eq!(pos3, 4);
-        assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
+        // Size 5
+        state.update_state_batch(&["e".to_string()]);
+        assert_mmr_metadata(&state, 0, 0, &[1, 5]);
+        assert_mmr_metadata(&state, 1, 1, &[0, 5]);
+        assert_mmr_metadata(&state, 2, 3, &[4, 2]);
+        assert_mmr_metadata(&state, 3, 4, &[3, 2]);
+        assert_mmr_metadata(&state, 4, 7, &[]);
+
+        // Size 6
+        state.update_state_batch(&["f".to_string()]);
+        assert_mmr_metadata(&state, 0, 0, &[1, 5]);
+        assert_mmr_metadata(&state, 1, 1, &[0, 5]);
+        assert_mmr_metadata(&state, 2, 3, &[4, 2]);
+        assert_mmr_metadata(&state, 3, 4, &[3, 2]);
+        assert_mmr_metadata(&state, 4, 7, &[8]);
+        assert_mmr_metadata(&state, 5, 8, &[7]);
+
+        // Size 7
+        state.update_state_batch(&["g".to_string()]);
+        assert_mmr_metadata(&state, 0, 0, &[1, 5]);
+        assert_mmr_metadata(&state, 1, 1, &[0, 5]);
+        assert_mmr_metadata(&state, 2, 3, &[4, 2]);
+        assert_mmr_metadata(&state, 3, 4, &[3, 2]);
+        assert_mmr_metadata(&state, 4, 7, &[8]);
+        assert_mmr_metadata(&state, 5, 8, &[7]);
+        assert_mmr_metadata(&state, 6, 10, &[]);
+    }
+
+    #[test]
+    fn test_mmr_metadata_calculation_with_batched_update_state_batch() {
+        let state = NexusState::new();
+
+        state.update_state_batch(&[
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ]);
+
+        assert_mmr_metadata(&state, 0, 0, &[1, 5]);
+        assert_mmr_metadata(&state, 1, 1, &[0, 5]);
+        assert_mmr_metadata(&state, 2, 3, &[4, 2]);
+        assert_mmr_metadata(&state, 3, 4, &[3, 2]);
     }
 
     #[test]
