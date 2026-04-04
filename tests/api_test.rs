@@ -38,7 +38,7 @@ async fn test_mmr_proof_generation_logic() {
     state.update_state_batch(&["tx1".to_string(), "tx2".to_string()]);
 
     let index = state.get_leaf_index("tx1").unwrap();
-    let (pos, _siblings) = state.get_mmr_proof_metadata(index);
+    let (pos, _siblings) = state.get_mmr_proof_metadata(index).unwrap();
 
     let proof = state.assemble_mmr_proof("tx1".to_string(), pos, vec![]);
     assert_eq!(proof.leaf, "tx1");

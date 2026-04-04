@@ -194,14 +194,15 @@ impl NexusState {
         self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
     }
 
-    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
+    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> Option<(u64, Vec<u64>)> {
         let (leaves_len, node_count) = {
             let leaves = self.leaves.lock().unwrap();
             let mmr = self.mmr.lock().unwrap();
             (leaves.len(), mmr.node_count)
         };
-
-        debug_assert!(leaf_index < leaves_len, "leaf_index out of bounds");
+        if leaf_index >= leaves_len {
+            return None;
+        }
 
         // Calculate the post-order position of a leaf in an MMR in O(log N) time.
         // Formula: pos = 2 * leaf_index - (number of set bits in leaf_index)
@@ -221,34 +222,20 @@ impl NexusState {
         let mut remaining = leaves_len;
 
         while remaining > 0 {
-            let Some(pow) = 1u64.checked_shl(height) else {
-                break;
-            };
-            let Some(offset) = pow.checked_mul(2).and_then(|v| v.checked_sub(1)) else {
-                break;
-            };
+            let pow = 1u64.checked_shl(height)?;
+            let offset = pow.checked_mul(2)?.checked_sub(1)?;
 
             if (leaves_before & 1) == 1 {
                 // Right child: sibling is the left child
-                let Some(sibling_pos) = curr_pos.checked_sub(offset) else {
-                    break;
-                };
+                let sibling_pos = curr_pos.checked_sub(offset)?;
                 siblings.push(sibling_pos);
-                let Some(next_pos) = curr_pos.checked_add(1) else {
-                    break;
-                };
-                curr_pos = next_pos;
+                curr_pos = curr_pos.checked_add(1)?;
             } else {
                 // Left child: sibling is the right child (if it exists)
-                let Some(sibling_pos) = curr_pos.checked_add(offset) else {
-                    break;
-                };
+                let sibling_pos = curr_pos.checked_add(offset)?;
                 if sibling_pos < node_count {
                     siblings.push(sibling_pos);
-                    let Some(next_pos) = sibling_pos.checked_add(1) else {
-                        break;
-                    };
-                    curr_pos = next_pos;
+                    curr_pos = sibling_pos.checked_add(1)?;
                 } else {
                     // It's a peak
                     break;
@@ -259,7 +246,7 @@ impl NexusState {
             remaining >>= 1;
         }
 
-        (pos, siblings)
+        Some((pos, siblings))
     }
 
     pub fn assemble_mmr_proof(
@@ -419,23 +406,23 @@ mod tests {
 
         // Size 1
         state.update_state_batch(&["a".to_string()]);
-        let (pos0, sibs0) = state.get_mmr_proof_metadata(0);
+        let (pos0, sibs0) = state.get_mmr_proof_metadata(0).unwrap();
         assert_eq!(pos0, 0);
         assert_eq!(sibs0, Vec::<u64>::new());
 
         // Size 2
         state.update_state_batch(&["b".to_string()]);
-        let (pos1, sibs1) = state.get_mmr_proof_metadata(1);
+        let (pos1, sibs1) = state.get_mmr_proof_metadata(1).unwrap();
         assert_eq!(pos1, 1);
         assert_eq!(sibs1, vec![0]);
 
         // Size 4
         state.update_state_batch(&["c".to_string(), "d".to_string()]);
-        let (pos2, sibs2) = state.get_mmr_proof_metadata(2);
+        let (pos2, sibs2) = state.get_mmr_proof_metadata(2).unwrap();
         assert_eq!(pos2, 3);
         assert_eq!(sibs2, vec![4, 2]); // leaf 2 (pos 3) has leaf 3 (pos 4) as sibling, then pos 5 has pos 2 as sibling
 
-        let (pos3, sibs3) = state.get_mmr_proof_metadata(3);
+        let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
         assert_eq!(pos3, 4);
         assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
     }
