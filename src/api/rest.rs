@@ -171,16 +171,21 @@ async fn get_mmr_proof(
     };
 
     let leaf_index = index.ok_or(StatusCode::NOT_FOUND)?;
+
+    let leaf = state
+        .nexus_state
+        .get_leaf_by_index(leaf_index)
+        .ok_or(StatusCode::NOT_FOUND)?;
+
     let (leaf_pos, sibling_positions) = state
         .nexus_state
         .get_mmr_proof_metadata(leaf_index)
-        .map_err(|e| {
-            tracing::warn!("MMR proof metadata error: {}", e);
-            if params.index.is_some() {
-                StatusCode::BAD_REQUEST
-            } else {
-                StatusCode::NOT_FOUND
-            }
+        .ok_or_else(|| {
+            tracing::error!(
+                "MMR proof metadata could not be computed for leaf_index {}",
+                leaf_index
+            );
+            StatusCode::INTERNAL_SERVER_ERROR
         })?;
 
     let mut siblings = Vec::new();
@@ -199,15 +204,6 @@ async fn get_mmr_proof(
             siblings.push((pos, format!("0x{}", hex::encode(hash_bytes))));
         }
     }
-
-    let leaf = state
-        .nexus_state
-        .leaves
-        .lock()
-        .unwrap()
-        .get(leaf_index)
-        .cloned()
-        .ok_or(StatusCode::NOT_FOUND)?;
 
     let proof = state
         .nexus_state
