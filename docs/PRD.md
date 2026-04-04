@@ -37,9 +37,13 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
 - **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification.
 
+### 2.9 Sovereign Transactional SQL (Pilot)
+- **Requirement**: Evaluate and pilot Kwil as a sovereign OLTP layer to replace hosted PostgreSQL.
+- **Implementation**: **New (v0.5.0)**: Implemented `KwilAdapter` for decentralized relational state persistence. Designed pilot schema (`docs/kwil_pilot_schema.sql`) for block and state-root anchoring.
+
 ## 3. Technical Stack
 - **Language**: Rust (Tokio, Axum, Tonic)
-- **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub)
+- **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub), **Kwil (Sovereign Pilot)**
 - **Cryptography**: Sha256 (Merkle Tree/MMR/HMAC), k256 (ECDSA), BIP-39 (Mnemonic)
 - **Observability**: Prometheus, OpenTelemetry (Tracing), **MEV Audit Logs**
 
@@ -64,3 +68,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 4.5 Oracle & Rebalancing
 - **Status**: **Historical FX Persistence**, **Dynamic LTV Rebalancing**, and **Multi-source Aggregated Oracle** Complete (v0.4.0).
 - **Next Step**: Implement confidence interval weights for oracle sources.
+
+### 4.6 Sovereign Infrastructure Migration (In Progress)
+- **Status**: **Kwil Pilot Implementation Complete (v0.5.0)**.
+- **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL.

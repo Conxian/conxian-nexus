@@ -22,11 +22,37 @@ impl Storage {
         })
     }
 
+    pub fn new_lazy(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
+        let pg_pool = sqlx::postgres::PgPoolOptions::new().connect_lazy(database_url)?;
+        let redis_client = RedisClient::open(redis_url)?;
+
+        Ok(Self {
+            pg_pool,
+            redis_client,
+        })
+    }
+
     /// Run database migrations
     pub async fn run_migrations(&self) -> anyhow::Result<()> {
         sqlx::migrate!("./migrations").run(&self.pg_pool).await?;
         Ok(())
     }
+
+    #[cfg(test)]
+    pub fn for_tests() -> std::sync::Arc<Self> {
+        let pg_pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://localhost/nexus")
+            .expect("connect_lazy should not require a live DB");
+
+        let redis_client = RedisClient::open("redis://127.0.0.1/")
+            .expect("redis client construction should not require a live server");
+
+        std::sync::Arc::new(Self {
+            pg_pool,
+            redis_client,
+        })
+    }
 }
 
+pub mod kwil;
 pub mod tableland;

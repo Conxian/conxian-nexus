@@ -75,3 +75,42 @@ async fn test_root_to_leaf_consistency() {
     assert_eq!(proof1.root, root2); // Proof should be against the latest root
     assert!(conxian_nexus::state::verify_merkle_proof(&proof1));
 }
+
+#[tokio::test]
+async fn test_mmr_proof_consistency() {
+    let state = Arc::new(NexusState::new());
+    let leaves = vec![
+        "tx1".to_string(),
+        "tx2".to_string(),
+        "tx3".to_string(),
+        "tx4".to_string(),
+    ];
+    state.update_state_batch(&leaves);
+
+    // Leaf 0 in 4-leaf MMR (all in one tree, pos 6 is peak)
+    let (pos, siblings) = state.get_mmr_proof_metadata(0).unwrap();
+    assert_eq!(pos, 0);
+    // For 4 leaves, nodes are 0,1->2, 3,4->5, 2,5->6.
+    // Siblings for 0 are [1, 5].
+    assert_eq!(siblings, vec![1, 5]);
+
+    // Leaf 2 in 4-leaf MMR: pos 3, siblings [4, 2].
+    let (pos2, siblings2) = state.get_mmr_proof_metadata(2).unwrap();
+    assert_eq!(pos2, 3);
+    assert_eq!(siblings2, vec![4, 2]);
+
+    // Leaf 3 in 4-leaf MMR: pos 4, siblings [3, 2].
+    let (pos3, siblings3) = state.get_mmr_proof_metadata(3).unwrap();
+    assert_eq!(pos3, 4);
+    assert_eq!(siblings3, vec![3, 2]);
+
+    // Check with 3 leaves
+    let state3 = Arc::new(NexusState::new());
+    state3.update_state_batch(&vec!["a".into(), "b".into(), "c".into()]);
+    // 0, 1 -> 2
+    // 3 (leaf 2)
+    // Peaks: 2, 3
+    let (pos_peak, siblings_peak) = state3.get_mmr_proof_metadata(2).unwrap();
+    assert_eq!(pos_peak, 3);
+    assert!(siblings_peak.is_empty()); // It is a peak
+}

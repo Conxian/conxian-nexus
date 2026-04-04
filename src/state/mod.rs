@@ -2,18 +2,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MerkleProof {
     pub leaf: String,
     pub path: Vec<(String, bool)>, // (hash, is_left)
     pub root: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct MMRProof {
     pub leaf: String,
     pub pos: u64,
-    pub siblings: Vec<(u64, String)>, // (pos, hash)
+    pub siblings: Vec<(u64, String)>,
     pub peaks: Vec<String>,
     pub root: String,
 }
@@ -287,6 +287,82 @@ impl NexusState {
     }
 }
 
+/// Helper to get MMR node position for a given leaf index.
+///
+/// Uses the postorder MMR leaf-position identity: `pos = 2 * leaf_index - popcount(leaf_index)`.
+fn get_mmr_node_pos(leaf_index: u64) -> u64 {
+    leaf_index * 2 - leaf_index.count_ones() as u64
+}
+
+/// Helper to get height of a node at given position in MMR.
+fn get_mmr_node_height(pos: u64) -> u32 {
+    let mut h = 0;
+    let mut p = pos;
+    loop {
+        let full_tree_size = (1u64 << (h + 1)) - 1;
+        if p < full_tree_size {
+            return h;
+        }
+        p -= full_tree_size;
+        h += 1;
+    }
+}
+
+/// Helper to get peak positions for a given leaf count.
+fn get_mmr_peaks(mut leaf_count: u64) -> Vec<u64> {
+    let mut peaks = Vec::new();
+    let mut offset = 0;
+    while leaf_count > 0 {
+        let h = 63 - leaf_count.leading_zeros();
+        let full_tree_leaves = 1u64 << h;
+        let full_tree_size = (1u64 << (h + 1)) - 1;
+
+        peaks.push(offset + full_tree_size - 1);
+        offset += full_tree_size;
+        leaf_count -= full_tree_leaves;
+    }
+    peaks
+}
+
+/// Helper to get internal siblings path for a position in MMR.
+fn get_mmr_path(pos: u64, leaf_count: u64) -> Vec<u64> {
+    let peaks = get_mmr_peaks(leaf_count);
+    let mut path = Vec::new();
+
+    let mut peak_start = 0u64;
+    let mut target_peak = None;
+    for &peak_pos in &peaks {
+        if pos <= peak_pos {
+            target_peak = Some(peak_pos);
+            break;
+        }
+        peak_start = peak_pos + 1;
+    }
+
+    let Some(mut p) = target_peak else {
+        return path;
+    };
+
+    let mut subtree_start = peak_start;
+    while p > pos {
+        let h = get_mmr_node_height(p - subtree_start);
+        let left_child = p - (1u64 << h);
+        let right_child = p - 1;
+
+        if pos <= left_child {
+            path.push(right_child);
+            p = left_child;
+        } else {
+            path.push(left_child);
+            p = right_child;
+            subtree_start = left_child + 1;
+        }
+    }
+
+    path.reverse();
+    path
+}
+
 pub fn verify_merkle_proof(proof: &MerkleProof) -> bool {
     let mut hasher = Sha256::new();
     hasher.update(proof.leaf.as_bytes());
@@ -320,7 +396,7 @@ impl Default for MMRFoundation {
 
 pub struct MMRFoundation {
     pub peaks: Vec<[u8; 32]>,
-    pub size: usize,
+    pub size: usize, // leaf count
     pub node_count: u64,
 }
 
