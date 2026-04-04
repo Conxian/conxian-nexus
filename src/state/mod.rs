@@ -20,6 +20,8 @@ pub struct MMRProof {
 
 pub struct NexusState {
     pub state_root: Mutex<String>,
+    // Lock ordering invariant: when a method needs both `leaves` and `mmr`, it must lock
+    // `leaves` before `mmr` to avoid deadlocks with update paths.
     pub leaves: Mutex<Vec<String>>,
     pub tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
     pub mmr: Mutex<MMRFoundation>,
@@ -194,20 +196,73 @@ impl NexusState {
         self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
     }
 
-    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
-        let mut pos = 0u64;
-        let siblings = Vec::new();
+    pub fn get_leaf_by_index(&self, index: usize) -> Option<String> {
+        self.leaves.lock().unwrap().get(index).cloned()
+    }
 
-        for i in 0..leaf_index {
-            pos += 1;
-            let mut s = i;
-            while s & 1 == 1 {
-                pos += 1;
-                s >>= 1;
-            }
+    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> Option<(u64, Vec<u64>)> {
+        let (leaves_len, node_count) = {
+            // Lock ordering is intentional to match the write path (`update_state_batch`,
+            // `set_initial_leaves`) and avoid deadlocks.
+            let leaves = self.leaves.lock().unwrap();
+            let mmr = self.mmr.lock().unwrap();
+            (leaves.len(), mmr.node_count)
+        };
+
+        if leaf_index >= leaves_len {
+            return None;
         }
 
-        (pos, siblings)
+        // Calculate the post-order position of a leaf in an MMR in O(log N) time.
+        // Formula: pos = 2 * leaf_index - (number of set bits in leaf_index)
+        let pos = (2 * leaf_index as u64) - (leaf_index.count_ones() as u64);
+
+        if pos >= node_count {
+            return None;
+        }
+
+        let mut siblings = Vec::new();
+        let mut curr_pos = pos;
+        let mut height: u32 = 0;
+
+        // Find the height of the leaf (always 0)
+        // and its siblings up to its peak.
+        // In this MMR, nodes are added in post-order.
+        // A node at height H is a parent if the next node has height H+1.
+        // This happens if the current number of leaves has the H-th bit set.
+
+        let mut leaves_before = leaf_index;
+        let mut remaining = leaves_len;
+
+        while remaining > 0 {
+            let pow = 1u64.checked_shl(height)?;
+            // Offset is (2 * (1 << height)) - 1. Written as (pow - 1) + pow so
+            // height == 63 can still represent the u64::MAX case without an intermediate
+            // overflow.
+            let offset = pow.checked_sub(1)?.checked_add(pow)?;
+
+            if (leaves_before & 1) == 1 {
+                // Right child: sibling is the left child
+                let sibling_pos = curr_pos.checked_sub(offset)?;
+                siblings.push(sibling_pos);
+                curr_pos = curr_pos.checked_add(1)?;
+            } else {
+                // Left child: sibling is the right child (if it exists)
+                let sibling_pos = curr_pos.checked_add(offset)?;
+                if sibling_pos < node_count {
+                    siblings.push(sibling_pos);
+                    curr_pos = sibling_pos.checked_add(1)?;
+                } else {
+                    // It's a peak
+                    break;
+                }
+            }
+            height += 1;
+            leaves_before >>= 1;
+            remaining >>= 1;
+        }
+
+        Some((pos, siblings))
     }
 
     pub fn assemble_mmr_proof(
@@ -362,14 +417,58 @@ mod tests {
     }
 
     #[test]
-    fn test_mmr_metadata_calculation() {
+    fn test_mmr_metadata_calculation_with_tree_size() {
         let state = NexusState::new();
-        let (pos0, _) = state.get_mmr_proof_metadata(0);
-        let (pos1, _) = state.get_mmr_proof_metadata(1);
-        let (pos2, _) = state.get_mmr_proof_metadata(2);
 
+        // Size 1
+        state.update_state_batch(&["a".to_string()]);
+        let (pos0, sibs0) = state.get_mmr_proof_metadata(0).unwrap();
         assert_eq!(pos0, 0);
+        assert_eq!(sibs0, Vec::<u64>::new());
+
+        // Size 2
+        state.update_state_batch(&["b".to_string()]);
+        let (pos1, sibs1) = state.get_mmr_proof_metadata(1).unwrap();
         assert_eq!(pos1, 1);
+        assert_eq!(sibs1, vec![0]);
+
+        // Size 4
+        state.update_state_batch(&["c".to_string(), "d".to_string()]);
+        let (pos2, sibs2) = state.get_mmr_proof_metadata(2).unwrap();
         assert_eq!(pos2, 3);
+        assert_eq!(sibs2, vec![4, 2]); // leaf 2 (pos 3) has leaf 3 (pos 4) as sibling, then pos 5 has pos 2 as sibling
+
+        let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
+        assert_eq!(pos3, 4);
+        assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
+    }
+
+    #[test]
+    fn test_mmr_metadata_leaf_index_out_of_bounds() {
+        let state = NexusState::new();
+        state.update_state_batch(&["a".to_string()]);
+
+        assert_eq!(state.get_mmr_proof_metadata(1), None);
+    }
+
+    #[test]
+    fn test_mmr_metadata_some_for_all_valid_indices() {
+        let state = NexusState::new();
+        state.update_state_batch(&[
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+            "e".to_string(),
+        ]);
+
+        let leaves_len = state.leaves.lock().unwrap().len();
+        for idx in 0..leaves_len {
+            assert!(
+                state.get_mmr_proof_metadata(idx).is_some(),
+                "expected metadata for leaf index {}",
+                idx,
+            );
+        }
     }
 }

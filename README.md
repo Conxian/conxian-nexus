@@ -37,7 +37,7 @@ Active development. Module boundaries and APIs may change as the stack converges
 - **FSOC Sequencer**: Mitigates MEV by validating transaction timestamps and payloads against on-chain events.
 - **Sovereign Handoff**: Automatic safety mode if sync drift exceeds threshold.
 - **Verifiable Proofs**: Generate and verify Merkle proofs for any transaction.
-- **Persistent MMR**: Full persistence of MMR peaks and nodes in PostgreSQL.
+- **Persistent MMR**: Full persistence of MMR peaks and nodes in PostgreSQL, with support for cryptographic inclusion proofs.
 - **Multi-Protocol**: Unified support for Bisq, RGB, and BitVM.
 - **Observability**: Prometheus metrics exporter and internal JSON metrics.
 
@@ -48,6 +48,7 @@ Active development. Module boundaries and APIs may change as the stack converges
 - `GET /metrics`: Prometheus metrics exporter (Text).
 - `POST /v1/execute`: Submit transactions for FSOC validation.
 - `GET /v1/proof?key=<tx_id>`: Retrieve Merkle proof.
+- `GET /v1/mmr-proof?tx_id=<tx_id>`: Retrieve MMR inclusion proof.
 - `GET /v1/services`: Multi-protocol service health.
 
 ## Getting Started
