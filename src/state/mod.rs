@@ -20,6 +20,8 @@ pub struct MMRProof {
 
 pub struct NexusState {
     pub state_root: Mutex<String>,
+    // Lock ordering invariant: when a method needs both `leaves` and `mmr`, it must lock
+    // `leaves` before `mmr` to avoid deadlocks with update paths.
     pub leaves: Mutex<Vec<String>>,
     pub tree_levels: Mutex<Vec<Vec<[u8; 32]>>>,
     pub mmr: Mutex<MMRFoundation>,
@@ -196,10 +198,13 @@ impl NexusState {
 
     pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> Option<(u64, Vec<u64>)> {
         let (leaves_len, node_count) = {
+            // Lock ordering is intentional to match the write path (`update_state_batch`,
+            // `set_initial_leaves`) and avoid deadlocks.
             let leaves = self.leaves.lock().unwrap();
             let mmr = self.mmr.lock().unwrap();
             (leaves.len(), mmr.node_count)
         };
+
         if leaf_index >= leaves_len {
             return None;
         }
@@ -207,6 +212,10 @@ impl NexusState {
         // Calculate the post-order position of a leaf in an MMR in O(log N) time.
         // Formula: pos = 2 * leaf_index - (number of set bits in leaf_index)
         let pos = (2 * leaf_index as u64) - (leaf_index.count_ones() as u64);
+
+        if pos >= node_count {
+            return None;
+        }
 
         let mut siblings = Vec::new();
         let mut curr_pos = pos;
@@ -223,7 +232,7 @@ impl NexusState {
 
         while remaining > 0 {
             let pow = 1u64.checked_shl(height)?;
-            let offset = pow.checked_mul(2)?.checked_sub(1)?;
+            let offset = pow.checked_sub(1)?.checked_add(pow)?;
 
             if (leaves_before & 1) == 1 {
                 // Right child: sibling is the left child
@@ -425,5 +434,13 @@ mod tests {
         let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
         assert_eq!(pos3, 4);
         assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
+    }
+
+    #[test]
+    fn test_mmr_metadata_leaf_index_out_of_bounds() {
+        let state = NexusState::new();
+        state.update_state_batch(&["a".to_string()]);
+
+        assert_eq!(state.get_mmr_proof_metadata(1), None);
     }
 }
