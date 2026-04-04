@@ -195,13 +195,21 @@ impl NexusState {
     }
 
     pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
+        let leaves = self.leaves.lock().unwrap();
+        let total_leaves = leaves.len();
+        if leaf_index >= total_leaves {
+            return (0, Vec::new());
+        }
+        let node_count = self.mmr.lock().unwrap().node_count;
+        drop(leaves);
+
         // Calculate the post-order position of a leaf in an MMR in O(log N) time.
         // Formula: pos = 2 * leaf_index - (number of set bits in leaf_index)
         let pos = (2 * leaf_index as u64) - (leaf_index.count_ones() as u64);
 
         let mut siblings = Vec::new();
         let mut curr_pos = pos;
-        let mut height = 0;
+        let mut height: u32 = 0;
 
         // Find the height of the leaf (always 0)
         // and its siblings up to its peak.
@@ -210,20 +218,37 @@ impl NexusState {
         // This happens if the current number of leaves has the H-th bit set.
 
         let mut leaves_before = leaf_index;
-        let mut total_leaves = self.leaves.lock().unwrap().len();
+        let mut remaining = total_leaves;
 
-        while total_leaves > 0 {
+        while remaining > 0 {
+            let Some(pow) = 1u64.checked_shl(height) else {
+                break;
+            };
+            let Some(offset) = pow.checked_mul(2).and_then(|v| v.checked_sub(1)) else {
+                break;
+            };
+
             if (leaves_before & 1) == 1 {
                 // Right child: sibling is the left child
-                let sibling_pos = curr_pos - (2 * (1 << height) - 1);
+                let Some(sibling_pos) = curr_pos.checked_sub(offset) else {
+                    break;
+                };
                 siblings.push(sibling_pos);
-                curr_pos += 1;
+                let Some(next_pos) = curr_pos.checked_add(1) else {
+                    break;
+                };
+                curr_pos = next_pos;
             } else {
                 // Left child: sibling is the right child (if it exists)
-                let sibling_pos = curr_pos + (2 * (1 << height) - 1);
-                if sibling_pos < self.mmr.lock().unwrap().node_count {
+                let Some(sibling_pos) = curr_pos.checked_add(offset) else {
+                    break;
+                };
+                if sibling_pos < node_count {
                     siblings.push(sibling_pos);
-                    curr_pos = sibling_pos + 1;
+                    let Some(next_pos) = sibling_pos.checked_add(1) else {
+                        break;
+                    };
+                    curr_pos = next_pos;
                 } else {
                     // It's a peak
                     break;
@@ -231,7 +256,7 @@ impl NexusState {
             }
             height += 1;
             leaves_before >>= 1;
-            total_leaves >>= 1;
+            remaining >>= 1;
         }
 
         (pos, siblings)
