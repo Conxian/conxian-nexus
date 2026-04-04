@@ -194,14 +194,17 @@ impl NexusState {
         self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
     }
 
-    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> (u64, Vec<u64>) {
-        let leaves = self.leaves.lock().unwrap();
-        let total_leaves = leaves.len();
-        if leaf_index >= total_leaves {
-            return (0, Vec::new());
-        }
+    pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> Option<(u64, Vec<u64>)> {
+        let total_leaves = {
+            let leaves = self.leaves.lock().unwrap();
+            let total = leaves.len();
+            if leaf_index >= total {
+                return None;
+            }
+            total
+        };
+
         let node_count = self.mmr.lock().unwrap().node_count;
-        drop(leaves);
 
         // Calculate the post-order position of a leaf in an MMR in O(log N) time.
         // Formula: pos = 2 * leaf_index - (number of set bits in leaf_index)
@@ -259,7 +262,7 @@ impl NexusState {
             remaining >>= 1;
         }
 
-        (pos, siblings)
+        Some((pos, siblings))
     }
 
     pub fn assemble_mmr_proof(
@@ -419,23 +422,23 @@ mod tests {
 
         // Size 1
         state.update_state_batch(&["a".to_string()]);
-        let (pos0, sibs0) = state.get_mmr_proof_metadata(0);
+        let (pos0, sibs0) = state.get_mmr_proof_metadata(0).unwrap();
         assert_eq!(pos0, 0);
         assert_eq!(sibs0, Vec::<u64>::new());
 
         // Size 2
         state.update_state_batch(&["b".to_string()]);
-        let (pos1, sibs1) = state.get_mmr_proof_metadata(1);
+        let (pos1, sibs1) = state.get_mmr_proof_metadata(1).unwrap();
         assert_eq!(pos1, 1);
         assert_eq!(sibs1, vec![0]);
 
         // Size 4
         state.update_state_batch(&["c".to_string(), "d".to_string()]);
-        let (pos2, sibs2) = state.get_mmr_proof_metadata(2);
+        let (pos2, sibs2) = state.get_mmr_proof_metadata(2).unwrap();
         assert_eq!(pos2, 3);
         assert_eq!(sibs2, vec![4, 2]); // leaf 2 (pos 3) has leaf 3 (pos 4) as sibling, then pos 5 has pos 2 as sibling
 
-        let (pos3, sibs3) = state.get_mmr_proof_metadata(3);
+        let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
         assert_eq!(pos3, 4);
         assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
     }
