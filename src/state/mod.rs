@@ -428,19 +428,95 @@ mod tests {
 
         // Size 2
         state.update_state_batch(&["b".to_string()]);
+        let (pos0_size2, sibs0_size2) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size2, 0);
+        assert_eq!(sibs0_size2, vec![1]);
+
         let (pos1, sibs1) = state.get_mmr_proof_metadata(1).unwrap();
         assert_eq!(pos1, 1);
         assert_eq!(sibs1, vec![0]);
 
+        // Size 3
+        state.update_state_batch(&["c".to_string()]);
+        let (pos0_size3, sibs0_size3) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size3, 0);
+        assert_eq!(sibs0_size3, vec![1]);
+
+        let (pos1_size3, sibs1_size3) = state.get_mmr_proof_metadata(1).unwrap();
+        assert_eq!(pos1_size3, 1);
+        assert_eq!(sibs1_size3, vec![0]);
+
+        let (pos2_size3, sibs2_size3) = state.get_mmr_proof_metadata(2).unwrap();
+        assert_eq!(pos2_size3, 3);
+        assert_eq!(sibs2_size3, Vec::<u64>::new());
+
         // Size 4
-        state.update_state_batch(&["c".to_string(), "d".to_string()]);
+        state.update_state_batch(&["d".to_string()]);
+        let (pos0_size4, sibs0_size4) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size4, 0);
+        assert_eq!(sibs0_size4, vec![1, 5]);
+
+        let (pos1_size4, sibs1_size4) = state.get_mmr_proof_metadata(1).unwrap();
+        assert_eq!(pos1_size4, 1);
+        assert_eq!(sibs1_size4, vec![0, 5]);
+
         let (pos2, sibs2) = state.get_mmr_proof_metadata(2).unwrap();
         assert_eq!(pos2, 3);
-        assert_eq!(sibs2, vec![4, 2]); // leaf 2 (pos 3) has leaf 3 (pos 4) as sibling, then pos 5 has pos 2 as sibling
+        assert_eq!(sibs2, vec![4, 2]);
 
         let (pos3, sibs3) = state.get_mmr_proof_metadata(3).unwrap();
         assert_eq!(pos3, 4);
-        assert_eq!(sibs3, vec![3, 2]); // leaf 3 (pos 4) has leaf 2 (pos 3) as sibling, then pos 5 has pos 2 as sibling
+        assert_eq!(sibs3, vec![3, 2]);
+
+        // Size 5
+        state.update_state_batch(&["e".to_string()]);
+        let (pos0_size5, sibs0_size5) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size5, 0);
+        assert_eq!(sibs0_size5, vec![1, 5]);
+
+        let (pos1_size5, sibs1_size5) = state.get_mmr_proof_metadata(1).unwrap();
+        assert_eq!(pos1_size5, 1);
+        assert_eq!(sibs1_size5, vec![0, 5]);
+
+        let (pos4_size5, sibs4_size5) = state.get_mmr_proof_metadata(4).unwrap();
+        assert_eq!(pos4_size5, 7);
+        assert_eq!(sibs4_size5, Vec::<u64>::new());
+
+        // Size 6
+        state.update_state_batch(&["f".to_string()]);
+        let (pos0_size6, sibs0_size6) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size6, 0);
+        assert_eq!(sibs0_size6, vec![1, 5]);
+
+        let (pos1_size6, sibs1_size6) = state.get_mmr_proof_metadata(1).unwrap();
+        assert_eq!(pos1_size6, 1);
+        assert_eq!(sibs1_size6, vec![0, 5]);
+
+        let (pos4_size6, sibs4_size6) = state.get_mmr_proof_metadata(4).unwrap();
+        assert_eq!(pos4_size6, 7);
+        assert_eq!(sibs4_size6, vec![8]);
+
+        let (pos5_size6, sibs5_size6) = state.get_mmr_proof_metadata(5).unwrap();
+        assert_eq!(pos5_size6, 8);
+        assert_eq!(sibs5_size6, vec![7]);
+
+        // Size 7
+        state.update_state_batch(&["g".to_string()]);
+        let (pos0_size7, sibs0_size7) = state.get_mmr_proof_metadata(0).unwrap();
+        assert_eq!(pos0_size7, 0);
+        assert_eq!(sibs0_size7, vec![1, 5]);
+
+        let (pos1_size7, sibs1_size7) = state.get_mmr_proof_metadata(1).unwrap();
+        assert_eq!(pos1_size7, 1);
+        assert_eq!(sibs1_size7, vec![0, 5]);
+
+        let (pos4_size7, sibs4_size7) = state.get_mmr_proof_metadata(4).unwrap();
+        assert_eq!(pos4_size7, 7);
+        assert_eq!(sibs4_size7, vec![8]);
+
+        let (pos6_size7, sibs6_size7) = state.get_mmr_proof_metadata(6).unwrap();
+        assert_eq!(pos6_size7, 10);
+        assert_eq!(sibs6_size7, Vec::<u64>::new());
     }
 
     #[test]
