@@ -196,6 +196,10 @@ impl NexusState {
         self.leaves.lock().unwrap().iter().position(|l| l == tx_id)
     }
 
+    pub fn get_leaf_by_index(&self, index: usize) -> Option<String> {
+        self.leaves.lock().unwrap().get(index).cloned()
+    }
+
     pub fn get_mmr_proof_metadata(&self, leaf_index: usize) -> Option<(u64, Vec<u64>)> {
         let (leaves_len, node_count) = {
             // Lock ordering is intentional to match the write path (`update_state_batch`,
@@ -232,6 +236,9 @@ impl NexusState {
 
         while remaining > 0 {
             let pow = 1u64.checked_shl(height)?;
+            // Offset is (2 * (1 << height)) - 1. Written as (pow - 1) + pow so
+            // height == 63 can still represent the u64::MAX case without an intermediate
+            // overflow.
             let offset = pow.checked_sub(1)?.checked_add(pow)?;
 
             if (leaves_before & 1) == 1 {
@@ -442,5 +449,26 @@ mod tests {
         state.update_state_batch(&["a".to_string()]);
 
         assert_eq!(state.get_mmr_proof_metadata(1), None);
+    }
+
+    #[test]
+    fn test_mmr_metadata_some_for_all_valid_indices() {
+        let state = NexusState::new();
+        state.update_state_batch(&[
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+            "e".to_string(),
+        ]);
+
+        let leaves_len = state.leaves.lock().unwrap().len();
+        for idx in 0..leaves_len {
+            assert!(
+                state.get_mmr_proof_metadata(idx).is_some(),
+                "expected metadata for leaf index {}",
+                idx,
+            );
+        }
     }
 }

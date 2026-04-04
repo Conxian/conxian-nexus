@@ -174,11 +174,7 @@ async fn get_mmr_proof(
 
     let leaf = state
         .nexus_state
-        .leaves
-        .lock()
-        .unwrap()
-        .get(leaf_index)
-        .cloned()
+        .get_leaf_by_index(leaf_index)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let (leaf_pos, sibling_positions) = state
