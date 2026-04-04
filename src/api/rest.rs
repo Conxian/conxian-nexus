@@ -171,10 +171,7 @@ async fn get_mmr_proof(
     };
 
     let leaf_index = index.ok_or(StatusCode::NOT_FOUND)?;
-    let (leaf_pos, sibling_positions) = state
-        .nexus_state
-        .get_mmr_proof_metadata(leaf_index)
-        .ok_or(StatusCode::NOT_FOUND)?;
+    let (leaf_pos, sibling_positions) = state.nexus_state.get_mmr_proof_metadata(leaf_index);
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
