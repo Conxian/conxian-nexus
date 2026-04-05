@@ -19,6 +19,46 @@ pub struct NexusGrpcService {
     pub executor: Arc<NexusExecutor>,
 }
 
+impl NexusGrpcService {
+    async fn read_safety_flags(&self, context: &'static str) -> Result<(bool, u64), Status> {
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, context, "Redis error reading safety flags (connect)");
+                Status::internal("Redis error reading safety flags")
+            })?;
+
+        let safety_mode: bool = redis::cmd("GET")
+            .arg("nexus:safety_mode")
+            .query_async::<_, Option<bool>>(&mut conn)
+            .await
+            .map_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    context,
+                    "Redis error reading safety flags (safety_mode)"
+                );
+                Status::internal("Redis error reading safety flags (safety_mode)")
+            })?
+            .unwrap_or(false);
+
+        let drift: u64 = redis::cmd("GET")
+            .arg("nexus:drift")
+            .query_async::<_, Option<u64>>(&mut conn)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, context, "Redis error reading safety flags (drift)");
+                Status::internal("Redis error reading safety flags (drift)")
+            })?
+            .unwrap_or(0);
+
+        Ok((safety_mode, drift))
+    }
+}
+
 #[tonic::async_trait]
 impl NexusService for NexusGrpcService {
     async fn get_proof(
@@ -60,30 +100,14 @@ impl NexusService for NexusGrpcService {
             sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
                 .fetch_one(&self.storage.pg_pool)
                 .await
-                .map_err(|e| Status::internal(format!("Database error in GetStatus: {e}")))?;
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Database error in GetStatus (max_height)");
+                    Status::internal("Database error in GetStatus (max_height)")
+                })?;
 
         let processed_height: u64 = max_height.unwrap_or(0).max(0) as u64;
 
-        let mut conn = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetStatus: {e}")))?;
-
-        let safety_mode: bool = redis::cmd("GET")
-            .arg("nexus:safety_mode")
-            .query_async::<_, Option<bool>>(&mut conn)
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetStatus (safety_mode): {e}")))?
-            .unwrap_or(false);
-
-        let drift: u64 = redis::cmd("GET")
-            .arg("nexus:drift")
-            .query_async::<_, Option<u64>>(&mut conn)
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetStatus (drift): {e}")))?
-            .unwrap_or(0);
+        let (safety_mode, drift) = self.read_safety_flags("GetStatus").await?;
 
         Ok(Response::new(StatusResponse {
             state_root: self.nexus_state.get_state_root(),
@@ -119,26 +143,7 @@ impl NexusService for NexusGrpcService {
                     Status::internal("Database error in GetMetrics (block_count)")
                 })?;
 
-        let mut conn = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetMetrics: {e}")))?;
-
-        let safety_mode: bool = redis::cmd("GET")
-            .arg("nexus:safety_mode")
-            .query_async::<_, Option<bool>>(&mut conn)
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetMetrics (safety_mode): {e}")))?
-            .unwrap_or(false);
-
-        let drift: u64 = redis::cmd("GET")
-            .arg("nexus:drift")
-            .query_async::<_, Option<u64>>(&mut conn)
-            .await
-            .map_err(|e| Status::internal(format!("Redis error in GetMetrics (drift): {e}")))?
-            .unwrap_or(0);
+        let (safety_mode, drift) = self.read_safety_flags("GetMetrics").await?;
 
         Ok(Response::new(MetricsResponse {
             total_transactions: tx_count as u64,
