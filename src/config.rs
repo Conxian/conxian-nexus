@@ -42,7 +42,10 @@ impl Config {
 
                 trimmed.to_string()
             }
-            Err(_) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            Err(env::VarError::NotPresent) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            Err(env::VarError::NotUnicode(_)) => {
+                anyhow::bail!("STACKS_NODE_RPC_URL must be valid unicode");
+            }
         };
 
         Ok(Self {
