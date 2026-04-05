@@ -105,14 +105,18 @@ impl NexusService for NexusGrpcService {
         )
         .fetch_one(&self.storage.pg_pool)
         .await
-        .map_err(|e| Status::internal(format!("Database error in GetMetrics (tx_count): {e}")))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
+            Status::internal("Database error in GetMetrics (tx_count)")
+        })?;
 
         let block_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
                 .fetch_one(&self.storage.pg_pool)
                 .await
                 .map_err(|e| {
-                    Status::internal(format!("Database error in GetMetrics (block_count): {e}"))
+                    tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
+                    Status::internal("Database error in GetMetrics (block_count)")
                 })?;
 
         let mut conn = self
