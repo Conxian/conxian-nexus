@@ -1,5 +1,7 @@
 use std::env;
 
+const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -31,6 +33,18 @@ impl Config {
             )
         }
 
+        let stacks_node_rpc_url = match env::var("STACKS_NODE_RPC_URL") {
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    anyhow::bail!("STACKS_NODE_RPC_URL cannot be empty");
+                }
+
+                trimmed.to_string()
+            }
+            Err(_) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+        };
+
         Ok(Self {
             database_url: env::var("DATABASE_URL").context("Missing env var: DATABASE_URL")?,
             redis_url: env::var("REDIS_URL").context("Missing env var: REDIS_URL")?,
@@ -43,8 +57,7 @@ impl Config {
                 .parse()
                 .context("Invalid GRPC_PORT (expected u16)")?,
             log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
-            stacks_node_rpc_url: env::var("STACKS_NODE_RPC_URL")
-                .context("Missing env var: STACKS_NODE_RPC_URL")?,
+            stacks_node_rpc_url,
             gateway_url: env::var("GATEWAY_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
