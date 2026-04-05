@@ -13,6 +13,7 @@ pub struct Config {
     pub gateway_url: Option<String>,
     pub experimental_apis_enabled: bool,
     pub oracle_enabled: bool,
+    pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
 }
@@ -64,6 +65,7 @@ impl Config {
                 .filter(|s| !s.is_empty()),
             experimental_apis_enabled: env_flag("NEXUS_EXPERIMENTAL_APIS"),
             oracle_enabled: env_flag("NEXUS_ORACLE_ENABLED"),
+            oracle_stub_ok: env_flag("NEXUS_ORACLE_STUB_OK"),
             oracle_endpoint_url: env::var("ORACLE_ENDPOINT_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
