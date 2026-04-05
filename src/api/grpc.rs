@@ -2,6 +2,7 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::state::NexusState;
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
+use sqlx::Row;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
@@ -56,12 +57,40 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<StatusRequest>,
     ) -> Result<Response<StatusResponse>, Status> {
+        let row = sqlx::query(
+            "SELECT MAX(height) as max_height FROM stacks_blocks WHERE state != 'orphaned'",
+        )
+        .fetch_one(&self.storage.pg_pool)
+        .await
+        .map_err(|e| Status::internal(format!("Database error in GetStatus: {e}")))?;
+
+        let processed_height: Option<i64> = row.get("max_height");
+
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| Status::internal(format!("Redis error in GetStatus: {e}")))?;
+
+        let safety_mode: bool = redis::cmd("GET")
+            .arg("nexus:safety_mode")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(false);
+
+        let drift: u64 = redis::cmd("GET")
+            .arg("nexus:drift")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(0);
+
         Ok(Response::new(StatusResponse {
             state_root: self.nexus_state.get_state_root(),
             mmr_root: self.nexus_state.get_mmr_root(),
-            processed_height: 0,
-            safety_mode: false,
-            drift: 0,
+            processed_height: processed_height.unwrap_or(0) as u64,
+            safety_mode,
+            drift,
         }))
     }
 
@@ -69,11 +98,43 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<MetricsRequest>,
     ) -> Result<Response<MetricsResponse>, Status> {
+        let tx_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned'")
+            .fetch_one(&self.storage.pg_pool)
+            .await
+            .map(|r| r.get(0))
+            .unwrap_or(0);
+
+        let block_count: i64 =
+            sqlx::query("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
+                .fetch_one(&self.storage.pg_pool)
+                .await
+                .map(|r| r.get(0))
+                .unwrap_or(0);
+
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+            .map_err(|e| Status::internal(format!("Redis error in GetMetrics: {e}")))?;
+
+        let safety_mode: bool = redis::cmd("GET")
+            .arg("nexus:safety_mode")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(false);
+
+        let drift: u64 = redis::cmd("GET")
+            .arg("nexus:drift")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(0);
+
         Ok(Response::new(MetricsResponse {
-            total_transactions: 0,
-            total_blocks: 0,
-            safety_mode: false,
-            drift: 0,
+            total_transactions: tx_count as u64,
+            total_blocks: block_count as u64,
+            safety_mode,
+            drift,
             uptime_seconds: crate::api::get_uptime(),
         }))
     }
