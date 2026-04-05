@@ -20,7 +20,7 @@ pub struct NexusGrpcService {
 }
 
 impl NexusGrpcService {
-    async fn read_safety_flags(&self, context: &'static str) -> Result<(bool, u64), Status> {
+    async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
         let mut conn = self
             .storage
             .redis_client
