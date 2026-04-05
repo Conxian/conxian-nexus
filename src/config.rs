@@ -8,28 +8,57 @@ pub struct Config {
     pub grpc_port: u16,
     pub log_level: String,
     pub stacks_node_rpc_url: String,
-    pub gateway_url: String,
+    pub gateway_url: Option<String>,
+    pub experimental_apis_enabled: bool,
+    pub oracle_enabled: bool,
+    pub oracle_endpoint_url: Option<String>,
+    pub oracle_contract_principal: Option<String>,
 }
 
 impl Config {
-    pub fn from_env() -> Self {
-        Self {
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://localhost/nexus".to_string()),
-            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string()),
+    pub fn from_env() -> anyhow::Result<Self> {
+        use anyhow::Context;
+
+        fn env_flag(key: &str) -> bool {
+            let value = match env::var(key) {
+                Ok(v) => v,
+                Err(_) => return false,
+            };
+
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        }
+
+        Ok(Self {
+            database_url: env::var("DATABASE_URL").context("Missing env var: DATABASE_URL")?,
+            redis_url: env::var("REDIS_URL").context("Missing env var: REDIS_URL")?,
             rest_port: env::var("REST_PORT")
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()
-                .unwrap_or(3000),
+                .context("Invalid REST_PORT (expected u16)")?,
             grpc_port: env::var("GRPC_PORT")
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
-                .unwrap_or(50051),
+                .context("Invalid GRPC_PORT (expected u16)")?,
             log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
             stacks_node_rpc_url: env::var("STACKS_NODE_RPC_URL")
-                .unwrap_or_else(|_| "https://api.mainnet.hiro.so".to_string()),
+                .context("Missing env var: STACKS_NODE_RPC_URL")?,
             gateway_url: env::var("GATEWAY_URL")
-                .unwrap_or_else(|_| "http://localhost:8080".to_string()),
-        }
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            experimental_apis_enabled: env_flag("NEXUS_EXPERIMENTAL_APIS"),
+            oracle_enabled: env_flag("NEXUS_ORACLE_ENABLED"),
+            oracle_endpoint_url: env::var("ORACLE_ENDPOINT_URL")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+            oracle_contract_principal: env::var("ORACLE_CONTRACT_PRINCIPAL")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
+        })
     }
 }

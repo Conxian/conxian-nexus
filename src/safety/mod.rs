@@ -15,13 +15,13 @@ pub struct NexusSafety {
     storage: Arc<Storage>,
     max_drift: u64,
     rpc_url: String,
-    gateway_url: String,
+    gateway_url: Option<String>,
     http_client: Client,
 }
 
 impl NexusSafety {
     /// Creates a new safety monitor with a default max drift of 2 blocks.
-    pub fn new(storage: Arc<Storage>, rpc_url: String, gateway_url: String) -> Self {
+    pub fn new(storage: Arc<Storage>, rpc_url: String, gateway_url: Option<String>) -> Self {
         Self {
             storage,
             max_drift: 2,
@@ -34,11 +34,15 @@ impl NexusSafety {
     /// Runs the heartbeat monitor loop.
     pub async fn run_heartbeat(&self) -> anyhow::Result<()> {
         let mut interval = time::interval(Duration::from_secs(10));
+        let gateway_note = self
+            .gateway_url
+            .as_deref()
+            .unwrap_or("(disabled; set GATEWAY_URL to enable)");
         tracing::info!(
             "Starting NexusSafety heartbeat (max_drift: {} blocks, RPC: {}, Gateway: {})...",
             self.max_drift,
             self.rpc_url,
-            self.gateway_url
+            gateway_note
         );
 
         loop {
@@ -46,15 +50,23 @@ impl NexusSafety {
             if let Err(e) = self.check_health().await {
                 tracing::error!("Safety heartbeat error: {}", e);
             }
-            if let Err(e) = self.ingest_gateway_telemetry().await {
-                tracing::error!("Gateway telemetry ingestion error: {}", e);
+
+            if self.gateway_url.is_some() {
+                if let Err(e) = self.ingest_gateway_telemetry().await {
+                    tracing::error!("Gateway telemetry ingestion error: {}", e);
+                }
             }
         }
     }
 
     /// Ingests telemetry from the Gateway and triggers safety mode if failure rates spike.
     async fn ingest_gateway_telemetry(&self) -> anyhow::Result<()> {
-        let url = format!("{}/api/v1/state", self.gateway_url);
+        let gateway_url = match self.gateway_url.as_deref() {
+            Some(url) => url,
+            None => return Ok(()),
+        };
+
+        let url = format!("{}/api/v1/state", gateway_url);
         let resp = self.http_client.get(&url).send().await?;
 
         if !resp.status().is_success() {

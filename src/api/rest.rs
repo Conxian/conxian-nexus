@@ -102,7 +102,19 @@ pub fn app_router(
         executor,
     };
 
-    Router::new()
+    fn env_flag(key: &str) -> bool {
+        let value = match std::env::var(key) {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    }
+
+    let mut router = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
@@ -111,20 +123,26 @@ pub fn app_router(
         .route("/metrics", get(prometheus_metrics))
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
-        .route("/health", get(health_check))
-        .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
-        .route(
-            "/v1/zkml/verify",
-            post(crate::api::zkml::verify_zkml_handler),
-        )
-        .route(
-            "/v1/identity/resolve",
-            post(crate::api::identity::resolve_identity_handler),
-        )
-        .route(
-            "/v1/dlc/create-bond",
-            post(crate::api::dlc::create_dlc_bond_handler),
-        )
+        .route("/health", get(health_check));
+
+    if env_flag("NEXUS_EXPERIMENTAL_APIS") {
+        router = router
+            .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
+            .route(
+                "/v1/zkml/verify",
+                post(crate::api::zkml::verify_zkml_handler),
+            )
+            .route(
+                "/v1/identity/resolve",
+                post(crate::api::identity::resolve_identity_handler),
+            )
+            .route(
+                "/v1/dlc/create-bond",
+                post(crate::api::dlc::create_dlc_bond_handler),
+            );
+    }
+
+    router
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .with_state(state)
 }

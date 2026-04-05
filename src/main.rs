@@ -6,6 +6,7 @@ use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
+use std::future;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
@@ -15,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
 
-    let config = Config::from_env();
+    let config = Config::from_env()?;
 
     // Initialize logging
     tracing_subscriber::fmt()
@@ -51,10 +52,6 @@ async fn main() -> anyhow::Result<()> {
         config.stacks_node_rpc_url.clone(),
         config.gateway_url.clone(),
     ));
-    let oracle_service = Arc::new(OracleService::new(
-        storage.clone(),
-        "https://api.exchangerate-api.com/v4/latest/USD".to_string(),
-    ));
 
     // Load Initial State from DB
     sync_service.load_initial_state().await?;
@@ -80,13 +77,40 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Spawn Oracle Service
-    let oracle_handle = {
+    let oracle_handle = if config.oracle_enabled {
+        use anyhow::Context;
+
+        let endpoint_url = config
+            .oracle_endpoint_url
+            .clone()
+            .context("NEXUS_ORACLE_ENABLED=1 requires ORACLE_ENDPOINT_URL")?;
+        let contract_principal = config
+            .oracle_contract_principal
+            .clone()
+            .context("NEXUS_ORACLE_ENABLED=1 requires ORACLE_CONTRACT_PRINCIPAL")?;
+
+        let oracle_service = Arc::new(OracleService::new(
+            storage.clone(),
+            endpoint_url,
+            contract_principal,
+        ));
+
         let oracle = oracle_service.clone();
-        tokio::spawn(async move {
+        Some(tokio::spawn(async move {
             if let Err(e) = oracle.run().await {
                 tracing::error!("Oracle service failed: {}", e);
             }
-        })
+        }))
+    } else {
+        tracing::info!("OracleService disabled (set NEXUS_ORACLE_ENABLED=1 to enable)");
+        None
+    };
+
+    let oracle_join = async move {
+        match oracle_handle {
+            Some(handle) => handle.await,
+            None => future::pending::<Result<(), tokio::task::JoinError>>().await,
+        }
     };
 
     // Spawn Rebalance Background Task
@@ -141,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
         _ = shutdown => tracing::info!("Shutting down..."),
         res = sync_handle => tracing::error!("Sync service exited: {:?}", res),
         res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
-        res = oracle_handle => tracing::error!("Oracle service exited: {:?}", res),
+        res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),

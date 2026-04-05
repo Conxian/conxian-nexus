@@ -19,10 +19,11 @@ struct ExchangeRateResponse {
 pub struct OracleStub {
     client: Client,
     endpoint_urls: Vec<String>,
+    contract_principal: String,
 }
 
 impl OracleStub {
-    pub fn new(endpoint_url: String) -> Self {
+    pub fn new(endpoint_url: String, contract_principal: String) -> Self {
         Self {
             client: Client::new(),
             endpoint_urls: vec![
@@ -30,6 +31,7 @@ impl OracleStub {
                 "https://open.er-api.com/v6/latest/USD".to_string(),
                 "https://api.exchangerate.host/latest?base=USD".to_string(),
             ],
+            contract_principal,
         }
     }
 
@@ -106,7 +108,7 @@ impl OracleStub {
 
         let signed_call = ContractBridge::create_signed_call(
             &wallet,
-            "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.oracle-v1",
+            &self.contract_principal,
             "update-fx-rates",
             vec![state_json],
         );

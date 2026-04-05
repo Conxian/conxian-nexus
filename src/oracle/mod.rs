@@ -11,10 +11,10 @@ pub struct OracleService {
 }
 
 impl OracleService {
-    pub fn new(storage: Arc<Storage>, endpoint_url: String) -> Self {
+    pub fn new(storage: Arc<Storage>, endpoint_url: String, contract_principal: String) -> Self {
         Self {
             storage,
-            stub: OracleStub::new(endpoint_url),
+            stub: OracleStub::new(endpoint_url, contract_principal),
         }
     }
 
