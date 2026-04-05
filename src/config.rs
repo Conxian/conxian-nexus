@@ -43,11 +43,19 @@ impl Config {
                 .parse()
                 .context("Invalid GRPC_PORT (expected u16)")?,
             log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
-            stacks_node_rpc_url: env::var("STACKS_NODE_RPC_URL")
+            stacks_node_rpc_url: match env::var("STACKS_NODE_RPC_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string()),
+            {
+                Some(url) => url,
+                None => {
+                    eprintln!(
+                        "WARN: STACKS_NODE_RPC_URL not set or empty; defaulting to https://api.mainnet.hiro.so"
+                    );
+                    "https://api.mainnet.hiro.so".to_string()
+                }
+            },
             gateway_url: env::var("GATEWAY_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
