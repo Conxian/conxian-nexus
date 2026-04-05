@@ -98,18 +98,22 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<MetricsRequest>,
     ) -> Result<Response<MetricsResponse>, Status> {
-        let tx_count: i64 = sqlx::query("SELECT COUNT(*) FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned'")
-            .fetch_one(&self.storage.pg_pool)
-            .await
-            .map(|r| r.get(0))
-            .unwrap_or(0);
+        let tx_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM stacks_transactions t \
+             JOIN stacks_blocks b ON t.block_hash = b.hash \
+             WHERE b.state != 'orphaned'",
+        )
+        .fetch_one(&self.storage.pg_pool)
+        .await
+        .map_err(|e| Status::internal(format!("Database error in GetMetrics (tx_count): {e}")))?;
 
         let block_count: i64 =
-            sqlx::query("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
                 .fetch_one(&self.storage.pg_pool)
                 .await
-                .map(|r| r.get(0))
-                .unwrap_or(0);
+                .map_err(|e| {
+                    Status::internal(format!("Database error in GetMetrics (block_count): {e}"))
+                })?;
 
         let mut conn = self
             .storage
