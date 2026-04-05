@@ -16,12 +16,11 @@ async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
 
-    let config = Config::from_env()?;
-
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(&config.log_level)
-        .init();
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    tracing_subscriber::fmt().with_env_filter(&log_level).init();
+
+    let config = Config::from_env()?;
 
     tracing::info!("Initializing Conxian Nexus (Glass Node)...");
 

@@ -50,8 +50,8 @@ impl Config {
             {
                 Some(url) => url,
                 None => {
-                    eprintln!(
-                        "WARN: STACKS_NODE_RPC_URL not set or empty; defaulting to https://api.mainnet.hiro.so"
+                    tracing::warn!(
+                        "STACKS_NODE_RPC_URL not set or empty; defaulting to https://api.mainnet.hiro.so"
                     );
                     "https://api.mainnet.hiro.so".to_string()
                 }
