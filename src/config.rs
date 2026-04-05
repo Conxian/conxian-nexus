@@ -46,6 +46,16 @@ impl Config {
             Err(_) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
         };
 
+        let experimental_apis_enabled = env_flag("NEXUS_EXPERIMENTAL_APIS");
+        let oracle_enabled = env_flag("NEXUS_ORACLE_ENABLED");
+        let oracle_stub_ok = env_flag("NEXUS_ORACLE_STUB_OK");
+
+        if oracle_enabled && !oracle_stub_ok {
+            anyhow::bail!(
+                "NEXUS_ORACLE_ENABLED is blocked because OracleService is still stubbed. For dev/test only, also set NEXUS_ORACLE_STUB_OK."
+            );
+        }
+
         Ok(Self {
             database_url: env::var("DATABASE_URL").context("Missing env var: DATABASE_URL")?,
             redis_url: env::var("REDIS_URL").context("Missing env var: REDIS_URL")?,
@@ -63,9 +73,9 @@ impl Config {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
-            experimental_apis_enabled: env_flag("NEXUS_EXPERIMENTAL_APIS"),
-            oracle_enabled: env_flag("NEXUS_ORACLE_ENABLED"),
-            oracle_stub_ok: env_flag("NEXUS_ORACLE_STUB_OK"),
+            experimental_apis_enabled,
+            oracle_enabled,
+            oracle_stub_ok,
             oracle_endpoint_url: env::var("ORACLE_ENDPOINT_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
