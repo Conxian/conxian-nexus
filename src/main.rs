@@ -80,6 +80,12 @@ async fn main() -> anyhow::Result<()> {
     let oracle_handle = if config.oracle_enabled {
         use anyhow::Context;
 
+        if !config.oracle_stub_ok {
+            return Err(anyhow::anyhow!(
+                "NEXUS_ORACLE_ENABLED=1 is blocked because OracleService is still stubbed. For dev/test only, also set NEXUS_ORACLE_STUB_OK=1."
+            ));
+        }
+
         let endpoint_url = config
             .oracle_endpoint_url
             .clone()
