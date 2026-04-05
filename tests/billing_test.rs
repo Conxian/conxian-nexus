@@ -3,6 +3,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
+use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
@@ -13,11 +14,24 @@ use tower::ServiceExt;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     dotenvy::dotenv().ok();
-    let storage = Arc::new(Storage::new().await.expect("Failed to create storage"));
+    let config = Config::from_env().expect("Failed to load config");
+    let storage = Arc::new(
+        Storage::from_config(&config)
+            .await
+            .expect("Failed to create storage"),
+    );
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
-    (app_router(storage.clone(), nexus_state, executor), storage)
+    (
+        app_router(
+            storage.clone(),
+            nexus_state,
+            executor,
+            config.experimental_apis_enabled,
+        ),
+        storage,
+    )
 }
 
 #[tokio::test]

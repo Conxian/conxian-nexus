@@ -2,7 +2,6 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::state::NexusState;
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
@@ -57,14 +56,13 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<StatusRequest>,
     ) -> Result<Response<StatusResponse>, Status> {
-        let row = sqlx::query(
-            "SELECT MAX(height) as max_height FROM stacks_blocks WHERE state != 'orphaned'",
-        )
-        .fetch_one(&self.storage.pg_pool)
-        .await
-        .map_err(|e| Status::internal(format!("Database error in GetStatus: {e}")))?;
+        let max_height: Option<i64> =
+            sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
+                .fetch_one(&self.storage.pg_pool)
+                .await
+                .map_err(|e| Status::internal(format!("Database error in GetStatus: {e}")))?;
 
-        let processed_height: Option<i64> = row.get("max_height");
+        let processed_height: u64 = max_height.unwrap_or(0).max(0) as u64;
 
         let mut conn = self
             .storage
@@ -75,20 +73,22 @@ impl NexusService for NexusGrpcService {
 
         let safety_mode: bool = redis::cmd("GET")
             .arg("nexus:safety_mode")
-            .query_async(&mut conn)
+            .query_async::<_, Option<bool>>(&mut conn)
             .await
+            .map_err(|e| Status::internal(format!("Redis error in GetStatus (safety_mode): {e}")))?
             .unwrap_or(false);
 
         let drift: u64 = redis::cmd("GET")
             .arg("nexus:drift")
-            .query_async(&mut conn)
+            .query_async::<_, Option<u64>>(&mut conn)
             .await
+            .map_err(|e| Status::internal(format!("Redis error in GetStatus (drift): {e}")))?
             .unwrap_or(0);
 
         Ok(Response::new(StatusResponse {
             state_root: self.nexus_state.get_state_root(),
             mmr_root: self.nexus_state.get_mmr_root(),
-            processed_height: processed_height.unwrap_or(0) as u64,
+            processed_height,
             safety_mode,
             drift,
         }))
@@ -128,14 +128,16 @@ impl NexusService for NexusGrpcService {
 
         let safety_mode: bool = redis::cmd("GET")
             .arg("nexus:safety_mode")
-            .query_async(&mut conn)
+            .query_async::<_, Option<bool>>(&mut conn)
             .await
+            .map_err(|e| Status::internal(format!("Redis error in GetMetrics (safety_mode): {e}")))?
             .unwrap_or(false);
 
         let drift: u64 = redis::cmd("GET")
             .arg("nexus:drift")
-            .query_async(&mut conn)
+            .query_async::<_, Option<u64>>(&mut conn)
             .await
+            .map_err(|e| Status::internal(format!("Redis error in GetMetrics (drift): {e}")))?
             .unwrap_or(0);
 
         Ok(Response::new(MetricsResponse {

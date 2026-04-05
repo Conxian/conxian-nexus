@@ -95,24 +95,13 @@ pub fn app_router(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
+    experimental_apis_enabled: bool,
 ) -> Router {
     let state = AppState {
         storage,
         nexus_state,
         executor,
     };
-
-    fn env_flag(key: &str) -> bool {
-        let value = match std::env::var(key) {
-            Ok(v) => v,
-            Err(_) => return false,
-        };
-
-        matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "yes" | "on"
-        )
-    }
 
     let mut router = Router::new()
         .route("/v1/proof", get(get_proof))
@@ -125,7 +114,7 @@ pub fn app_router(
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check));
 
-    if env_flag("NEXUS_EXPERIMENTAL_APIS") {
+    if experimental_apis_enabled {
         router = router
             .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
             .route(
@@ -152,8 +141,9 @@ pub async fn start_rest_server(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     port: u16,
+    experimental_apis_enabled: bool,
 ) -> anyhow::Result<()> {
-    let app = app_router(storage, nexus_state, executor);
+    let app = app_router(storage, nexus_state, executor, experimental_apis_enabled);
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("REST server listening on {}", listener.local_addr()?);

@@ -1,6 +1,6 @@
+use crate::config::Config;
 use redis::Client as RedisClient;
 use sqlx::postgres::PgPool;
-use std::env;
 
 pub struct Storage {
     pub pg_pool: PgPool,
@@ -8,12 +8,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub async fn new() -> anyhow::Result<Self> {
-        use anyhow::Context;
-
-        let database_url = env::var("DATABASE_URL").context("Missing env var: DATABASE_URL")?;
-        let redis_url = env::var("REDIS_URL").context("Missing env var: REDIS_URL")?;
-
+    pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
         let pg_pool = PgPool::connect(&database_url).await?;
         let redis_client = RedisClient::open(redis_url)?;
 
@@ -21,6 +16,10 @@ impl Storage {
             pg_pool,
             redis_client,
         })
+    }
+
+    pub async fn from_config(config: &Config) -> anyhow::Result<Self> {
+        Self::new(&config.database_url, &config.redis_url).await
     }
 
     pub fn new_lazy(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
@@ -31,6 +30,10 @@ impl Storage {
             pg_pool,
             redis_client,
         })
+    }
+
+    pub fn from_config_lazy(config: &Config) -> anyhow::Result<Self> {
+        Self::new_lazy(&config.database_url, &config.redis_url)
     }
 
     /// Run database migrations

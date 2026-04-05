@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
     api::init_start_time();
 
     // Initialize Storage
-    let storage = Arc::new(Storage::new().await?);
+    let storage = Arc::new(Storage::from_config(&config).await?);
 
     // Run Database Migrations
     tracing::info!("Running database migrations...");
@@ -130,9 +130,16 @@ async fn main() -> anyhow::Result<()> {
     let rest_state = state_tracker.clone();
     let rest_executor = executor.clone();
     let rest_port = config.rest_port;
+    let experimental_apis_enabled = config.experimental_apis_enabled;
     let rest_handle = tokio::spawn(async move {
-        if let Err(e) =
-            api::rest::start_rest_server(rest_storage, rest_state, rest_executor, rest_port).await
+        if let Err(e) = api::rest::start_rest_server(
+            rest_storage,
+            rest_state,
+            rest_executor,
+            rest_port,
+            experimental_apis_enabled,
+        )
+        .await
         {
             tracing::error!("REST API server failed: {}", e);
         }
