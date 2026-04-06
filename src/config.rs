@@ -1,6 +1,7 @@
 use std::env;
 
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
+// CON-394: Remove or flip this once the real OracleService is implemented.
 const ORACLE_SERVICE_IS_STUBBED: bool = true;
 
 #[derive(Debug, Clone)]
