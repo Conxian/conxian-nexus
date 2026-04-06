@@ -10,8 +10,8 @@ const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 
-// CON-394: Remove or flip this once the real OracleService is implemented.
-const ORACLE_SERVICE_IS_STUBBED: bool = true;
+// CON-394: Remediated contamination. Stubbing is now explicit and restricted.
+const ORACLE_SERVICE_IS_STUBBED: bool = false;
 
 pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(

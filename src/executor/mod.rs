@@ -106,7 +106,7 @@ impl NexusExecutor {
         );
         tracing::debug!("Mapping revenue for customer: {}", customer_id);
 
-        // [STUB] Update ARR/MRR/Churn metrics in Supabase/Redis.
+        // Update volume metrics in Redis for revenue tracking.
         if let Ok(mut conn) = self
             .storage
             .redis_client
