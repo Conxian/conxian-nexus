@@ -1,7 +1,5 @@
 use conxian_nexus::api;
-use conxian_nexus::config::{
-    Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
-};
+use conxian_nexus::config::{Config, ENV_ORACLE_ENABLED};
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
