@@ -32,8 +32,9 @@ impl Config {
         }
 
         Ok(Self {
-            database_url: env::var("DATABASE_URL").context("Missing env var: DATABASE_URL")?,
-            redis_url: env::var("REDIS_URL").context("Missing env var: REDIS_URL")?,
+            database_url: env::var("DATABASE_URL")
+                .unwrap_or_else(|_| "postgres://localhost/nexus".to_string()),
+            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string()),
             rest_port: env::var("REST_PORT")
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()
