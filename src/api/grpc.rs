@@ -4,7 +4,7 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Notify};
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
 // Proto generated code
@@ -26,22 +26,16 @@ const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
 
 struct MetricsCountsCacheState {
     value: Option<(Instant, u64, u64)>,
-    refreshing: bool,
 }
 
 struct MetricsCountsCache {
     state: Mutex<MetricsCountsCacheState>,
-    notify: Notify,
 }
 
 impl MetricsCountsCache {
     fn new() -> Self {
         Self {
-            state: Mutex::new(MetricsCountsCacheState {
-                value: None,
-                refreshing: false,
-            }),
-            notify: Notify::new(),
+            state: Mutex::new(MetricsCountsCacheState { value: None }),
         }
     }
 }
@@ -73,48 +67,19 @@ impl NexusGrpcService {
     }
 
     async fn read_cached_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        loop {
-            let notified = {
-                let mut cache_guard = self.metrics_counts_cache.state.lock().await;
-
-                if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
-                    if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
-                        return Ok((cached_tx_count, cached_block_count));
-                    }
-                }
-
-                if cache_guard.refreshing {
-                    Some(self.metrics_counts_cache.notify.notified())
-                } else {
-                    cache_guard.refreshing = true;
-                    None
-                }
-            };
-
-            if let Some(notified) = notified {
-                notified.await;
-                continue;
-            }
-
-            let refreshed_counts = self.fetch_metrics_counts().await;
-
-            let mut cache_guard = self.metrics_counts_cache.state.lock().await;
-            cache_guard.refreshing = false;
-
-            match refreshed_counts {
-                Ok((tx_count, block_count)) => {
-                    cache_guard.value = Some((Instant::now(), tx_count, block_count));
-                    drop(cache_guard);
-                    self.metrics_counts_cache.notify.notify_waiters();
-                    return Ok((tx_count, block_count));
-                }
-                Err(status) => {
-                    drop(cache_guard);
-                    self.metrics_counts_cache.notify.notify_waiters();
-                    return Err(status);
+        {
+            let cache_guard = self.metrics_counts_cache.state.lock().await;
+            if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
+                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                    return Ok((cached_tx_count, cached_block_count));
                 }
             }
         }
+
+        let (tx_count, block_count) = self.fetch_metrics_counts().await?;
+        let mut cache_guard = self.metrics_counts_cache.state.lock().await;
+        cache_guard.value = Some((Instant::now(), tx_count, block_count));
+        Ok((tx_count, block_count))
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
