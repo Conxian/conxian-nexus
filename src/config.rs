@@ -38,13 +38,17 @@ impl Config {
         let stacks_node_rpc_url = match env::var("STACKS_NODE_RPC_URL") {
             Ok(raw) => {
                 let trimmed = raw.trim();
+                // Treat empty/whitespace as "not set" so we fall back to the default URL.
                 if trimmed.is_empty() {
-                    anyhow::bail!("STACKS_NODE_RPC_URL cannot be empty");
+                    DEFAULT_STACKS_NODE_RPC_URL.to_string()
+                } else {
+                    trimmed.to_string()
                 }
-
-                trimmed.to_string()
             }
-            Err(_) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            Err(env::VarError::NotPresent) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            Err(env::VarError::NotUnicode(_)) => {
+                anyhow::bail!("STACKS_NODE_RPC_URL must be valid unicode");
+            }
         };
 
         let experimental_apis_enabled = env_flag("NEXUS_EXPERIMENTAL_APIS");
