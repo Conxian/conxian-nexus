@@ -110,24 +110,19 @@ impl NexusGrpcService {
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let (safety_raw, drift_raw): (Option<String>, Option<String>) = {
-            let mut conn_guard = conn.lock().await;
-            redis::pipe()
-                .cmd("GET")
-                .arg("nexus:safety_mode")
-                .cmd("GET")
-                .arg("nexus:drift")
-                .query_async(&mut *conn_guard)
-                .await
-                .map_err(|e| {
-                    tracing::error!(
-                        error = %e,
-                        context,
-                        "Redis error reading safety flags (pipeline)"
-                    );
-                    Status::internal("Redis error reading safety flags")
-                })?
-        };
+        let mut conn = { conn.lock().await.clone() };
+
+        let (safety_raw, drift_raw): (Option<String>, Option<String>) = redis::pipe()
+            .cmd("GET")
+            .arg("nexus:safety_mode")
+            .cmd("GET")
+            .arg("nexus:drift")
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
+                Status::internal("Redis error reading safety flags")
+            })?;
 
         let safety_mode: bool = match safety_raw.as_deref() {
             None => false,
