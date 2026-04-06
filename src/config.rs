@@ -37,10 +37,10 @@ impl Config {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
-                    anyhow::bail!("STACKS_NODE_RPC_URL cannot be empty");
+                    DEFAULT_STACKS_NODE_RPC_URL.to_string()
+                } else {
+                    trimmed.to_string()
                 }
-
-                trimmed.to_string()
             }
             Err(env::VarError::NotPresent) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
             Err(env::VarError::NotUnicode(_)) => {
