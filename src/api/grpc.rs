@@ -107,19 +107,59 @@ impl NexusGrpcService {
             }
         };
 
-        let (safety_raw, drift_raw): (Option<String>, Option<String>) = match redis::pipe()
-            .cmd("GET")
-            .arg("nexus:safety_mode")
-            .cmd("GET")
-            .arg("nexus:drift")
-            .query_async(&mut conn)
-            .await
-        {
+        let pipeline_result: Result<(Option<String>, Option<String>), redis::RedisError> =
+            redis::pipe()
+                .cmd("GET")
+                .arg("nexus:safety_mode")
+                .cmd("GET")
+                .arg("nexus:drift")
+                .query_async(&mut conn)
+                .await;
+
+        let (safety_raw, drift_raw): (Option<String>, Option<String>) = match pipeline_result {
             Ok(result) => result,
             Err(e) => {
                 *self.redis_conn.lock().await = None;
-                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
-                return Err(Status::internal("Redis error reading safety flags"));
+                tracing::warn!(
+                    error = %e,
+                    context,
+                    "Redis error reading safety flags (pipeline); retrying once"
+                );
+
+                let mut conn = redis_client
+                    .get_multiplexed_async_connection()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (connect)"
+                        );
+                        Status::internal("Redis error reading safety flags")
+                    })?;
+
+                match redis::pipe()
+                    .cmd("GET")
+                    .arg("nexus:safety_mode")
+                    .cmd("GET")
+                    .arg("nexus:drift")
+                    .query_async(&mut conn)
+                    .await
+                {
+                    Ok(result) => {
+                        *self.redis_conn.lock().await = Some(conn.clone());
+                        result
+                    }
+                    Err(e) => {
+                        *self.redis_conn.lock().await = None;
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (pipeline)"
+                        );
+                        return Err(Status::internal("Redis error reading safety flags"));
+                    }
+                }
             }
         };
 
