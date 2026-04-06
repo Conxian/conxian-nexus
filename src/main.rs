@@ -102,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
-        tracing::info!("OracleService disabled (set NEXUS_ORACLE_ENABLED=1 to enable)");
+        tracing::info!("OracleService disabled (set NEXUS_ORACLE_ENABLED=1 (or true/yes/on) to enable)");
         None
     };
 
