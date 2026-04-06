@@ -44,22 +44,43 @@ impl Config {
         }
 
         let database_url = match env::var("DATABASE_URL") {
-            Ok(v) => v,
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    tracing::warn!(
+                        default = DEFAULT_DATABASE_URL,
+                        "DATABASE_URL set but empty; defaulting"
+                    );
+                    DEFAULT_DATABASE_URL.to_string()
+                } else {
+                    trimmed.to_string()
+                }
+            }
             Err(e) => {
                 tracing::warn!(
                     error = ?e,
-                    "DATABASE_URL not set or invalid; defaulting to postgres://localhost/nexus"
+                    default = DEFAULT_DATABASE_URL,
+                    "DATABASE_URL not set or invalid; defaulting"
                 );
                 DEFAULT_DATABASE_URL.to_string()
             }
         };
 
         let redis_url = match env::var("REDIS_URL") {
-            Ok(v) => v,
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL set but empty; defaulting");
+                    DEFAULT_REDIS_URL.to_string()
+                } else {
+                    trimmed.to_string()
+                }
+            }
             Err(e) => {
                 tracing::warn!(
                     error = ?e,
-                    "REDIS_URL not set or invalid; defaulting to redis://127.0.0.1/"
+                    default = DEFAULT_REDIS_URL,
+                    "REDIS_URL not set or invalid; defaulting"
                 );
                 DEFAULT_REDIS_URL.to_string()
             }
