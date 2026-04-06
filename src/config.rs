@@ -5,7 +5,7 @@ pub const ENV_ORACLE_ENABLED: &str = "NEXUS_ORACLE_ENABLED";
 pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
 
-pub fn parse_flag(value: &str) -> bool {
+pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
@@ -31,7 +31,10 @@ impl Config {
         use anyhow::Context;
 
         fn env_flag(key: &str) -> bool {
-            env::var(key).ok().is_some_and(|v| parse_flag(&v))
+            env::var(key)
+                .ok()
+                .map(|v| parse_flag(&v))
+                .unwrap_or(false)
         }
 
         Ok(Self {
