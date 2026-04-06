@@ -44,6 +44,17 @@ impl MetricsCountsCache {
 }
 
 impl NexusGrpcService {
+    async fn read_fresh_cached_metrics_counts(&self) -> Option<(u64, u64)> {
+        let cache_guard = self.metrics_counts_cache.state.lock().await;
+        if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
+            if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                return Some((cached_tx_count, cached_block_count));
+            }
+        }
+
+        None
+    }
+
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
         let tx_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM stacks_transactions t \
@@ -70,24 +81,14 @@ impl NexusGrpcService {
     }
 
     async fn read_cached_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        {
-            let cache_guard = self.metrics_counts_cache.state.lock().await;
-            if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
-                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
-                    return Ok((cached_tx_count, cached_block_count));
-                }
-            }
+        if let Some(counts) = self.read_fresh_cached_metrics_counts().await {
+            return Ok(counts);
         }
 
         let _refresh_guard = self.metrics_counts_cache.refresh_lock.lock().await;
 
-        {
-            let cache_guard = self.metrics_counts_cache.state.lock().await;
-            if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
-                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
-                    return Ok((cached_tx_count, cached_block_count));
-                }
-            }
+        if let Some(counts) = self.read_fresh_cached_metrics_counts().await {
+            return Ok(counts);
         }
 
         let (tx_count, block_count) = self.fetch_metrics_counts().await?;
