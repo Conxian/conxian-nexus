@@ -1,5 +1,17 @@
 use std::env;
 
+pub const ENV_EXPERIMENTAL_APIS: &str = "NEXUS_EXPERIMENTAL_APIS";
+pub const ENV_ORACLE_ENABLED: &str = "NEXUS_ORACLE_ENABLED";
+pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
+pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
+
+pub fn parse_flag(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "1" | "true" | "yes" | "on"
+    )
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -20,15 +32,7 @@ impl Config {
         use anyhow::Context;
 
         fn env_flag(key: &str) -> bool {
-            let value = match env::var(key) {
-                Ok(v) => v,
-                Err(_) => return false,
-            };
-
-            matches!(
-                value.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
+            env::var(key).ok().is_some_and(|v| parse_flag(&v))
         }
 
         Ok(Self {
@@ -74,13 +78,13 @@ impl Config {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
-            experimental_apis_enabled: env_flag("NEXUS_EXPERIMENTAL_APIS"),
-            oracle_enabled: env_flag("NEXUS_ORACLE_ENABLED"),
-            oracle_endpoint_url: env::var("ORACLE_ENDPOINT_URL")
+            experimental_apis_enabled: env_flag(ENV_EXPERIMENTAL_APIS),
+            oracle_enabled: env_flag(ENV_ORACLE_ENABLED),
+            oracle_endpoint_url: env::var(ENV_ORACLE_ENDPOINT_URL)
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
-            oracle_contract_principal: env::var("ORACLE_CONTRACT_PRINCIPAL")
+            oracle_contract_principal: env::var(ENV_ORACLE_CONTRACT_PRINCIPAL)
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
