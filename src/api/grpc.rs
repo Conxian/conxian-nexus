@@ -108,7 +108,7 @@ impl NexusGrpcService {
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let mut conn = conn.clone();
+        let mut conn = (*conn).clone();
 
         let (safety_raw, drift_raw): (Option<String>, Option<String>) = redis::pipe()
             .cmd("GET")
