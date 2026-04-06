@@ -78,18 +78,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn Oracle Service
     let oracle_handle = if config.oracle_enabled {
-        use anyhow::Context;
-
-        let endpoint_url = config
-            .oracle_endpoint_url
-            .clone()
-            .with_context(|| format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_ENDPOINT_URL}"))?;
-        let contract_principal = config
-            .oracle_contract_principal
-            .clone()
-            .with_context(|| {
-                format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}")
-            })?;
+        let endpoint_url = config.oracle_endpoint_url.clone().unwrap();
+        let contract_principal = config.oracle_contract_principal.clone().unwrap();
 
         let oracle_service = Arc::new(OracleService::new(
             storage.clone(),

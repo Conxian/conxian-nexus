@@ -108,6 +108,14 @@ impl Config {
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
         let oracle_enabled = env_flag(ENV_ORACLE_ENABLED);
         let oracle_stub_ok = env_flag(ENV_ORACLE_STUB_OK);
+        let oracle_endpoint_url = env::var(ENV_ORACLE_ENDPOINT_URL)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let oracle_contract_principal = env::var(ENV_ORACLE_CONTRACT_PRINCIPAL)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
 
         if oracle_enabled && ORACLE_SERVICE_IS_STUBBED && !oracle_stub_ok {
             anyhow::bail!(
@@ -115,6 +123,16 @@ impl Config {
                 ENV_ORACLE_ENABLED,
                 ENV_ORACLE_STUB_OK
             );
+        }
+
+        if oracle_enabled {
+            if oracle_endpoint_url.is_none() {
+                anyhow::bail!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_ENDPOINT_URL}");
+            }
+
+            if oracle_contract_principal.is_none() {
+                anyhow::bail!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}");
+            }
         }
 
         Ok(Self {
@@ -136,14 +154,8 @@ impl Config {
             experimental_apis_enabled,
             oracle_enabled,
             oracle_stub_ok,
-            oracle_endpoint_url: env::var(ENV_ORACLE_ENDPOINT_URL)
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-            oracle_contract_principal: env::var(ENV_ORACLE_CONTRACT_PRINCIPAL)
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
+            oracle_endpoint_url,
+            oracle_contract_principal,
         })
     }
 }
