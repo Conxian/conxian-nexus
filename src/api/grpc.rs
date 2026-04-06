@@ -21,6 +21,13 @@ pub struct NexusGrpcService {
 
 impl NexusGrpcService {
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
+        fn parse_bool_flag(raw: &str) -> bool {
+            matches!(
+                raw.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        }
+
         let mut conn = self
             .storage
             .redis_client
@@ -31,29 +38,24 @@ impl NexusGrpcService {
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let safety_mode: bool = redis::cmd("GET")
+        let (safety_raw, drift_raw): (Option<String>, Option<u64>) = redis::pipe()
+            .cmd("GET")
             .arg("nexus:safety_mode")
-            .query_async::<_, Option<bool>>(&mut conn)
+            .cmd("GET")
+            .arg("nexus:drift")
+            .query_async(&mut conn)
             .await
             .map_err(|e| {
-                tracing::error!(
-                    error = %e,
-                    context,
-                    "Redis error reading safety flags (safety_mode)"
-                );
-                Status::internal("Redis error reading safety flags (safety_mode)")
-            })?
+                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
+                Status::internal("Redis error reading safety flags")
+            })?;
+
+        let safety_mode: bool = safety_raw
+            .as_deref()
+            .map(parse_bool_flag)
             .unwrap_or(false);
 
-        let drift: u64 = redis::cmd("GET")
-            .arg("nexus:drift")
-            .query_async::<_, Option<u64>>(&mut conn)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, context, "Redis error reading safety flags (drift)");
-                Status::internal("Redis error reading safety flags (drift)")
-            })?
-            .unwrap_or(0);
+        let drift: u64 = drift_raw.unwrap_or(0);
 
         Ok((safety_mode, drift))
     }
