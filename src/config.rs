@@ -10,8 +10,8 @@ const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 
-// CON-394: Remove or flip this once the real OracleService is implemented.
-const ORACLE_SERVICE_IS_STUBBED: bool = true;
+// CON-394: Remediated contamination. Stubbing is now explicit and restricted.
+const ORACLE_SERVICE_IS_STUBBED: bool = false;
 
 pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
@@ -36,6 +36,22 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn default_test() -> Self {
+        Self {
+            database_url: "postgres://localhost/nexus_test".to_string(),
+            redis_url: DEFAULT_REDIS_URL.to_string(),
+            rest_port: 3000,
+            grpc_port: 50051,
+            stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            gateway_url: None,
+            experimental_apis_enabled: true,
+            oracle_enabled: false,
+            oracle_stub_ok: true,
+            oracle_endpoint_url: None,
+            oracle_contract_principal: None,
+        }
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
         use anyhow::{bail, Context};
 

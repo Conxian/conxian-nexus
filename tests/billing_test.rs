@@ -14,7 +14,7 @@ use tower::ServiceExt;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     dotenvy::dotenv().ok();
-    let config = Config::from_env().expect("Failed to load config");
+    let config = Config::default_test();
     let storage = Arc::new(
         Storage::from_config(&config)
             .await
@@ -29,6 +29,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
             storage.clone(),
             nexus_state,
             executor,
+            None, // OracleService
             experimental_apis_enabled,
         ),
         storage,

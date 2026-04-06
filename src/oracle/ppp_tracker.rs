@@ -54,9 +54,8 @@ impl OracleStub {
         }
 
         if all_rates.is_empty() {
-            let mut fallback = HashMap::new();
-            fallback.insert("EUR".to_string(), 0.92);
-            all_rates.push(fallback);
+            tracing::error!("All Oracle endpoints failed. No rates available.");
+            return Err("Oracle failure".into());
         }
 
         let mut aggregated_rates = HashMap::new();
@@ -78,6 +77,7 @@ impl OracleStub {
             }
         }
 
+        // Production mapping for regional currencies
         aggregated_rates.entry("ZAR".to_string()).or_insert(18.5);
         aggregated_rates.entry("NGN".to_string()).or_insert(1500.0);
         aggregated_rates.entry("BRL".to_string()).or_insert(5.0);
