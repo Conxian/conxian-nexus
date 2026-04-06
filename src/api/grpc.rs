@@ -20,7 +20,7 @@ pub struct NexusGrpcService {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     metrics_counts_cache: MetricsCountsCache,
-    redis_conn: OnceCell<Mutex<redis::aio::MultiplexedConnection>>,
+    redis_conn: OnceCell<redis::aio::MultiplexedConnection>,
 }
 
 const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
@@ -99,19 +99,16 @@ impl NexusGrpcService {
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
         let redis_client = self.storage.redis_client.clone();
-        let conn = self
-            .redis_conn
-            .get_or_try_init(|| async move {
-                let conn = redis_client.get_multiplexed_async_connection().await?;
-                Ok::<_, redis::RedisError>(Mutex::new(conn))
-            })
-            .await
+        let conn = self.redis_conn.get_or_try_init(|| async move {
+            redis_client.get_multiplexed_async_connection().await
+        })
+        .await
             .map_err(|e| {
                 tracing::error!(error = %e, context, "Redis error reading safety flags (connect)");
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let mut conn = { conn.lock().await.clone() };
+        let mut conn = conn.clone();
 
         let (safety_raw, drift_raw): (Option<String>, Option<String>) = redis::pipe()
             .cmd("GET")
@@ -128,15 +125,12 @@ impl NexusGrpcService {
         let safety_mode: bool = match safety_raw.as_deref() {
             None => false,
             Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
+                let normalized = raw.trim().to_ascii_lowercase();
+                if normalized.is_empty() {
                     false
-                } else if crate::config::parse_flag(trimmed) {
+                } else if matches!(normalized.as_str(), "1" | "true" | "yes" | "on") {
                     true
-                } else if matches!(
-                    trimmed.to_ascii_lowercase().as_str(),
-                    "0" | "false" | "no" | "off"
-                ) {
+                } else if matches!(normalized.as_str(), "0" | "false" | "no" | "off") {
                     false
                 } else {
                     tracing::warn!(
