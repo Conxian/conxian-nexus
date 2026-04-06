@@ -13,7 +13,7 @@ const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 // CON-394: Remove or flip this once the real OracleService is implemented.
 const ORACLE_SERVICE_IS_STUBBED: bool = true;
 
-pub fn parse_flag(value: &str) -> bool {
+pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
         value.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
@@ -40,7 +40,10 @@ impl Config {
         use anyhow::Context;
 
         fn env_flag(key: &str) -> bool {
-            env::var(key).ok().is_some_and(|v| parse_flag(&v))
+            env::var(key)
+                .ok()
+                .map(|v| parse_flag(&v))
+                .unwrap_or(false)
         }
 
         let database_url = match env::var("DATABASE_URL") {
