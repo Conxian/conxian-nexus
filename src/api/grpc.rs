@@ -30,12 +30,14 @@ struct MetricsCountsCacheState {
 
 struct MetricsCountsCache {
     state: Mutex<MetricsCountsCacheState>,
+    refresh_lock: Mutex<()>,
 }
 
 impl MetricsCountsCache {
     fn new() -> Self {
         Self {
             state: Mutex::new(MetricsCountsCacheState { value: None }),
+            refresh_lock: Mutex::new(()),
         }
     }
 }
@@ -67,6 +69,17 @@ impl NexusGrpcService {
     }
 
     async fn read_cached_metrics_counts(&self) -> Result<(u64, u64), Status> {
+        {
+            let cache_guard = self.metrics_counts_cache.state.lock().await;
+            if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
+                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                    return Ok((cached_tx_count, cached_block_count));
+                }
+            }
+        }
+
+        let _refresh_guard = self.metrics_counts_cache.refresh_lock.lock().await;
+
         {
             let cache_guard = self.metrics_counts_cache.state.lock().await;
             if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
