@@ -83,11 +83,11 @@ async fn main() -> anyhow::Result<()> {
         let endpoint_url = config
             .oracle_endpoint_url
             .clone()
-            .context("NEXUS_ORACLE_ENABLED requires ORACLE_ENDPOINT_URL")?;
+            .context("NEXUS_ORACLE_ENABLED=1 (or true/yes/on) requires ORACLE_ENDPOINT_URL")?;
         let contract_principal = config
             .oracle_contract_principal
             .clone()
-            .context("NEXUS_ORACLE_ENABLED requires ORACLE_CONTRACT_PRINCIPAL")?;
+            .context("NEXUS_ORACLE_ENABLED=1 (or true/yes/on) requires ORACLE_CONTRACT_PRINCIPAL")?;
 
         let oracle_service = Arc::new(OracleService::new(
             storage.clone(),
