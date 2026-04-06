@@ -1,5 +1,5 @@
 use conxian_nexus::api;
-use conxian_nexus::config::Config;
+use conxian_nexus::config::{Config, ENV_ORACLE_ENABLED};
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
@@ -15,13 +15,11 @@ use tokio::time::{self, Duration};
 async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
+    // Initialize logging
+    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+    tracing_subscriber::fmt().with_env_filter(&log_level).init();
 
     let config = Config::from_env()?;
-
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(&config.log_level)
-        .init();
 
     tracing::info!("Initializing Conxian Nexus (Glass Node)...");
 
@@ -29,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     api::init_start_time();
 
     // Initialize Storage
-    let storage = Arc::new(Storage::new().await?);
+    let storage = Arc::new(Storage::from_config(&config).await?);
 
     // Run Database Migrations
     tracing::info!("Running database migrations...");
@@ -78,16 +76,8 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn Oracle Service
     let oracle_handle = if config.oracle_enabled {
-        use anyhow::Context;
-
-        let endpoint_url = config
-            .oracle_endpoint_url
-            .clone()
-            .context("NEXUS_ORACLE_ENABLED=1 (or true/yes/on) requires ORACLE_ENDPOINT_URL")?;
-        let contract_principal = config
-            .oracle_contract_principal
-            .clone()
-            .context("NEXUS_ORACLE_ENABLED=1 (or true/yes/on) requires ORACLE_CONTRACT_PRINCIPAL")?;
+        let endpoint_url = config.oracle_endpoint_url.clone().unwrap();
+        let contract_principal = config.oracle_contract_principal.clone().unwrap();
 
         let oracle_service = Arc::new(OracleService::new(
             storage.clone(),
@@ -102,7 +92,10 @@ async fn main() -> anyhow::Result<()> {
             }
         }))
     } else {
-        tracing::info!("OracleService disabled (set NEXUS_ORACLE_ENABLED=1 (or true/yes/on) to enable)");
+        tracing::info!(
+            "OracleService disabled (set {}=1 to enable)",
+            ENV_ORACLE_ENABLED
+        );
         None
     };
 
@@ -130,9 +123,16 @@ async fn main() -> anyhow::Result<()> {
     let rest_state = state_tracker.clone();
     let rest_executor = executor.clone();
     let rest_port = config.rest_port;
+    let experimental_apis_enabled = config.experimental_apis_enabled;
     let rest_handle = tokio::spawn(async move {
-        if let Err(e) =
-            api::rest::start_rest_server(rest_storage, rest_state, rest_executor, rest_port).await
+        if let Err(e) = api::rest::start_rest_server(
+            rest_storage,
+            rest_state,
+            rest_executor,
+            rest_port,
+            experimental_apis_enabled,
+        )
+        .await
         {
             tracing::error!("REST API server failed: {}", e);
         }
