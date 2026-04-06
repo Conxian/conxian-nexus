@@ -36,6 +36,22 @@ pub struct Config {
 }
 
 impl Config {
+    pub fn default_test() -> Self {
+        Self {
+            database_url: "postgres://localhost/nexus_test".to_string(),
+            redis_url: DEFAULT_REDIS_URL.to_string(),
+            rest_port: 3000,
+            grpc_port: 50051,
+            stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            gateway_url: None,
+            experimental_apis_enabled: true,
+            oracle_enabled: false,
+            oracle_stub_ok: true,
+            oracle_endpoint_url: None,
+            oracle_contract_principal: None,
+        }
+    }
+
     pub fn from_env() -> anyhow::Result<Self> {
         use anyhow::{bail, Context};
 
