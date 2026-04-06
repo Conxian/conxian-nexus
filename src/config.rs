@@ -32,9 +32,22 @@ impl Config {
         }
 
         Ok(Self {
-            database_url: env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://localhost/nexus".to_string()),
-            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string()),
+            database_url: match env::var("DATABASE_URL") {
+                Ok(v) => v,
+                Err(_) => {
+                    tracing::warn!(
+                        "DATABASE_URL not set; defaulting to postgres://localhost/nexus"
+                    );
+                    "postgres://localhost/nexus".to_string()
+                }
+            },
+            redis_url: match env::var("REDIS_URL") {
+                Ok(v) => v,
+                Err(_) => {
+                    tracing::warn!("REDIS_URL not set; defaulting to redis://127.0.0.1/");
+                    "redis://127.0.0.1/".to_string()
+                }
+            },
             rest_port: env::var("REST_PORT")
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()
