@@ -17,7 +17,6 @@ use tokio::time::{self, Duration};
 async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
-
     // Initialize logging
     let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     tracing_subscriber::fmt().with_env_filter(&log_level).init();

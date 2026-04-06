@@ -2,8 +2,16 @@ use std::env;
 
 pub const ENV_EXPERIMENTAL_APIS: &str = "NEXUS_EXPERIMENTAL_APIS";
 pub const ENV_ORACLE_ENABLED: &str = "NEXUS_ORACLE_ENABLED";
+pub const ENV_ORACLE_STUB_OK: &str = "NEXUS_ORACLE_STUB_OK";
 pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
+
+const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
+const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
+const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
+
+// CON-394: Remove or flip this once the real OracleService is implemented.
+const ORACLE_SERVICE_IS_STUBBED: bool = true;
 
 pub fn parse_flag(value: &str) -> bool {
     matches!(
@@ -22,6 +30,7 @@ pub struct Config {
     pub gateway_url: Option<String>,
     pub experimental_apis_enabled: bool,
     pub oracle_enabled: bool,
+    pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
 }
@@ -34,27 +43,68 @@ impl Config {
             env::var(key).ok().is_some_and(|v| parse_flag(&v))
         }
 
+        let database_url = match env::var("DATABASE_URL") {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    error = ?e,
+                    "DATABASE_URL not set or invalid; defaulting to postgres://localhost/nexus"
+                );
+                DEFAULT_DATABASE_URL.to_string()
+            }
+        };
+
+        let redis_url = match env::var("REDIS_URL") {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(
+                    error = ?e,
+                    "REDIS_URL not set or invalid; defaulting to redis://127.0.0.1/"
+                );
+                DEFAULT_REDIS_URL.to_string()
+            }
+        };
+
+        let stacks_node_rpc_url = match env::var("STACKS_NODE_RPC_URL") {
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    tracing::warn!(
+                        default = DEFAULT_STACKS_NODE_RPC_URL,
+                        "STACKS_NODE_RPC_URL set but empty; defaulting"
+                    );
+                    DEFAULT_STACKS_NODE_RPC_URL.to_string()
+                } else {
+                    trimmed.to_string()
+                }
+            }
+            Err(env::VarError::NotPresent) => {
+                tracing::warn!(
+                    default = DEFAULT_STACKS_NODE_RPC_URL,
+                    "STACKS_NODE_RPC_URL not set; defaulting"
+                );
+                DEFAULT_STACKS_NODE_RPC_URL.to_string()
+            }
+            Err(env::VarError::NotUnicode(_)) => {
+                anyhow::bail!("STACKS_NODE_RPC_URL must be valid unicode");
+            }
+        };
+
+        let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
+        let oracle_enabled = env_flag(ENV_ORACLE_ENABLED);
+        let oracle_stub_ok = env_flag(ENV_ORACLE_STUB_OK);
+
+        if oracle_enabled && ORACLE_SERVICE_IS_STUBBED && !oracle_stub_ok {
+            anyhow::bail!(
+                "{} is blocked because OracleService is still stubbed. For dev/test only, also set {}=1 (or true/yes/on).",
+                ENV_ORACLE_ENABLED,
+                ENV_ORACLE_STUB_OK
+            );
+        }
+
         Ok(Self {
-            database_url: match env::var("DATABASE_URL") {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::warn!(
-                        error = ?e,
-                        "DATABASE_URL not set or invalid; defaulting to postgres://localhost/nexus"
-                    );
-                    "postgres://localhost/nexus".to_string()
-                }
-            },
-            redis_url: match env::var("REDIS_URL") {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::warn!(
-                        error = ?e,
-                        "REDIS_URL not set or invalid; defaulting to redis://127.0.0.1/"
-                    );
-                    "redis://127.0.0.1/".to_string()
-                }
-            },
+            database_url,
+            redis_url,
             rest_port: env::var("REST_PORT")
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()
@@ -63,25 +113,14 @@ impl Config {
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
                 .context("Invalid GRPC_PORT (expected u16)")?,
-            stacks_node_rpc_url: match env::var("STACKS_NODE_RPC_URL")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-            {
-                Some(url) => url,
-                None => {
-                    tracing::warn!(
-                        "STACKS_NODE_RPC_URL not set or empty; defaulting to https://api.mainnet.hiro.so"
-                    );
-                    "https://api.mainnet.hiro.so".to_string()
-                }
-            },
+            stacks_node_rpc_url,
             gateway_url: env::var("GATEWAY_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
-            experimental_apis_enabled: env_flag(ENV_EXPERIMENTAL_APIS),
-            oracle_enabled: env_flag(ENV_ORACLE_ENABLED),
+            experimental_apis_enabled,
+            oracle_enabled,
+            oracle_stub_ok,
             oracle_endpoint_url: env::var(ENV_ORACLE_ENDPOINT_URL)
                 .ok()
                 .map(|s| s.trim().to_string())
