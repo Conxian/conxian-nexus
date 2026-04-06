@@ -18,7 +18,6 @@ pub struct Config {
     pub redis_url: String,
     pub rest_port: u16,
     pub grpc_port: u16,
-    pub log_level: String,
     pub stacks_node_rpc_url: String,
     pub gateway_url: Option<String>,
     pub experimental_apis_enabled: bool,
@@ -60,7 +59,6 @@ impl Config {
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
                 .context("Invalid GRPC_PORT (expected u16)")?,
-            log_level: env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
             stacks_node_rpc_url: match env::var("STACKS_NODE_RPC_URL")
                 .ok()
                 .map(|s| s.trim().to_string())
