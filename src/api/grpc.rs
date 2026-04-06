@@ -2,7 +2,6 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::state::NexusState;
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
