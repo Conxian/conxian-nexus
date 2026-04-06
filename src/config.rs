@@ -37,7 +37,7 @@ pub struct Config {
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
-        use anyhow::Context;
+        use anyhow::{bail, Context};
 
         fn env_flag(key: &str) -> bool {
             env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
@@ -56,14 +56,11 @@ impl Config {
                     trimmed.to_string()
                 }
             }
-            Err(e) => {
-                tracing::warn!(
-                    error = ?e,
-                    default = DEFAULT_DATABASE_URL,
-                    "DATABASE_URL not set or invalid; defaulting"
-                );
+            Err(env::VarError::NotPresent) => {
+                tracing::warn!(default = DEFAULT_DATABASE_URL, "DATABASE_URL not set; defaulting");
                 DEFAULT_DATABASE_URL.to_string()
             }
+            Err(env::VarError::NotUnicode(_)) => bail!("DATABASE_URL must be valid unicode"),
         };
 
         let redis_url = match env::var("REDIS_URL") {
@@ -76,14 +73,11 @@ impl Config {
                     trimmed.to_string()
                 }
             }
-            Err(e) => {
-                tracing::warn!(
-                    error = ?e,
-                    default = DEFAULT_REDIS_URL,
-                    "REDIS_URL not set or invalid; defaulting"
-                );
+            Err(env::VarError::NotPresent) => {
+                tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL not set; defaulting");
                 DEFAULT_REDIS_URL.to_string()
             }
+            Err(env::VarError::NotUnicode(_)) => bail!("REDIS_URL must be valid unicode"),
         };
 
         let stacks_node_rpc_url = match env::var("STACKS_NODE_RPC_URL") {
