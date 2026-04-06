@@ -1,5 +1,5 @@
-//! [CON-66] Conxius Identity Service.
-//! Implements plug-and-play resolution for ENS, BNS, and World ID.
+//! [CON-64] Identity Resolution Layer for Conxian Gateway.
+//! Resolves decentralized identities (ENS, BNS, WorldID) to Stacks addresses.
 
 use crate::api::rest::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 pub struct IdentityResolveRequest {
-    pub name: String,     // "vitalik.eth", "conxian.btc"
+    pub name: String,
     pub protocol: String, // "ENS", "BNS", "WorldID"
 }
 
@@ -18,7 +18,7 @@ pub struct IdentityResolveResponse {
     pub proof_of_personhood: bool,
 }
 
-/// [NEXUS-ID-01] Identity resolution for social names and PoP.
+/// [NEXUS-ID-01] Identity provider resolution.
 pub async fn resolve_identity_handler(
     State(_state): State<AppState>,
     Json(payload): Json<IdentityResolveRequest>,
@@ -37,7 +37,7 @@ pub async fn resolve_identity_handler(
             false,
         ),
         "BNS" => (
-            "SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM".to_string(),
+            "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(), // Align with SAB bootstrap wallet
             false,
         ),
         "WorldID" => ("world_id_nullifier_abc123".to_string(), true),
