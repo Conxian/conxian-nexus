@@ -50,7 +50,11 @@ impl Config {
             }
             Err(env::VarError::NotPresent) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
             Err(env::VarError::NotUnicode(_)) => {
-                anyhow::bail!("STACKS_NODE_RPC_URL must be valid unicode");
+                tracing::warn!(
+                    default = DEFAULT_STACKS_NODE_RPC_URL,
+                    "STACKS_NODE_RPC_URL contains non-unicode bytes; falling back to default"
+                );
+                DEFAULT_STACKS_NODE_RPC_URL.to_string()
             }
         };
 
