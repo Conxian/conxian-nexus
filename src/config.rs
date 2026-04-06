@@ -40,10 +40,7 @@ impl Config {
         use anyhow::Context;
 
         fn env_flag(key: &str) -> bool {
-            env::var(key)
-                .ok()
-                .map(|v| parse_flag(&v))
-                .unwrap_or(false)
+            env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
         }
 
         let database_url = match env::var("DATABASE_URL") {
