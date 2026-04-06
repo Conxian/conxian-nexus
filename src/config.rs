@@ -100,9 +100,7 @@ impl Config {
                 );
                 DEFAULT_STACKS_NODE_RPC_URL.to_string()
             }
-            Err(env::VarError::NotUnicode(_)) => {
-                anyhow::bail!("STACKS_NODE_RPC_URL must be valid unicode");
-            }
+            Err(env::VarError::NotUnicode(_)) => bail!("STACKS_NODE_RPC_URL must be valid unicode"),
         };
 
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
@@ -118,7 +116,7 @@ impl Config {
             .filter(|s| !s.is_empty());
 
         if oracle_enabled && ORACLE_SERVICE_IS_STUBBED && !oracle_stub_ok {
-            anyhow::bail!(
+            bail!(
                 "{} is blocked because OracleService is still stubbed. For dev/test only, also set {}=1 (or true/yes/on).",
                 ENV_ORACLE_ENABLED,
                 ENV_ORACLE_STUB_OK
