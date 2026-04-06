@@ -4,7 +4,7 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OnceCell};
 use tonic::{Request, Response, Status};
 
 // Proto generated code
@@ -20,6 +20,7 @@ pub struct NexusGrpcService {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     metrics_counts_cache: MetricsCountsCache,
+    redis_conn: OnceCell<Mutex<redis::aio::MultiplexedConnection>>,
 }
 
 const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
@@ -96,35 +97,50 @@ impl NexusGrpcService {
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        let mut conn = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
+        let redis_client = self.storage.redis_client.clone();
+        let conn = self
+            .redis_conn
+            .get_or_try_init(|| async move {
+                let conn = redis_client.get_multiplexed_async_connection().await?;
+                Ok::<_, redis::RedisError>(Mutex::new(conn))
+            })
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, context, "Redis error reading safety flags (connect)");
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let (safety_raw, drift_raw): (Option<String>, Option<u64>) = redis::pipe()
-            .cmd("GET")
-            .arg("nexus:safety_mode")
-            .cmd("GET")
-            .arg("nexus:drift")
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
-                Status::internal("Redis error reading safety flags")
-            })?;
+        let (safety_raw, drift_raw): (Option<String>, Option<String>) = {
+            let mut conn_guard = conn.lock().await;
+            redis::pipe()
+                .cmd("GET")
+                .arg("nexus:safety_mode")
+                .cmd("GET")
+                .arg("nexus:drift")
+                .query_async(&mut *conn_guard)
+                .await
+                .map_err(|e| {
+                    tracing::error!(
+                        error = %e,
+                        context,
+                        "Redis error reading safety flags (pipeline)"
+                    );
+                    Status::internal("Redis error reading safety flags")
+                })?
+        };
 
         let safety_mode: bool = match safety_raw.as_deref() {
             None => false,
             Some(raw) => {
-                let normalized = raw.trim().to_ascii_lowercase();
-                if crate::config::parse_flag(&normalized) {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    false
+                } else if crate::config::parse_flag(trimmed) {
                     true
-                } else if matches!(normalized.as_str(), "" | "0" | "false" | "no" | "off") {
+                } else if matches!(
+                    trimmed.to_ascii_lowercase().as_str(),
+                    "0" | "false" | "no" | "off"
+                ) {
                     false
                 } else {
                     tracing::warn!(
@@ -137,7 +153,24 @@ impl NexusGrpcService {
             }
         };
 
-        let drift: u64 = drift_raw.unwrap_or(0);
+        let drift: u64 = match drift_raw.as_deref() {
+            None => 0,
+            Some(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    0
+                } else if let Ok(value) = trimmed.parse::<u64>() {
+                    value
+                } else {
+                    tracing::warn!(
+                        context,
+                        value = %raw,
+                        "Unrecognized nexus:drift value in Redis; treating as 0"
+                    );
+                    0
+                }
+            }
+        };
 
         Ok((safety_mode, drift))
     }
@@ -283,6 +316,7 @@ pub async fn start_grpc_server(
         nexus_state,
         executor,
         metrics_counts_cache: MetricsCountsCache::new(),
+        redis_conn: OnceCell::new(),
     };
 
     tracing::info!("gRPC server listening on {}", addr);
