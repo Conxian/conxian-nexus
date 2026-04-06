@@ -51,13 +51,6 @@ impl NexusGrpcService {
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        fn parse_bool_flag(raw: &str) -> bool {
-            matches!(
-                raw.trim().to_ascii_lowercase().as_str(),
-                "1" | "true" | "yes" | "on"
-            )
-        }
-
         let mut conn = self
             .storage
             .redis_client
@@ -82,7 +75,7 @@ impl NexusGrpcService {
 
         let safety_mode: bool = safety_raw
             .as_deref()
-            .map(parse_bool_flag)
+            .map(crate::config::parse_flag)
             .unwrap_or(false);
 
         let drift: u64 = drift_raw.unwrap_or(0);
