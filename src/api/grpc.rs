@@ -20,6 +20,7 @@ pub struct NexusGrpcService {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     metrics_counts_cache: MetricsCountsCache,
+    redis_conn: Mutex<Option<redis::aio::MultiplexedConnection>>,
 }
 
 const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
@@ -83,27 +84,84 @@ impl NexusGrpcService {
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        let mut conn = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, context, "Redis error reading safety flags (connect)");
-                Status::internal("Redis error reading safety flags")
-            })?;
+        let redis_client = self.storage.redis_client.clone();
+        let cached_conn = { self.redis_conn.lock().await.clone() };
 
-        let (safety_raw, drift_raw): (Option<String>, Option<u64>) = redis::pipe()
-            .cmd("GET")
-            .arg("nexus:safety_mode")
-            .cmd("GET")
-            .arg("nexus:drift")
-            .query_async(&mut conn)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
-                Status::internal("Redis error reading safety flags")
-            })?;
+        let mut conn = match cached_conn {
+            Some(conn) => conn,
+            None => {
+                let conn = redis_client
+                    .get_multiplexed_async_connection()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (connect)"
+                        );
+                        Status::internal("Redis error reading safety flags")
+                    })?;
+
+                *self.redis_conn.lock().await = Some(conn.clone());
+                conn
+            }
+        };
+
+        let pipeline_result: Result<(Option<String>, Option<String>), redis::RedisError> =
+            redis::pipe()
+                .cmd("GET")
+                .arg("nexus:safety_mode")
+                .cmd("GET")
+                .arg("nexus:drift")
+                .query_async(&mut conn)
+                .await;
+
+        let (safety_raw, drift_raw): (Option<String>, Option<String>) = match pipeline_result {
+            Ok(result) => result,
+            Err(e) => {
+                *self.redis_conn.lock().await = None;
+                tracing::warn!(
+                    error = %e,
+                    context,
+                    "Redis error reading safety flags (pipeline); retrying once"
+                );
+
+                let mut conn = redis_client
+                    .get_multiplexed_async_connection()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (connect)"
+                        );
+                        Status::internal("Redis error reading safety flags")
+                    })?;
+
+                match redis::pipe()
+                    .cmd("GET")
+                    .arg("nexus:safety_mode")
+                    .cmd("GET")
+                    .arg("nexus:drift")
+                    .query_async(&mut conn)
+                    .await
+                {
+                    Ok(result) => {
+                        *self.redis_conn.lock().await = Some(conn.clone());
+                        result
+                    }
+                    Err(e) => {
+                        *self.redis_conn.lock().await = None;
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (pipeline)"
+                        );
+                        return Err(Status::internal("Redis error reading safety flags"));
+                    }
+                }
+            }
+        };
 
         let safety_mode: bool = match safety_raw.as_deref() {
             None => false,
@@ -124,7 +182,24 @@ impl NexusGrpcService {
             }
         };
 
-        let drift: u64 = drift_raw.unwrap_or(0);
+        let drift: u64 = match drift_raw.as_deref() {
+            None => 0,
+            Some(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    0
+                } else if let Ok(value) = trimmed.parse::<u64>() {
+                    value
+                } else {
+                    tracing::warn!(
+                        context,
+                        value = %raw,
+                        "Unrecognized nexus:drift value in Redis; treating as 0"
+                    );
+                    0
+                }
+            }
+        };
 
         Ok((safety_mode, drift))
     }
@@ -270,6 +345,7 @@ pub async fn start_grpc_server(
         nexus_state,
         executor,
         metrics_counts_cache: MetricsCountsCache::new(),
+        redis_conn: Mutex::new(None),
     };
 
     tracing::info!("gRPC server listening on {}", addr);
