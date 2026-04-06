@@ -39,6 +39,10 @@ impl Config {
                 let trimmed = raw.trim();
                 // Treat empty/whitespace as "not set" so we fall back to the default URL.
                 if trimmed.is_empty() {
+                    tracing::warn!(
+                        default = DEFAULT_STACKS_NODE_RPC_URL,
+                        "STACKS_NODE_RPC_URL is set but empty/whitespace; falling back to default"
+                    );
                     DEFAULT_STACKS_NODE_RPC_URL.to_string()
                 } else {
                     trimmed.to_string()
