@@ -36,6 +36,7 @@ impl Config {
         let stacks_node_rpc_url = match env::var("STACKS_NODE_RPC_URL") {
             Ok(raw) => {
                 let trimmed = raw.trim();
+                // Treat empty/whitespace as "not set" so we fall back to the default URL.
                 if trimmed.is_empty() {
                     DEFAULT_STACKS_NODE_RPC_URL.to_string()
                 } else {
