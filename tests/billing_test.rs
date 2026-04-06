@@ -22,13 +22,14 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     );
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let experimental_apis_enabled = false;
 
     (
         app_router(
             storage.clone(),
             nexus_state,
             executor,
-            config.experimental_apis_enabled,
+            experimental_apis_enabled,
         ),
         storage,
     )
