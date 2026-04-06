@@ -3,6 +3,8 @@ use crate::state::NexusState;
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
 use tonic::{Request, Response, Status};
 
 // Proto generated code
@@ -17,7 +19,10 @@ pub struct NexusGrpcService {
     pub storage: Arc<Storage>,
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
+    metrics_counts_cache: Mutex<Option<(Instant, u64, u64)>>,
 }
+
+const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
 
 impl NexusGrpcService {
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
@@ -124,32 +129,76 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<MetricsRequest>,
     ) -> Result<Response<MetricsResponse>, Status> {
-        let tx_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM stacks_transactions t \
-             JOIN stacks_blocks b ON t.block_hash = b.hash \
-             WHERE b.state != 'orphaned'",
-        )
-        .fetch_one(&self.storage.pg_pool)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
-            Status::internal("Database error in GetMetrics (tx_count)")
-        })?;
+        let (tx_count, block_count) = {
+            let mut cache_guard = self.metrics_counts_cache.lock().await;
 
-        let block_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
+            if let Some((cached_at, cached_tx_count, cached_block_count)) = *cache_guard {
+                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                    (cached_tx_count, cached_block_count)
+                } else {
+                    let tx_count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM stacks_transactions t \
+                         JOIN stacks_blocks b ON t.block_hash = b.hash \
+                         WHERE b.state != 'orphaned'",
+                    )
+                    .fetch_one(&self.storage.pg_pool)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
+                        Status::internal("Database error in GetMetrics (tx_count)")
+                    })?;
+
+                    let block_count: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'",
+                    )
+                    .fetch_one(&self.storage.pg_pool)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
+                        Status::internal("Database error in GetMetrics (block_count)")
+                    })?;
+
+                    let tx_count = tx_count as u64;
+                    let block_count = block_count as u64;
+
+                    *cache_guard = Some((Instant::now(), tx_count, block_count));
+                    (tx_count, block_count)
+                }
+            } else {
+                let tx_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM stacks_transactions t \
+                     JOIN stacks_blocks b ON t.block_hash = b.hash \
+                     WHERE b.state != 'orphaned'",
+                )
                 .fetch_one(&self.storage.pg_pool)
                 .await
                 .map_err(|e| {
-                    tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
-                    Status::internal("Database error in GetMetrics (block_count)")
+                    tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
+                    Status::internal("Database error in GetMetrics (tx_count)")
                 })?;
+
+                let block_count: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
+                        .fetch_one(&self.storage.pg_pool)
+                        .await
+                        .map_err(|e| {
+                            tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
+                            Status::internal("Database error in GetMetrics (block_count)")
+                        })?;
+
+                let tx_count = tx_count as u64;
+                let block_count = block_count as u64;
+
+                *cache_guard = Some((Instant::now(), tx_count, block_count));
+                (tx_count, block_count)
+            }
+        };
 
         let (safety_mode, drift) = self.read_safety_flags("GetMetrics").await?;
 
         Ok(Response::new(MetricsResponse {
-            total_transactions: tx_count as u64,
-            total_blocks: block_count as u64,
+            total_transactions: tx_count,
+            total_blocks: block_count,
             safety_mode,
             drift,
             uptime_seconds: crate::api::get_uptime(),
@@ -219,6 +268,7 @@ pub async fn start_grpc_server(
         storage,
         nexus_state,
         executor,
+        metrics_counts_cache: Mutex::new(None),
     };
 
     tracing::info!("gRPC server listening on {}", addr);
