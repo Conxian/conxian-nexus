@@ -4,7 +4,7 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, Notify};
 use tonic::{Request, Response, Status};
 
 // Proto generated code
@@ -19,10 +19,32 @@ pub struct NexusGrpcService {
     pub storage: Arc<Storage>,
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
-    metrics_counts_cache: Mutex<Option<(Instant, u64, u64)>>,
+    metrics_counts_cache: MetricsCountsCache,
 }
 
 const METRICS_COUNTS_CACHE_TTL: Duration = Duration::from_secs(10);
+
+struct MetricsCountsCacheState {
+    value: Option<(Instant, u64, u64)>,
+    refreshing: bool,
+}
+
+struct MetricsCountsCache {
+    state: Mutex<MetricsCountsCacheState>,
+    notify: Notify,
+}
+
+impl MetricsCountsCache {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(MetricsCountsCacheState {
+                value: None,
+                refreshing: false,
+            }),
+            notify: Notify::new(),
+        }
+    }
+}
 
 impl NexusGrpcService {
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
@@ -48,6 +70,51 @@ impl NexusGrpcService {
                 })?;
 
         Ok((tx_count as u64, block_count as u64))
+    }
+
+    async fn read_cached_metrics_counts(&self) -> Result<(u64, u64), Status> {
+        loop {
+            let notified = {
+                let mut cache_guard = self.metrics_counts_cache.state.lock().await;
+
+                if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
+                    if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                        return Ok((cached_tx_count, cached_block_count));
+                    }
+                }
+
+                if cache_guard.refreshing {
+                    Some(self.metrics_counts_cache.notify.notified())
+                } else {
+                    cache_guard.refreshing = true;
+                    None
+                }
+            };
+
+            if let Some(notified) = notified {
+                notified.await;
+                continue;
+            }
+
+            let refreshed_counts = self.fetch_metrics_counts().await;
+
+            let mut cache_guard = self.metrics_counts_cache.state.lock().await;
+            cache_guard.refreshing = false;
+
+            match refreshed_counts {
+                Ok((tx_count, block_count)) => {
+                    cache_guard.value = Some((Instant::now(), tx_count, block_count));
+                    drop(cache_guard);
+                    self.metrics_counts_cache.notify.notify_waiters();
+                    return Ok((tx_count, block_count));
+                }
+                Err(status) => {
+                    drop(cache_guard);
+                    self.metrics_counts_cache.notify.notify_waiters();
+                    return Err(status);
+                }
+            }
+        }
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
@@ -161,27 +228,7 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<MetricsRequest>,
     ) -> Result<Response<MetricsResponse>, Status> {
-        let cached_counts = {
-            let cache_guard = self.metrics_counts_cache.lock().await;
-            match *cache_guard {
-                Some((cached_at, cached_tx_count, cached_block_count))
-                    if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL =>
-                {
-                    Some((cached_tx_count, cached_block_count))
-                }
-                _ => None,
-            }
-        };
-
-        let (tx_count, block_count) = match cached_counts {
-            Some((tx_count, block_count)) => (tx_count, block_count),
-            None => {
-                let (tx_count, block_count) = self.fetch_metrics_counts().await?;
-                let mut cache_guard = self.metrics_counts_cache.lock().await;
-                *cache_guard = Some((Instant::now(), tx_count, block_count));
-                (tx_count, block_count)
-            }
-        };
+        let (tx_count, block_count) = self.read_cached_metrics_counts().await?;
 
         let (safety_mode, drift) = self.read_safety_flags("GetMetrics").await?;
 
@@ -257,7 +304,7 @@ pub async fn start_grpc_server(
         storage,
         nexus_state,
         executor,
-        metrics_counts_cache: Mutex::new(None),
+        metrics_counts_cache: MetricsCountsCache::new(),
     };
 
     tracing::info!("gRPC server listening on {}", addr);
