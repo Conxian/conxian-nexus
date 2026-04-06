@@ -1,6 +1,7 @@
 use std::env;
 
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
+const ORACLE_SERVICE_IS_STUBBED: bool = true;
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -50,9 +51,9 @@ impl Config {
         let oracle_enabled = env_flag("NEXUS_ORACLE_ENABLED");
         let oracle_stub_ok = env_flag("NEXUS_ORACLE_STUB_OK");
 
-        if oracle_enabled && !oracle_stub_ok {
+        if oracle_enabled && ORACLE_SERVICE_IS_STUBBED && !oracle_stub_ok {
             anyhow::bail!(
-                "NEXUS_ORACLE_ENABLED is blocked because OracleService is still stubbed. For dev/test only, also set NEXUS_ORACLE_STUB_OK."
+                "NEXUS_ORACLE_ENABLED is blocked because OracleService is still stubbed. For dev/test only, also set NEXUS_ORACLE_STUB_OK=1 (or true/yes/on)."
             );
         }
 
