@@ -74,10 +74,24 @@ impl NexusGrpcService {
                 Status::internal("Redis error reading safety flags")
             })?;
 
-        let safety_mode: bool = safety_raw
-            .as_deref()
-            .map(crate::config::parse_flag)
-            .unwrap_or(false);
+        let safety_mode: bool = match safety_raw.as_deref() {
+            None => false,
+            Some(raw) => {
+                let normalized = raw.trim().to_ascii_lowercase();
+                if crate::config::parse_flag(&normalized) {
+                    true
+                } else if matches!(normalized.as_str(), "" | "0" | "false" | "no" | "off") {
+                    false
+                } else {
+                    tracing::warn!(
+                        context,
+                        value = %raw,
+                        "Unrecognized nexus:safety_mode value in Redis; treating as false"
+                    );
+                    false
+                }
+            }
+        };
 
         let drift: u64 = drift_raw.unwrap_or(0);
 
