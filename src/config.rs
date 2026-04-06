@@ -37,17 +37,21 @@ impl Config {
         Ok(Self {
             database_url: match env::var("DATABASE_URL") {
                 Ok(v) => v,
-                Err(_) => {
+                Err(e) => {
                     tracing::warn!(
-                        "DATABASE_URL not set; defaulting to postgres://localhost/nexus"
+                        error = ?e,
+                        "DATABASE_URL not set or invalid; defaulting to postgres://localhost/nexus"
                     );
                     "postgres://localhost/nexus".to_string()
                 }
             },
             redis_url: match env::var("REDIS_URL") {
                 Ok(v) => v,
-                Err(_) => {
-                    tracing::warn!("REDIS_URL not set; defaulting to redis://127.0.0.1/");
+                Err(e) => {
+                    tracing::warn!(
+                        error = ?e,
+                        "REDIS_URL not set or invalid; defaulting to redis://127.0.0.1/"
+                    );
                     "redis://127.0.0.1/".to_string()
                 }
             },
