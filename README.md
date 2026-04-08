@@ -14,9 +14,13 @@ Active development. Module boundaries and APIs may change as the stack converges
 
 Ownership and review requirements are defined in [`CODEOWNERS`](./CODEOWNERS).
 
-For operational contact, use:
-- Maintainer: [@botshelomokoka](https://github.com/botshelomokoka) (botshelo@conxian-labs.com)
-- Shared inboxes: support@conxian-labs.com, info@conxian-labs.com, admin@conxian-labs.com
+For questions about this repository, start by contacting:
+
+- Maintainer: [@botshelomokoka](https://github.com/botshelomokoka)
+
+For operational contact details (including email inboxes), see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+For security issues, see [`SECURITY.md`](./SECURITY.md).
 
 ## Audience
 
