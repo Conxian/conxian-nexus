@@ -73,7 +73,10 @@ impl Config {
                 }
             }
             Err(env::VarError::NotPresent) => {
-                tracing::warn!(default = DEFAULT_DATABASE_URL, "DATABASE_URL not set; defaulting");
+                tracing::warn!(
+                    default = DEFAULT_DATABASE_URL,
+                    "DATABASE_URL not set; defaulting"
+                );
                 DEFAULT_DATABASE_URL.to_string()
             }
             Err(env::VarError::NotUnicode(_)) => bail!("DATABASE_URL must be valid unicode"),
@@ -83,7 +86,10 @@ impl Config {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
-                    tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL set but empty; defaulting");
+                    tracing::warn!(
+                        default = DEFAULT_REDIS_URL,
+                        "REDIS_URL set but empty; defaulting"
+                    );
                     DEFAULT_REDIS_URL.to_string()
                 } else {
                     trimmed.to_string()
