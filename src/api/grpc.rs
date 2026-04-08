@@ -89,6 +89,10 @@ impl NexusGrpcService {
         Ok((tx_count, block_count))
     }
 
+    /// Reads safety-mode and drift flags from Redis.
+    ///
+    /// If Redis is unavailable, this logs the error and returns `(true, 0)` to
+    /// keep read-only health/metrics RPCs available while remaining conservative.
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
         let conservative_default = (true, 0);
         let redis_client = self.storage.redis_client.clone();

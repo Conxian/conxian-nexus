@@ -70,7 +70,7 @@ impl Config {
                     );
                     DEFAULT_DATABASE_URL.to_string()
                 } else {
-                    bail!("Missing env var: DATABASE_URL")
+                    bail!("Missing or empty env var: DATABASE_URL");
                 }
             }
             Err(env::VarError::NotUnicode(_)) => bail!("DATABASE_URL must be valid unicode"),
@@ -86,7 +86,7 @@ impl Config {
                     );
                     DEFAULT_REDIS_URL.to_string()
                 } else {
-                    bail!("Missing env var: REDIS_URL")
+                    bail!("Missing or empty env var: REDIS_URL");
                 }
             }
             Err(env::VarError::NotUnicode(_)) => bail!("REDIS_URL must be valid unicode"),
