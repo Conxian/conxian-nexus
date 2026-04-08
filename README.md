@@ -10,6 +10,18 @@ Provide a verifiable synchronization and proof layer between off-chain state and
 
 Active development. Module boundaries and APIs may change as the stack converges on shared primitives.
 
+## Ownership
+
+Ownership and review requirements are defined in [`CODEOWNERS`](./CODEOWNERS).
+
+For questions about this repository, start by contacting:
+
+- Maintainer: [@botshelomokoka](https://github.com/botshelomokoka)
+
+For operational contact details (including email inboxes), see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+
+For security issues, see [`SECURITY.md`](./SECURITY.md).
+
 ## Audience
 
 - Backend engineers working on state sync, proof generation, and ordering.
