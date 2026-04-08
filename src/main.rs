@@ -1,5 +1,7 @@
 use conxian_nexus::api;
-use conxian_nexus::config::{Config, ENV_ORACLE_ENABLED};
+use conxian_nexus::config::{
+    Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
+};
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
@@ -41,8 +43,14 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Oracle Service
     let oracle_service = if config.oracle_enabled {
-        let endpoint_url = config.oracle_endpoint_url.clone().unwrap();
-        let contract_principal = config.oracle_contract_principal.clone().unwrap();
+        use anyhow::Context;
+
+        let endpoint_url = config.oracle_endpoint_url.clone().with_context(|| {
+            format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_ENDPOINT_URL}")
+        })?;
+        let contract_principal = config.oracle_contract_principal.clone().with_context(|| {
+            format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}")
+        })?;
 
         Some(Arc::new(OracleService::new(
             storage.clone(),
