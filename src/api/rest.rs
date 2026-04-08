@@ -12,33 +12,50 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
+
+static PROMETHEUS_METRICS_INIT: OnceLock<prometheus::Result<()>> = OnceLock::new();
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = IntGauge::new(
         "nexus_total_transactions",
         "Total number of transactions processed"
     )
-    .unwrap();
+    .expect("nexus_total_transactions metric must be valid");
     pub static ref TOTAL_BLOCKS: IntGauge =
-        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
+        IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
+            .expect("nexus_total_blocks metric must be valid");
     pub static ref SYNC_DRIFT: IntGauge =
-        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
-    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
+        IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
+            .expect("nexus_sync_drift metric must be valid");
+    pub static ref SAFETY_MODE: IntGauge = IntGauge::new(
         "nexus_safety_mode",
         "Safety mode status (1 = active, 0 = inactive)"
     )
-    .unwrap();
+    .expect("nexus_safety_mode metric must be valid");
 }
 
 fn init_prometheus_metrics() {
-    lazy_static::initialize(&TOTAL_TRANSACTIONS);
-    lazy_static::initialize(&TOTAL_BLOCKS);
-    lazy_static::initialize(&SYNC_DRIFT);
-    lazy_static::initialize(&SAFETY_MODE);
+    let init_result = PROMETHEUS_METRICS_INIT.get_or_init(|| {
+        lazy_static::initialize(&TOTAL_TRANSACTIONS);
+        lazy_static::initialize(&TOTAL_BLOCKS);
+        lazy_static::initialize(&SYNC_DRIFT);
+        lazy_static::initialize(&SAFETY_MODE);
+
+        prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone()))?;
+        prometheus::register(Box::new(TOTAL_BLOCKS.clone()))?;
+        prometheus::register(Box::new(SYNC_DRIFT.clone()))?;
+        prometheus::register(Box::new(SAFETY_MODE.clone()))?;
+
+        Ok(())
+    });
+
+    if let Err(e) = init_result {
+        tracing::error!(error = %e, "Prometheus metrics registration failed");
+    }
 }
 
 #[derive(Clone)]
@@ -351,6 +368,8 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
 }
 
 async fn prometheus_metrics() -> impl IntoResponse {
+    init_prometheus_metrics();
+
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
