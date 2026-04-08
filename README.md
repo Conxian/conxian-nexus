@@ -14,6 +14,10 @@ Active development. Module boundaries and APIs may change as the stack converges
 
 Ownership and review requirements are defined in [`CODEOWNERS`](./CODEOWNERS).
 
+For operational contact, use:
+- Maintainer: [@botshelomokoka](https://github.com/botshelomokoka) (botshelo@conxian-labs.com)
+- Shared inboxes: support@conxian-labs.com, info@conxian-labs.com, admin@conxian-labs.com
+
 ## Audience
 
 - Backend engineers working on state sync, proof generation, and ordering.

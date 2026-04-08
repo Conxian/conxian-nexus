@@ -2,7 +2,7 @@
 #
 # Notes:
 # - GitHub uses this file to auto-request reviews when a PR touches matching paths.
-# - Prefer listing real GitHub usernames (not internal role aliases).
+# - Prefer listing real GitHub users (e.g. @user) or teams (e.g. @org/team).
 
 * @botshelomokoka @admin-conxian-labs
 
