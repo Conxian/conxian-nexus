@@ -10,6 +10,10 @@ Provide a verifiable synchronization and proof layer between off-chain state and
 
 Active development. Module boundaries and APIs may change as the stack converges on shared primitives.
 
+## Ownership
+
+Ownership and review requirements are defined in [`CODEOWNERS`](./CODEOWNERS).
+
 ## Audience
 
 - Backend engineers working on state sync, proof generation, and ordering.
