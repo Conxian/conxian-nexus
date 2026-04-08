@@ -2,7 +2,6 @@
 /target
 target/
 **/*.rs.bk
-Cargo.lock
 
 # IDEs
 .idea/
@@ -27,6 +26,11 @@ Thumbs.db
 tests/output/
 *.log
 tests/*.log
+
+# Audit and Dumps
+full_audit_dump.txt
+*dump.txt
+*audit*.txt
 
 # Submodules
 lib-conxian-core/target/

@@ -38,5 +38,6 @@ Please include the following information in your report:
 - **HMAC Authentication**: Secure telemetry for B2B billing.
 - **FSOC Sequencer**: Mitigates MEV and front-running risks.
 - **Verifiable Proofs**: Cryptographic state validation.
+- **Artifact Governance**: Strict ignore rules to prevent source dumps (e.g., `*dump.txt`) from being tracked in version control.
 
 Thank you for helping us keep Conxian Nexus secure!

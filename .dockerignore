@@ -1,7 +1,6 @@
 # Rust
 target/
 **/*.rs.bk
-Cargo.lock
 
 # IDEs
 .idea/
@@ -25,3 +24,8 @@ Cargo.lock
 # Testing
 tests/output/
 *.log
+
+# Audit and Dumps
+full_audit_dump.txt
+*dump.txt
+*audit*.txt

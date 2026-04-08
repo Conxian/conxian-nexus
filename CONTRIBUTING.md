@@ -14,6 +14,7 @@ Thank you for your interest in contributing!
 - Follow standard Rust formatting (`cargo fmt`).
 - Ensure all public functions have doc comments.
 - Maintain high test coverage for new logic.
+- **Do not commit source code dumps, audit logs, or temporary artifacts**. Check `.gitignore` for current patterns.
 
 ## Core Modules Update
 - **NexusState**: Now uses a native Merkle Tree for verifiable state root tracking.
