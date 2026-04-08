@@ -94,7 +94,8 @@ impl NexusGrpcService {
     /// If Redis is unavailable, this logs the error and returns `(true, 0)` to
     /// keep read-only health/metrics RPCs available while remaining conservative.
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        let conservative_default = (true, 0);
+        let default_flags = (true, 0);
+
         let redis_client = self.storage.redis_client.clone();
         let cached_conn = { self.redis_conn.lock().await.clone() };
 
@@ -109,7 +110,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        return Ok(conservative_default);
+                        return Ok(default_flags);
                     }
                 };
 
@@ -145,7 +146,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        return Ok(conservative_default);
+                        return Ok(default_flags);
                     }
                 };
 
@@ -168,7 +169,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (pipeline); defaulting safe"
                         );
-                        return Ok(conservative_default);
+                        return Ok(default_flags);
                     }
                 }
             }
