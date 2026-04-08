@@ -55,7 +55,7 @@ pub async fn resolve_identity_handler(
             url.set_fragment(None);
             match url.path_segments_mut() {
                 Ok(mut segments) => {
-                    segments.clear();
+                    segments.pop_if_empty();
                     segments.extend(["v1", "names", name]);
                 }
                 Err(()) => {
