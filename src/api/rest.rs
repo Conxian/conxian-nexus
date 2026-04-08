@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::{Arc, OnceLock};
 
-static PROMETHEUS_METRICS_INIT: OnceLock<prometheus::Result<()>> = OnceLock::new();
+static PROMETHEUS_METRICS_INIT: OnceLock<()> = OnceLock::new();
 
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = IntGauge::new(
@@ -39,23 +39,22 @@ lazy_static! {
 }
 
 fn init_prometheus_metrics() {
-    let init_result = PROMETHEUS_METRICS_INIT.get_or_init(|| {
+    PROMETHEUS_METRICS_INIT.get_or_init(|| {
         lazy_static::initialize(&TOTAL_TRANSACTIONS);
         lazy_static::initialize(&TOTAL_BLOCKS);
         lazy_static::initialize(&SYNC_DRIFT);
         lazy_static::initialize(&SAFETY_MODE);
 
-        prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone()))?;
-        prometheus::register(Box::new(TOTAL_BLOCKS.clone()))?;
-        prometheus::register(Box::new(SYNC_DRIFT.clone()))?;
-        prometheus::register(Box::new(SAFETY_MODE.clone()))?;
-
-        Ok(())
+        if let Err(e) = (|| -> prometheus::Result<()> {
+            prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone()))?;
+            prometheus::register(Box::new(TOTAL_BLOCKS.clone()))?;
+            prometheus::register(Box::new(SYNC_DRIFT.clone()))?;
+            prometheus::register(Box::new(SAFETY_MODE.clone()))?;
+            Ok(())
+        })() {
+            tracing::error!(error = %e, "Prometheus metrics registration failed");
+        }
     });
-
-    if let Err(e) = init_result {
-        tracing::error!(error = %e, "Prometheus metrics registration failed");
-    }
 }
 
 #[derive(Clone)]
