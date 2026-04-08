@@ -34,7 +34,7 @@ lazy_static! {
     .unwrap();
 }
 
-pub fn init_prometheus_metrics() {
+fn init_prometheus_metrics() {
     lazy_static::initialize(&TOTAL_TRANSACTIONS);
     lazy_static::initialize(&TOTAL_BLOCKS);
     lazy_static::initialize(&SYNC_DRIFT);
