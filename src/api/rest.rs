@@ -40,11 +40,7 @@ lazy_static! {
 
 fn init_prometheus_metrics() {
     PROMETHEUS_METRICS_INIT.get_or_init(|| {
-        lazy_static::initialize(&TOTAL_TRANSACTIONS);
-        lazy_static::initialize(&TOTAL_BLOCKS);
-        lazy_static::initialize(&SYNC_DRIFT);
-        lazy_static::initialize(&SAFETY_MODE);
-
+        // Best-effort: avoid panicking on accidental duplicate metric registration.
         if let Err(e) = (|| -> prometheus::Result<()> {
             prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone()))?;
             prometheus::register(Box::new(TOTAL_BLOCKS.clone()))?;
@@ -367,8 +363,6 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
 }
 
 async fn prometheus_metrics() -> impl IntoResponse {
-    init_prometheus_metrics();
-
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
