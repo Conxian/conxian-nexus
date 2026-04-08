@@ -55,26 +55,19 @@ impl NexusGrpcService {
         None
     }
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        let tx_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM stacks_transactions t \
-             JOIN stacks_blocks b ON t.block_hash = b.hash \
-             WHERE b.state != 'orphaned'",
+        let (tx_count, block_count): (i64, i64) = sqlx::query_as(
+            "SELECT \
+                (SELECT COUNT(*) FROM stacks_transactions t \
+                 JOIN stacks_blocks b ON t.block_hash = b.hash \
+                 WHERE b.state != 'orphaned') AS tx_count, \
+                (SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned') AS block_count",
         )
         .fetch_one(&self.storage.pg_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
-            Status::internal("Database error in GetMetrics (tx_count)")
+            tracing::error!(error = %e, "Database error in GetMetrics (counts)");
+            Status::internal("Database error in GetMetrics (counts)")
         })?;
-
-        let block_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
-                .fetch_one(&self.storage.pg_pool)
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
-                    Status::internal("Database error in GetMetrics (block_count)")
-                })?;
 
         Ok((tx_count as u64, block_count as u64))
     }
