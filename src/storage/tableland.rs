@@ -34,9 +34,10 @@ impl TablelandAdapter {
     ) -> anyhow::Result<String> {
         tracing::info!("Committing state to Tableland: {}", commitment.table_id);
 
-        Err(anyhow!(
-            "Tableland persistence is not yet available (base_url={})",
-            self._base_url
-        ))
+        tracing::warn!(
+            base_url = %self._base_url,
+            "Tableland persistence is not yet available"
+        );
+        Err(anyhow!("Tableland persistence is not yet available"))
     }
 }
