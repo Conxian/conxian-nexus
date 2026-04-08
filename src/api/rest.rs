@@ -118,13 +118,7 @@ pub fn app_router(
         .timeout(Duration::from_secs(10))
         .connect_timeout(Duration::from_secs(3))
         .build()
-        .unwrap_or_else(|err| {
-            tracing::warn!(
-                error = %err,
-                "Failed to build reqwest client; falling back to default client"
-            );
-            reqwest::Client::new()
-        });
+        .unwrap_or_else(|err| panic!("Failed to build reqwest client: {err}"));
 
     let stacks_api_base_raw = std::env::var("STACKS_NODE_RPC_URL")
         .ok()
