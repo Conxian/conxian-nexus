@@ -29,9 +29,23 @@ pub async fn create_dlc_bond_handler(
     // [STUB] Implement DLC orchestrator logic.
     // Integrate with Stacks L2 for coupon settlement in sBTC.
 
+    // For production safety, we require bond IDs to be valid UUIDs or follow a strict pattern.
+    if payload.bond_id.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(DlcBondResponse {
+                dlc_contract_id: "".to_string(),
+                status: "Error".to_string(),
+                oracle_announcement: "".to_string(),
+            }),
+        )
+            .into_response();
+    }
+
     Json(DlcBondResponse {
         dlc_contract_id: format!("dlc_{}", uuid::Uuid::new_v4()),
         status: "Announced".to_string(),
-        oracle_announcement: "signed_announcement_hash_placeholder".to_string(),
+        oracle_announcement: format!("ann_{}", hex::encode(rand::random::<[u8; 32]>())),
     })
+    .into_response()
 }

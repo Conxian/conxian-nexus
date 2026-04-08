@@ -16,6 +16,8 @@ Thumbs.db
 # Environment
 .env
 .env.local
+.env.*
+!.env.example
 
 # SQLx
 .sqlx/
@@ -23,6 +25,12 @@ Thumbs.db
 # Testing
 tests/output/
 *.log
+tests/*.log
+
+# Audit and Dumps
+full_audit_dump.txt
+*dump.txt
+*audit*.txt
 
 # Submodules
 lib-conxian-core/target/

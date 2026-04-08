@@ -1,31 +1,31 @@
-# Git
-.git
-.gitignore
-.gitmodules
-
-# Rust artifacts
+# Rust
 target/
-lib-conxian-core/target/
+**/*.rs.bk
 
-# Documentation
-README.md
-CHANGELOG.md
-CONTRIBUTING.md
-LICENSE
-SECURITY.md
-docs/
+# IDEs
+.idea/
+.vscode/
+
+# OS
+.DS_Store
 
 # Environment
 .env
-.env.example
+.env.local
+.env.*
 
-# Docker files
-Dockerfile
-docker-compose.yml
+# Git
+.git
+.gitignore
+
+# SQLx
+.sqlx/
 
 # Testing
-tests/
+tests/output/
 *.log
 
-# Scripts and metadata
-.github/
+# Audit and Dumps
+full_audit_dump.txt
+*dump.txt
+*audit*.txt

@@ -72,3 +72,23 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 4.6 Sovereign Infrastructure Migration (In Progress)
 - **Status**: **Kwil Pilot Implementation Complete (v0.5.0)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL.
+
+## 5. Mainnet Readiness Evidence Pack (v0.5.0)
+
+### 5.1 Security & TEE (CON-162)
+- **External Triggers**: ISO 20022, PAPSS, and BRICS triggers are now wired into the execution flow.
+- **Verification Logic**: All external signals require valid TEE attestation and Oracle cross-verification before emitting a state proposal.
+- **Time-locks**: Verified triggers initiate a mandatory 144-block time-lock in the `settlement_proposals` table, preventing direct contract execution from TradFi payloads.
+
+### 5.2 Hygiene & Contamination (CON-394/183)
+- **Branch Model**: Production branches are mainnet-only. All testnet defaults (ST... addresses) have been removed from critical paths.
+- **Secrets Management**: No secrets tracked in source control. Standardized `.env.example` provided with security guidelines.
+- **Artifact Control**: `.gitignore` and `.dockerignore` hardened to exclude build artifacts and local configuration.
+
+### 5.3 Signer & Wallet Governance (CON-229)
+- **Bootstrap Wallet**: Aligned with the canonical SAB-owned wallet (`SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM`) for identity resolution and signing operations.
+- **Signer Controls**: `lib-conxian-core` handles HD derivation and secure message signing, allowing for multi-sig transitions and DAO handoff.
+
+### 5.4 Rollback & Finality (NEXUS-03)
+- **Microblock Reorgs**: NexusSync detects microblock reorgs and performs automated state rollbacks to the last hard-finality (burn block) tip.
+- **MMR Persistence**: Persistent MMR peaks and nodes ensure state roots can be reconstructed from the on-chain audit trail with O(1) performance.

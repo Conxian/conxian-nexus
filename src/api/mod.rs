@@ -2,6 +2,7 @@ pub mod billing;
 pub mod grpc;
 pub mod rest;
 pub mod services;
+pub mod settlement;
 
 use std::sync::OnceLock;
 use std::time::Instant;

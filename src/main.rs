@@ -39,6 +39,20 @@ async fn main() -> anyhow::Result<()> {
     // Initialize Executor
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
+    // Initialize Oracle Service
+    let oracle_service = if config.oracle_enabled {
+        let endpoint_url = config.oracle_endpoint_url.clone().unwrap();
+        let contract_principal = config.oracle_contract_principal.clone().unwrap();
+
+        Some(Arc::new(OracleService::new(
+            storage.clone(),
+            endpoint_url,
+            contract_principal,
+        )))
+    } else {
+        None
+    };
+
     // Initialize Services
     let sync_service = Arc::new(NexusSync::new(
         storage.clone(),
@@ -75,19 +89,10 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Spawn Oracle Service
-    let oracle_handle = if config.oracle_enabled {
-        let endpoint_url = config.oracle_endpoint_url.clone().unwrap();
-        let contract_principal = config.oracle_contract_principal.clone().unwrap();
-
-        let oracle_service = Arc::new(OracleService::new(
-            storage.clone(),
-            endpoint_url,
-            contract_principal,
-        ));
-
-        let oracle = oracle_service.clone();
+    let oracle_handle = if let Some(ref oracle) = oracle_service {
+        let oracle_worker = oracle.clone();
         Some(tokio::spawn(async move {
-            if let Err(e) = oracle.run().await {
+            if let Err(e) = oracle_worker.run().await {
                 tracing::error!("Oracle service failed: {}", e);
             }
         }))
@@ -122,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_storage = storage.clone();
     let rest_state = state_tracker.clone();
     let rest_executor = executor.clone();
+    let rest_oracle = oracle_service.clone();
     let rest_port = config.rest_port;
     let experimental_apis_enabled = config.experimental_apis_enabled;
     let rest_handle = tokio::spawn(async move {
@@ -129,6 +135,7 @@ async fn main() -> anyhow::Result<()> {
             rest_storage,
             rest_state,
             rest_executor,
+            rest_oracle,
             rest_port,
             experimental_apis_enabled,
         )

@@ -54,7 +54,6 @@ impl NexusGrpcService {
 
         None
     }
-
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
         let tx_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM stacks_transactions t \
@@ -121,35 +120,69 @@ impl NexusGrpcService {
             }
         };
 
-        let (safety_raw, drift_raw): (Option<String>, Option<String>) = match redis::pipe()
-            .cmd("GET")
-            .arg("nexus:safety_mode")
-            .cmd("GET")
-            .arg("nexus:drift")
-            .query_async(&mut conn)
-            .await
-        {
+        let pipeline_result: Result<(Option<String>, Option<String>), redis::RedisError> =
+            redis::pipe()
+                .cmd("GET")
+                .arg("nexus:safety_mode")
+                .cmd("GET")
+                .arg("nexus:drift")
+                .query_async(&mut conn)
+                .await;
+
+        let (safety_raw, drift_raw): (Option<String>, Option<String>) = match pipeline_result {
             Ok(result) => result,
             Err(e) => {
                 *self.redis_conn.lock().await = None;
-                tracing::error!(error = %e, context, "Redis error reading safety flags (pipeline)");
-                return Err(Status::internal("Redis error reading safety flags"));
+                tracing::warn!(
+                    error = %e,
+                    context,
+                    "Redis error reading safety flags (pipeline); retrying once"
+                );
+
+                let mut conn = redis_client
+                    .get_multiplexed_async_connection()
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (connect)"
+                        );
+                        Status::internal("Redis error reading safety flags")
+                    })?;
+
+                match redis::pipe()
+                    .cmd("GET")
+                    .arg("nexus:safety_mode")
+                    .cmd("GET")
+                    .arg("nexus:drift")
+                    .query_async(&mut conn)
+                    .await
+                {
+                    Ok(result) => {
+                        *self.redis_conn.lock().await = Some(conn.clone());
+                        result
+                    }
+                    Err(e) => {
+                        *self.redis_conn.lock().await = None;
+                        tracing::error!(
+                            error = %e,
+                            context,
+                            "Redis error reading safety flags (pipeline)"
+                        );
+                        return Err(Status::internal("Redis error reading safety flags"));
+                    }
+                }
             }
         };
 
         let safety_mode: bool = match safety_raw.as_deref() {
             None => false,
             Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    false
-                } else if crate::config::parse_flag(trimmed) {
+                let normalized = raw.trim().to_ascii_lowercase();
+                if crate::config::parse_flag(&normalized) {
                     true
-                } else if trimmed == "0"
-                    || trimmed.eq_ignore_ascii_case("false")
-                    || trimmed.eq_ignore_ascii_case("no")
-                    || trimmed.eq_ignore_ascii_case("off")
-                {
+                } else if matches!(normalized.as_str(), "" | "0" | "false" | "no" | "off") {
                     false
                 } else {
                     tracing::warn!(
