@@ -15,42 +15,74 @@ use lazy_static::lazy_static;
 use prometheus::{Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::sync::{Arc, OnceLock};
-
-static PROMETHEUS_METRICS_INIT: OnceLock<()> = OnceLock::new();
+use std::sync::Arc;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = IntGauge::new(
-        "nexus_total_transactions",
-        "Total number of transactions processed"
-    )
-    .expect("nexus_total_transactions metric must be valid");
-    pub static ref TOTAL_BLOCKS: IntGauge =
-        IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = {
+        let gauge = IntGauge::new(
+            "nexus_total_transactions",
+            "Total number of transactions processed",
+        )
+        .expect("nexus_total_transactions metric must be valid");
+
+        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
+            tracing::error!(
+                error = %e,
+                "Prometheus metrics registration failed for nexus_total_transactions"
+            );
+        }
+
+        gauge
+    };
+    pub static ref TOTAL_BLOCKS: IntGauge = {
+        let gauge = IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
             .expect("nexus_total_blocks metric must be valid");
-    pub static ref SYNC_DRIFT: IntGauge =
-        IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
+
+        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
+            tracing::error!(
+                error = %e,
+                "Prometheus metrics registration failed for nexus_total_blocks"
+            );
+        }
+
+        gauge
+    };
+    pub static ref SYNC_DRIFT: IntGauge = {
+        let gauge = IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
             .expect("nexus_sync_drift metric must be valid");
-    pub static ref SAFETY_MODE: IntGauge = IntGauge::new(
-        "nexus_safety_mode",
-        "Safety mode status (1 = active, 0 = inactive)"
-    )
-    .expect("nexus_safety_mode metric must be valid");
+
+        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
+            tracing::error!(
+                error = %e,
+                "Prometheus metrics registration failed for nexus_sync_drift"
+            );
+        }
+
+        gauge
+    };
+    pub static ref SAFETY_MODE: IntGauge = {
+        let gauge = IntGauge::new(
+            "nexus_safety_mode",
+            "Safety mode status (1 = active, 0 = inactive)",
+        )
+        .expect("nexus_safety_mode metric must be valid");
+
+        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
+            tracing::error!(
+                error = %e,
+                "Prometheus metrics registration failed for nexus_safety_mode"
+            );
+        }
+
+        gauge
+    };
 }
 
 fn init_prometheus_metrics() {
-    PROMETHEUS_METRICS_INIT.get_or_init(|| {
-        // Best-effort: avoid panicking on accidental duplicate metric registration.
-        if let Err(e) = (|| -> prometheus::Result<()> {
-            prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone()))?;
-            prometheus::register(Box::new(TOTAL_BLOCKS.clone()))?;
-            prometheus::register(Box::new(SYNC_DRIFT.clone()))?;
-            prometheus::register(Box::new(SAFETY_MODE.clone()))?;
-            Ok(())
-        })() {
-            tracing::error!(error = %e, "Prometheus metrics registration failed");
-        }
-    });
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
 }
 
 #[derive(Clone)]
