@@ -93,6 +93,10 @@ impl NexusGrpcService {
     ///
     /// If Redis is unavailable, this logs the error and returns `(true, 0)` to
     /// keep read-only health/metrics RPCs available while remaining conservative.
+    ///
+    /// In this fallback, `drift=0` means "unknown (Redis unavailable)" and must
+    /// not be interpreted as "in-sync". This helper is intended only for the
+    /// read-only `GetStatus`/`GetMetrics` paths.
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
         let default_flags = (true, 0);
 

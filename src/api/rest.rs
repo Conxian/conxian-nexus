@@ -34,6 +34,13 @@ lazy_static! {
     .unwrap();
 }
 
+pub fn init_prometheus_metrics() {
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub storage: Arc<Storage>,
@@ -102,6 +109,8 @@ pub fn app_router(
     oracle: Option<Arc<OracleService>>,
     experimental_apis_enabled: bool,
 ) -> Router {
+    init_prometheus_metrics();
+
     let state = AppState {
         storage,
         nexus_state,
