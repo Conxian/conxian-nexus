@@ -178,9 +178,9 @@ pub mod gateway {
     pub struct BitVMService;
     impl BitVMService {
         /// [CON-75] BitVM2 verification floor for Job Card settlement.
-        pub fn verify_job_card(&self, job_card: &crate::cjcs::JobCard) -> bool {
-            // [STUB] Verify against BitVM2 state root.
-            !job_card.work_intent.task_id.is_empty()
+        pub fn verify_job_card(&self, _job_card: &crate::cjcs::JobCard) -> bool {
+            // BitVM2 verification is not yet wired. Fail closed.
+            false
         }
     }
 
@@ -198,8 +198,8 @@ pub mod gateway {
         fn handle_request(&self, _payload: &str) -> ServiceResponse {
             ServiceResponse {
                 service: self.name().to_string(),
-                status: "Success".to_string(),
-                message: "BitVM state verified.".to_string(),
+                status: "NotImplemented".to_string(),
+                message: "BitVM2 verification is not yet available.".to_string(),
                 data: None,
             }
         }

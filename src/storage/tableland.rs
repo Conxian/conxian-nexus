@@ -2,6 +2,7 @@
 //! Bridges off-shore yield routing state to decentralized Tableland tables.
 
 use crate::storage::Storage;
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -33,12 +34,9 @@ impl TablelandAdapter {
     ) -> anyhow::Result<String> {
         tracing::info!("Committing state to Tableland: {}", commitment.table_id);
 
-        // [STUB] Implement actual Tableland REST/Validator API calls here.
-        // Requires signed transaction from Conxian Wallet for Tableland mutation.
-
-        let txn_hash = format!("0x{}", hex::encode(rand::random::<[u8; 32]>()));
-        tracing::debug!("Tableland mutation txn broadcasted: {}", txn_hash);
-
-        Ok(txn_hash)
+        Err(anyhow!(
+            "Tableland persistence is not yet available (base_url={})",
+            self._base_url
+        ))
     }
 }
