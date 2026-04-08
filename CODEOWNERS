@@ -2,7 +2,12 @@
 #
 # Notes:
 # - GitHub uses this file to auto-request reviews when a PR touches matching paths.
-# - Prefer listing real GitHub users (e.g. @user) or teams (e.g. @org/team).
+# - Entries must be GitHub usernames (@user) or teams (@org/team). Emails are not supported.
+# - For operational/email contacts, see the Ownership section in README.
+
+# Owners:
+# - @botshelomokoka: primary maintainer
+# - @admin-conxian-labs: repository administrator account
 
 * @botshelomokoka @admin-conxian-labs
 
