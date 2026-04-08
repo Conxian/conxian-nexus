@@ -142,6 +142,7 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
                 properties:
                   state_root:
                     type: string
@@ -155,6 +156,7 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
                 properties:
                   state_root:
                     type: string
