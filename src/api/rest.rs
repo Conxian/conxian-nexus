@@ -16,6 +16,7 @@ use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use std::time::Duration;
 
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
@@ -47,6 +48,8 @@ pub struct AppState {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
+    pub http_client: reqwest::Client,
+    pub stacks_api_base: reqwest::Url,
 }
 
 #[derive(Deserialize)]
@@ -111,11 +114,40 @@ pub fn app_router(
 ) -> Router {
     init_prometheus_metrics();
 
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .connect_timeout(Duration::from_secs(3))
+        .build()
+        .unwrap_or_else(|err| {
+            tracing::warn!(
+                error = %err,
+                "Failed to build reqwest client; falling back to default client"
+            );
+            reqwest::Client::new()
+        });
+
+    let stacks_api_base_raw = std::env::var("STACKS_NODE_RPC_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string());
+    let stacks_api_base = reqwest::Url::parse(&stacks_api_base_raw).unwrap_or_else(|err| {
+        tracing::warn!(
+            error = %err,
+            stacks_api_base = %stacks_api_base_raw,
+            "Invalid STACKS_NODE_RPC_URL; falling back to default Stacks API base URL"
+        );
+        reqwest::Url::parse("https://api.mainnet.hiro.so")
+            .expect("default Stacks API base URL should be valid")
+    });
+
     let state = AppState {
         storage,
         nexus_state,
         executor,
         oracle,
+        http_client,
+        stacks_api_base,
     };
 
     let mut router = Router::new()

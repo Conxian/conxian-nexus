@@ -26,7 +26,7 @@ pub struct IdentityResolveResponse {
 
 /// [NEXUS-ID-01] Identity provider resolution.
 pub async fn resolve_identity_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<IdentityResolveRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
@@ -37,18 +37,42 @@ pub async fn resolve_identity_handler(
 
     match payload.protocol.as_str() {
         "BNS" => {
-            let stacks_api_base = std::env::var("STACKS_NODE_RPC_URL")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string());
-            let url = format!(
-                "{}/v1/names/{}",
-                stacks_api_base.trim_end_matches('/'),
-                payload.name
-            );
+            let name = payload.name.trim();
+            if name.is_empty() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(IdentityResolveResponse {
+                        address: "".to_string(),
+                        protocol: payload.protocol,
+                        proof_of_personhood: false,
+                    }),
+                )
+                    .into_response();
+            }
 
-            let resp = match reqwest::Client::new().get(url).send().await {
+            let mut url = state.stacks_api_base.clone();
+            url.set_query(None);
+            url.set_fragment(None);
+            match url.path_segments_mut() {
+                Ok(mut segments) => {
+                    segments.clear();
+                    segments.extend(["v1", "names", name]);
+                }
+                Err(()) => {
+                    tracing::error!(base_url = %state.stacks_api_base, "Stacks API base URL cannot be a base");
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(IdentityResolveResponse {
+                            address: "".to_string(),
+                            protocol: payload.protocol,
+                            proof_of_personhood: false,
+                        }),
+                    )
+                        .into_response();
+                }
+            }
+
+            let resp = match state.http_client.get(url).send().await {
                 Ok(resp) => resp,
                 Err(err) => {
                     tracing::warn!(error = %err, "BNS name lookup failed");
