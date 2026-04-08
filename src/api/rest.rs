@@ -71,6 +71,13 @@ pub struct VerifyStateRequest {
     pub state_root: String,
 }
 
+#[derive(Deserialize, Serialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
+    pub proof: String,
+    pub public_inputs: Option<Vec<String>>,
+}
+
 #[derive(Serialize)]
 pub struct VerifyStateResponse {
     pub valid: bool,
@@ -122,6 +129,10 @@ pub fn app_router(
         .route("/v1/proof", get(get_proof))
         .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
+        .route(
+            "/v1/bitvm2/verify-state-root",
+            post(verify_bitvm2_state_root),
+        )
         .route("/v1/status", get(get_status))
         .route("/v1/metrics", get(get_metrics))
         .route("/metrics", get(prometheus_metrics))
@@ -254,6 +265,63 @@ async fn verify_state(
         valid: current_root == payload.state_root,
         mmr_root: state.nexus_state.get_mmr_root(),
     })
+}
+
+async fn verify_bitvm2_state_root(
+    State(_state): State<AppState>,
+    Json(payload): Json<VerifyBitvm2StateRootRequest>,
+) -> impl IntoResponse {
+    let gateway_url = std::env::var("GATEWAY_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let gateway_url = match gateway_url {
+        Some(url) => url,
+        None => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(serde_json::json!({
+                    "state_root": payload.state_root,
+                    "verified": false,
+                    "error": "GATEWAY_URL is not configured",
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let url = format!(
+        "{}/api/v1/bitvm2/verify-state-root",
+        gateway_url.trim_end_matches('/')
+    );
+
+    let resp = match reqwest::Client::new().post(url).json(&payload).send().await {
+        Ok(resp) => resp,
+        Err(err) => {
+            tracing::warn!(error = %err, "BitVM2 verifier gateway request failed");
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(serde_json::json!({
+                    "state_root": payload.state_root,
+                    "verified": false,
+                    "error": "bitvm2 verifier gateway request failed",
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let body: serde_json::Value = resp.json().await.unwrap_or_else(|_| {
+        serde_json::json!({
+            "state_root": payload.state_root,
+            "verified": false,
+            "error": "bitvm2 verifier gateway returned invalid JSON",
+        })
+    });
+
+    (status, Json(body)).into_response()
 }
 
 async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {

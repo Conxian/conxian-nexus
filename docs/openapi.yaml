@@ -100,6 +100,34 @@ paths:
                 properties:
                   valid:
                     type: boolean
+  /v1/bitvm2/verify-state-root:
+    post:
+      summary: Verify a BitVM2 state root SNARK proof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state_root:
+                  type: string
+                proof:
+                  type: string
+                public_inputs:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verified:
+                    type: boolean
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
