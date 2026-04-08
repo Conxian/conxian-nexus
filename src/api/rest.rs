@@ -12,23 +12,33 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{Encoder, IntGauge, TextEncoder};
+use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge =
-        IntGauge::new("nexus_total_transactions", "Total transactions processed").unwrap();
-    pub static ref TOTAL_BLOCKS: IntGauge =
-        IntGauge::new("nexus_total_blocks", "Total blocks synchronized").unwrap();
-    pub static ref SYNC_DRIFT: IntGauge =
-        IntGauge::new("nexus_sync_drift", "Drift between Nexus and L1").unwrap();
-    pub static ref SAFETY_MODE: IntGauge = IntGauge::new(
-        "nexus_safety_mode",
-        "Safety Mode Status (1 = active, 0 = inactive)"
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
+        "nexus_total_transactions",
+        "Total number of transactions processed"
     )
     .unwrap();
+    pub static ref TOTAL_BLOCKS: IntGauge =
+        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
+    pub static ref SYNC_DRIFT: IntGauge =
+        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
+    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
+        "nexus_safety_mode",
+        "Safety mode status (1 = active, 0 = inactive)"
+    )
+    .unwrap();
+}
+
+pub fn init_prometheus_metrics() {
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
 }
 
 #[derive(Clone)]
@@ -99,6 +109,8 @@ pub fn app_router(
     oracle: Option<Arc<OracleService>>,
     experimental_apis_enabled: bool,
 ) -> Router {
+    init_prometheus_metrics();
+
     let state = AppState {
         storage,
         nexus_state,
