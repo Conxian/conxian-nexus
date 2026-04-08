@@ -11,11 +11,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use lazy_static::lazy_static;
 use prometheus::{Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
-use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge =
@@ -24,8 +24,11 @@ lazy_static! {
         IntGauge::new("nexus_total_blocks", "Total blocks synchronized").unwrap();
     pub static ref SYNC_DRIFT: IntGauge =
         IntGauge::new("nexus_sync_drift", "Drift between Nexus and L1").unwrap();
-    pub static ref SAFETY_MODE: IntGauge =
-        IntGauge::new("nexus_safety_mode", "Safety Mode Status (1 = active, 0 = inactive)").unwrap();
+    pub static ref SAFETY_MODE: IntGauge = IntGauge::new(
+        "nexus_safety_mode",
+        "Safety Mode Status (1 = active, 0 = inactive)"
+    )
+    .unwrap();
 }
 
 #[derive(Clone)]
@@ -148,7 +151,13 @@ pub async fn start_rest_server(
     port: u16,
     experimental_apis_enabled: bool,
 ) -> anyhow::Result<()> {
-    let app = app_router(storage, nexus_state, executor, oracle, experimental_apis_enabled);
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        oracle,
+        experimental_apis_enabled,
+    );
 
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
     tracing::info!("REST server listening on {}", listener.local_addr()?);

@@ -51,7 +51,10 @@ pub async fn settlement_trigger_handler(
 
     // 2. Oracle Verification
     if let Some(oracle) = &state.oracle {
-        match oracle.verify_external_signal(&payload.source, &payload.payload).await {
+        match oracle
+            .verify_external_signal(&payload.source, &payload.payload)
+            .await
+        {
             Ok(true) => tracing::info!("Oracle verified {} signal", payload.source),
             Ok(false) => {
                 return (

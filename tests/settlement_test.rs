@@ -3,13 +3,13 @@ use axum::{
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
+use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
-use conxian_nexus::config::Config;
+use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
-use serde_json::json;
 
 #[tokio::test]
 async fn test_external_settlement_trigger_unauthorized() {
@@ -108,7 +108,9 @@ async fn test_external_settlement_trigger_success() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let res: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
     assert_eq!(res["status"], "Active");

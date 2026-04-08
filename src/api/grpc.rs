@@ -31,50 +31,56 @@ struct MetricsCountsCacheState {
 
 struct MetricsCountsCache {
     state: Mutex<MetricsCountsCacheState>,
+    refresh_lock: Mutex<()>,
 }
 
 impl MetricsCountsCache {
     fn new() -> Self {
         Self {
             state: Mutex::new(MetricsCountsCacheState { value: None }),
+            refresh_lock: Mutex::new(()),
         }
     }
 }
 
 impl NexusGrpcService {
+    async fn read_fresh_cached_metrics_counts(&self) -> Option<(u64, u64)> {
+        let cache_guard = self.metrics_counts_cache.state.lock().await;
+        if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
+            if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
+                return Some((cached_tx_count, cached_block_count));
+            }
+        }
+
+        None
+    }
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        let tx_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM stacks_transactions t \
-             JOIN stacks_blocks b ON t.block_hash = b.hash \
-             WHERE b.state != 'orphaned'",
+        let (tx_count, block_count): (i64, i64) = sqlx::query_as(
+            "SELECT \
+                (SELECT COUNT(*) FROM stacks_transactions t \
+                 JOIN stacks_blocks b ON t.block_hash = b.hash \
+                 WHERE b.state != 'orphaned') AS tx_count, \
+                (SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned') AS block_count",
         )
         .fetch_one(&self.storage.pg_pool)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "Database error in GetMetrics (tx_count)");
-            Status::internal("Database error in GetMetrics (tx_count)")
+            tracing::error!(error = %e, "Database error in GetMetrics (counts)");
+            Status::internal("Database error in GetMetrics (counts)")
         })?;
-
-        let block_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned'")
-                .fetch_one(&self.storage.pg_pool)
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, "Database error in GetMetrics (block_count)");
-                    Status::internal("Database error in GetMetrics (block_count)")
-                })?;
 
         Ok((tx_count as u64, block_count as u64))
     }
 
     async fn read_cached_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        {
-            let cache_guard = self.metrics_counts_cache.state.lock().await;
-            if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
-                if cached_at.elapsed() < METRICS_COUNTS_CACHE_TTL {
-                    return Ok((cached_tx_count, cached_block_count));
-                }
-            }
+        if let Some(counts) = self.read_fresh_cached_metrics_counts().await {
+            return Ok(counts);
+        }
+
+        let _refresh_guard = self.metrics_counts_cache.refresh_lock.lock().await;
+
+        if let Some(counts) = self.read_fresh_cached_metrics_counts().await {
+            return Ok(counts);
         }
 
         let (tx_count, block_count) = self.fetch_metrics_counts().await?;
