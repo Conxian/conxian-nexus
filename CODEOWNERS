@@ -3,7 +3,8 @@
 # Notes:
 # - GitHub uses this file to auto-request reviews when a PR touches matching paths.
 # - Entries must be GitHub usernames (@user) or teams (@org/team). Emails are not supported.
-# - For operational contact details, see CONTRIBUTING.md (and SECURITY.md for security reports).
+# - For operational contact details, see CONTRIBUTING.md.
+# - For security reports, see SECURITY.md.
 
 # Owners:
 # - @botshelomokoka: primary maintainer
