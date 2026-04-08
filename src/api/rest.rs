@@ -19,12 +19,12 @@ use std::sync::Arc;
 
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
-        "nexus_transactions_total",
+        "nexus_total_transactions",
         "Total number of transactions processed"
     )
     .unwrap();
     pub static ref TOTAL_BLOCKS: IntGauge =
-        register_int_gauge!("nexus_blocks_total", "Total number of blocks processed").unwrap();
+        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
     pub static ref SYNC_DRIFT: IntGauge =
         register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
     pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
