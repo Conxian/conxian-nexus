@@ -3,6 +3,7 @@
 
 use crate::api::rest::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use reqwest::StatusCode as ReqwestStatusCode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +64,7 @@ pub async fn resolve_identity_handler(
                 }
             };
 
-            if resp.status() == StatusCode::NOT_FOUND {
+            if resp.status() == ReqwestStatusCode::NOT_FOUND {
                 return (
                     StatusCode::NOT_FOUND,
                     Json(IdentityResolveResponse {
