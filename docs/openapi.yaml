@@ -109,6 +109,9 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - state_root
+                - proof
               properties:
                 state_root:
                   type: string
@@ -125,9 +128,40 @@ paths:
             application/json:
               schema:
                 type: object
+                additionalProperties: true
                 properties:
+                  state_root:
+                    type: string
                   verified:
                     type: boolean
+                  error:
+                    type: string
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state_root:
+                    type: string
+                  verified:
+                    type: boolean
+                  error:
+                    type: string
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state_root:
+                    type: string
+                  verified:
+                    type: boolean
+                  error:
+                    type: string
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
