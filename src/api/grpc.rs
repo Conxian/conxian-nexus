@@ -55,7 +55,7 @@ impl NexusGrpcService {
         None
     }
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
-        let (tx_count, block_count): (i64, i64) = sqlx::query_as::<_, (i64, i64)>(
+        let (tx_count, block_count): (i64, i64) = sqlx::query_as(
             "SELECT \
                     (SELECT COUNT(*) FROM stacks_transactions t \
                      JOIN stacks_blocks b ON t.block_hash = b.hash \
@@ -66,7 +66,7 @@ impl NexusGrpcService {
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Database error in GetMetrics (counts)");
-            Status::internal("Database error in GetMetrics (counts)")
+            Status::internal("Database error in GetMetrics")
         })?;
 
         Ok((tx_count as u64, block_count as u64))
@@ -90,8 +90,7 @@ impl NexusGrpcService {
     }
 
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        let default_flags = (true, 0);
-
+        let conservative_default = (true, 0);
         let redis_client = self.storage.redis_client.clone();
         let cached_conn = { self.redis_conn.lock().await.clone() };
 
@@ -106,7 +105,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        return Ok(default_flags);
+                        return Ok(conservative_default);
                     }
                 };
 
@@ -142,7 +141,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        return Ok(default_flags);
+                        return Ok(conservative_default);
                     }
                 };
 
@@ -165,7 +164,7 @@ impl NexusGrpcService {
                             context,
                             "Redis error reading safety flags (pipeline); defaulting safe"
                         );
-                        return Ok(default_flags);
+                        return Ok(conservative_default);
                     }
                 }
             }
