@@ -127,43 +127,25 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
-                properties:
-                  state_root:
-                    type: string
-                  verified:
-                    type: boolean
-                  error:
-                    type: string
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+        default:
+          description: Gateway response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
         '502':
           description: Bad Gateway
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
-                properties:
-                  state_root:
-                    type: string
-                  verified:
-                    type: boolean
-                  error:
-                    type: string
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
         '503':
           description: Service Unavailable
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: true
-                properties:
-                  state_root:
-                    type: string
-                  verified:
-                    type: boolean
-                  error:
-                    type: string
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
@@ -270,3 +252,16 @@ paths:
                     type: integer
                   status:
                     type: string
+
+components:
+  schemas:
+    Bitvm2StateRootVerificationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        state_root:
+          type: string
+        verified:
+          type: boolean
+        error:
+          type: string
