@@ -100,6 +100,52 @@ paths:
                 properties:
                   valid:
                     type: boolean
+  /v1/bitvm2/verify-state-root:
+    post:
+      summary: Verify a BitVM2 state root SNARK proof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - state_root
+                - proof
+              properties:
+                state_root:
+                  type: string
+                proof:
+                  type: string
+                public_inputs:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+        default:
+          description: Gateway response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+        '502':
+          description: Bad Gateway
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+        '503':
+          description: Service Unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
@@ -206,3 +252,16 @@ paths:
                     type: integer
                   status:
                     type: string
+
+components:
+  schemas:
+    Bitvm2StateRootVerificationResponse:
+      type: object
+      additionalProperties: true
+      properties:
+        state_root:
+          type: string
+        verified:
+          type: boolean
+        error:
+          type: string
