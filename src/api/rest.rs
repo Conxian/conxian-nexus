@@ -78,6 +78,7 @@ pub struct VerifyStateRequest {
 pub struct VerifyBitvm2StateRootRequest {
     pub state_root: String,
     pub proof: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub public_inputs: Option<Vec<String>>,
 }
 
