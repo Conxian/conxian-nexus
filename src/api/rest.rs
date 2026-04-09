@@ -310,15 +310,20 @@ async fn verify_bitvm2_state_root(
         "{}/api/v1/bitvm2/verify-state-root",
         gateway_url.trim_end_matches('/')
     );
-    let url_for_log = url.clone();
 
-    let resp = match state.http_client.post(url).json(&payload).send().await {
+    let resp = match state
+        .http_client
+        .post(url.as_str())
+        .json(&payload)
+        .send()
+        .await
+    {
         Ok(resp) => resp,
         Err(err) => {
             tracing::warn!(
                 error = %err,
                 state_root = %payload.state_root,
-                url = %url_for_log,
+                url = %url,
                 "BitVM2 verifier gateway request failed"
             );
             return (
@@ -341,7 +346,7 @@ async fn verify_bitvm2_state_root(
             tracing::warn!(
                 error = %err,
                 state_root = %payload.state_root,
-                url = %url_for_log,
+                url = %url,
                 upstream_status = %upstream_status,
                 "BitVM2 verifier gateway read failed"
             );
@@ -362,7 +367,7 @@ async fn verify_bitvm2_state_root(
             tracing::warn!(
                 error = %err,
                 state_root = %payload.state_root,
-                url = %url_for_log,
+                url = %url,
                 upstream_status = %upstream_status,
                 "BitVM2 verifier gateway returned invalid JSON"
             );
