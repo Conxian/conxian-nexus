@@ -85,12 +85,18 @@ pub async fn settlement_trigger_handler(
     }
 
     // 3. Log external settlement event [CON-164]
+    // Extract institutional identifiers for reconciliation
     let fiat_value = payload.payload.get("amount").and_then(|v| v.as_f64());
+
+    // Reconciliation helpers (UETR for ISO20022, unique refs for PAPSS)
+    let uetr = payload.payload.get("uetr").and_then(|v| v.as_str());
+    let e2e_id = payload.payload.get("end_to_end_id").and_then(|v| v.as_str());
+
     let _ = sqlx::query(
         "INSERT INTO cxn_external_settlement_logs (external_tx_reference, settlement_network_origin, fiat_value_pegged, raw_payload)
          VALUES ($1, $2, $3, $4)"
     )
-    .bind(&payload.external_id)
+    .bind(uetr.or(e2e_id).unwrap_or(&payload.external_id))
     .bind(&payload.source)
     .bind(fiat_value)
     .bind(&payload.payload)
