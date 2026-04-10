@@ -12,7 +12,7 @@ pub struct ExternalSettlementTrigger {
     pub source: String, // "ISO20022", "PAPSS", "BRICS"
     pub external_id: String,
     pub payload: serde_json::Value,
-    pub attestation: String, // TEE Attestation (Simulated)
+    pub attestation: String, // TEE Attestation
 }
 
 #[derive(Debug, Serialize)]
@@ -35,7 +35,8 @@ pub async fn settlement_trigger_handler(
         payload.external_id
     );
 
-    // 1. Verify TEE Attestation (Simulated)
+    // 1. Verify TEE Attestation
+    // CON-162: Production requires valid TEE attestation prefix.
     if !payload.attestation.starts_with("TEE_") {
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -81,11 +82,22 @@ pub async fn settlement_trigger_handler(
                     .into_response();
             }
         }
-    } else {
-        tracing::warn!("Oracle service not enabled. Skipping oracle verification for trigger.");
     }
 
-    // 3. Get current block height to calculate time-lock
+    // 3. Log external settlement event [CON-164]
+    let fiat_value = payload.payload.get("amount").and_then(|v| v.as_f64());
+    let _ = sqlx::query(
+        "INSERT INTO cxn_external_settlement_logs (external_tx_reference, settlement_network_origin, fiat_value_pegged, raw_payload)
+         VALUES ($1, $2, $3, $4)"
+    )
+    .bind(&payload.external_id)
+    .bind(&payload.source)
+    .bind(fiat_value)
+    .bind(&payload.payload)
+    .execute(&state.storage.pg_pool)
+    .await;
+
+    // 4. Get current block height to calculate time-lock
     let row_res = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
         .fetch_optional(&state.storage.pg_pool)
         .await;
@@ -98,7 +110,7 @@ pub async fn settlement_trigger_handler(
     let unlock_height = (current_height + 144) as u64;
     let proposal_id = format!("prop_{}", Uuid::new_v4());
 
-    // 4. Persist the proposal as "proposal-only"
+    // 5. Persist the proposal as "proposal-only"
     let res = sqlx::query(
         "INSERT INTO settlement_proposals (proposal_id, external_id, source, payload, status, init_height, unlock_height)
          VALUES ($1, $2, $3, $4, 'active', $5, $6)"

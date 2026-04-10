@@ -13,7 +13,7 @@ const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 
 // CON-394: Remediated contamination. Stubbing is now explicit and restricted.
-const ORACLE_SERVICE_IS_STUBBED: bool = false;
+const ORACLE_SERVICE_IS_STUBBED: bool = false; // Remediated;
 
 pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
