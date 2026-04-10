@@ -16,13 +16,13 @@ struct ExchangeRateResponse {
     rates: HashMap<String, f64>,
 }
 
-pub struct OracleStub {
+pub struct OracleAggregator {
     client: Client,
     endpoint_urls: Vec<String>,
     contract_principal: String,
 }
 
-impl OracleStub {
+impl OracleAggregator {
     pub fn new(endpoint_url: String, contract_principal: String) -> Self {
         Self {
             client: Client::new(),

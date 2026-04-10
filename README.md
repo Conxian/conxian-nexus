@@ -4,22 +4,17 @@ Conxian Nexus is a high-performance middleware designed to synchronize off-chain
 
 ## Purpose
 
-Provide a verifiable synchronization and proof layer between off-chain state and Stacks L1, with ordering guarantees and safety-mode controls.
+Provide a verifiable synchronization and proof layer between off-chain state and Stacks L1, with ordering guarantees and safety-mode controls. It serves as the primary sovereign truth layer for the Conxian ecosystem.
 
 ## Status
 
-Active development. Module boundaries and APIs may change as the stack converges on shared primitives.
+**Production-Ready (v0.4.0)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
 
-## Audience
+## Repository Categorization
 
-- Backend engineers working on state sync, proof generation, and ordering.
-- Protocol engineers integrating L1 events into higher-level execution flows.
-- Infrastructure operators running Nexus for observability and safety monitoring.
-
-## Relationship to the Conxian stack
-
-- Complements Conxian Gateway by focusing on ordering, proofs, and state-root integrity.
-- Can be used as an execution-adjacent component for systems that require FSOC-style validation.
+- **Classification**: P1 - Required for stable production support.
+- **Business Unit**: Conxian Sovereign Finance (CSF).
+- **Owner**: @botshelomokoka
 
 ## Modules
 
@@ -39,7 +34,7 @@ Active development. Module boundaries and APIs may change as the stack converges
 - **Verifiable Proofs**: Generate and verify Merkle proofs for any transaction.
 - **Persistent MMR**: Full persistence of MMR peaks and nodes in PostgreSQL, with support for cryptographic inclusion proofs.
 - **Multi-Protocol**: Unified support for Bisq, RGB, and BitVM.
-- **Observability**: Prometheus metrics exporter and internal JSON metrics.
+- **Global Settlement Ingress**: Additive support for ISO 20022, PAPSS, and BRICS triggers with TEE verification.
 
 ## API Highlights
 
@@ -49,7 +44,7 @@ Active development. Module boundaries and APIs may change as the stack converges
 - `POST /v1/execute`: Submit transactions for FSOC validation.
 - `GET /v1/proof?key=<tx_id>`: Retrieve Merkle proof.
 - `GET /v1/mmr-proof?tx_id=<tx_id>`: Retrieve MMR inclusion proof.
-- `GET /v1/services`: Multi-protocol service health.
+- `POST /v1/settlement/trigger`: External institutional settlement triggers.
 
 ## Getting Started
 
@@ -69,6 +64,13 @@ Or manually:
 ```bash
 cargo run
 ```
+
+## Governance & Security
+
+- **Ownership**: Defined in [CODEOWNERS](./CODEOWNERS).
+- **Contributing**: See [CONTRIBUTING.md](./CONTRIBUTING.md).
+- **Security**: See [SECURITY.md](./SECURITY.md).
+- **BOS Boundary**: This repository enforces a strict mainnet-only production boundary.
 
 ## Documentation
 

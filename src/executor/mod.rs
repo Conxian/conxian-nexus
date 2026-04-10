@@ -328,7 +328,7 @@ mod tests {
             tx_id: "tx123".to_string(),
             payload: "data".to_string(),
             timestamp: Utc::now(),
-            sender: "SP...".to_string(),
+            sender: "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(),
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();

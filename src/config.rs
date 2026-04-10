@@ -5,13 +5,15 @@ pub const ENV_ORACLE_ENABLED: &str = "NEXUS_ORACLE_ENABLED";
 pub const ENV_ORACLE_STUB_OK: &str = "NEXUS_ORACLE_STUB_OK";
 pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
+pub const ENV_ALLOW_DEFAULT_DB: &str = "NEXUS_ALLOW_DEFAULT_DB";
+pub const ENV_ALLOW_DEFAULT_REDIS: &str = "NEXUS_ALLOW_DEFAULT_REDIS";
 
 const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 
 // CON-394: Remediated contamination. Stubbing is now explicit and restricted.
-const ORACLE_SERVICE_IS_STUBBED: bool = false;
+const ORACLE_SERVICE_IS_STUBBED: bool = false; // Remediated;
 
 pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
@@ -59,45 +61,63 @@ impl Config {
             env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
         }
 
+        let allow_default_db = cfg!(debug_assertions) || env_flag(ENV_ALLOW_DEFAULT_DB);
         let database_url = match env::var("DATABASE_URL") {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
-                    tracing::warn!(
-                        default = DEFAULT_DATABASE_URL,
-                        "DATABASE_URL set but empty; defaulting"
-                    );
-                    DEFAULT_DATABASE_URL.to_string()
+                    if allow_default_db {
+                        tracing::warn!(
+                            default = DEFAULT_DATABASE_URL,
+                            "DATABASE_URL set but empty; defaulting"
+                        );
+                        DEFAULT_DATABASE_URL.to_string()
+                    } else {
+                        bail!("Missing env var: DATABASE_URL");
+                    }
                 } else {
                     trimmed.to_string()
                 }
             }
             Err(env::VarError::NotPresent) => {
-                tracing::warn!(
-                    default = DEFAULT_DATABASE_URL,
-                    "DATABASE_URL not set; defaulting"
-                );
-                DEFAULT_DATABASE_URL.to_string()
+                if allow_default_db {
+                    tracing::warn!(
+                        default = DEFAULT_DATABASE_URL,
+                        "DATABASE_URL not set; defaulting"
+                    );
+                    DEFAULT_DATABASE_URL.to_string()
+                } else {
+                    bail!("Missing env var: DATABASE_URL");
+                }
             }
             Err(env::VarError::NotUnicode(_)) => bail!("DATABASE_URL must be valid unicode"),
         };
 
+        let allow_default_redis = cfg!(debug_assertions) || env_flag(ENV_ALLOW_DEFAULT_REDIS);
         let redis_url = match env::var("REDIS_URL") {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
-                    tracing::warn!(
-                        default = DEFAULT_REDIS_URL,
-                        "REDIS_URL set but empty; defaulting"
-                    );
-                    DEFAULT_REDIS_URL.to_string()
+                    if allow_default_redis {
+                        tracing::warn!(
+                            default = DEFAULT_REDIS_URL,
+                            "REDIS_URL set but empty; defaulting"
+                        );
+                        DEFAULT_REDIS_URL.to_string()
+                    } else {
+                        bail!("Missing env var: REDIS_URL");
+                    }
                 } else {
                     trimmed.to_string()
                 }
             }
             Err(env::VarError::NotPresent) => {
-                tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL not set; defaulting");
-                DEFAULT_REDIS_URL.to_string()
+                if allow_default_redis {
+                    tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL not set; defaulting");
+                    DEFAULT_REDIS_URL.to_string()
+                } else {
+                    bail!("Missing env var: REDIS_URL");
+                }
             }
             Err(env::VarError::NotUnicode(_)) => bail!("REDIS_URL must be valid unicode"),
         };

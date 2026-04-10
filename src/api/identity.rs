@@ -2,8 +2,14 @@
 //! Resolves decentralized identities (ENS, BNS, WorldID) to Stacks addresses.
 
 use crate::api::rest::AppState;
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use reqwest::StatusCode as ReqwestStatusCode;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+struct BnsNameResponse {
+    address: String,
+}
 
 #[derive(Debug, Deserialize)]
 pub struct IdentityResolveRequest {
@@ -29,24 +35,102 @@ pub async fn resolve_identity_handler(
         payload.protocol
     );
 
-    // [STUB] Integrate Web3.bio, ENS, BNS, and World ID APIs.
+    match payload.protocol.as_str() {
+        "BNS" => {
+            let stacks_api_base = std::env::var("STACKS_NODE_RPC_URL")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string());
+            let url = format!(
+                "{}/v1/names/{}",
+                stacks_api_base.trim_end_matches('/'),
+                payload.name
+            );
 
-    let (address, pop) = match payload.protocol.as_str() {
-        "ENS" => (
-            "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045".to_string(),
-            false,
-        ),
-        "BNS" => (
-            "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(), // Align with SAB bootstrap wallet
-            false,
-        ),
-        "WorldID" => ("world_id_nullifier_abc123".to_string(), true),
-        _ => ("unknown".to_string(), false),
-    };
+            let resp = match reqwest::Client::new().get(url).send().await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    tracing::warn!(error = %err, "BNS name lookup failed");
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(IdentityResolveResponse {
+                            address: "".to_string(),
+                            protocol: payload.protocol,
+                            proof_of_personhood: false,
+                        }),
+                    )
+                        .into_response();
+                }
+            };
 
-    Json(IdentityResolveResponse {
-        address,
-        protocol: payload.protocol,
-        proof_of_personhood: pop,
-    })
+            if resp.status() == ReqwestStatusCode::NOT_FOUND {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Json(IdentityResolveResponse {
+                        address: "".to_string(),
+                        protocol: payload.protocol,
+                        proof_of_personhood: false,
+                    }),
+                )
+                    .into_response();
+            }
+
+            if !resp.status().is_success() {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(IdentityResolveResponse {
+                        address: "".to_string(),
+                        protocol: payload.protocol,
+                        proof_of_personhood: false,
+                    }),
+                )
+                    .into_response();
+            }
+
+            let parsed: BnsNameResponse = match resp.json().await {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    tracing::warn!(error = %err, "BNS response JSON parse failed");
+                    return (
+                        StatusCode::BAD_GATEWAY,
+                        Json(IdentityResolveResponse {
+                            address: "".to_string(),
+                            protocol: payload.protocol,
+                            proof_of_personhood: false,
+                        }),
+                    )
+                        .into_response();
+                }
+            };
+
+            (
+                StatusCode::OK,
+                Json(IdentityResolveResponse {
+                    address: parsed.address,
+                    protocol: payload.protocol,
+                    proof_of_personhood: false,
+                }),
+            )
+                .into_response()
+        }
+        "ENS" | "WorldID" => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(IdentityResolveResponse {
+                address: "".to_string(),
+                protocol: payload.protocol,
+                proof_of_personhood: false,
+            }),
+        )
+            .into_response(),
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(IdentityResolveResponse {
+                address: "".to_string(),
+                protocol: payload.protocol,
+                proof_of_personhood: false,
+            }),
+        )
+            .into_response(),
+    }
 }

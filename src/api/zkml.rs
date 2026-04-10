@@ -3,7 +3,7 @@
 //! Requirement: Zero Secret Egress (ZSE) compliance.
 
 use crate::api::rest::AppState;
-use axum::{extract::State, response::IntoResponse, Json};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -29,18 +29,26 @@ pub async fn verify_zkml_handler(
         payload.model_id
     );
 
-    // [STUB] Implement actual ZKML verification (Groth16/PlonK) here.
-    // Ensure all Job Card completions are verified before yield distribution.
+    if payload.proof.trim().is_empty()
+        || payload.input_commitment.trim().is_empty()
+        || payload.model_id.trim().is_empty()
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ZkmlVerifyResponse {
+                valid: false,
+                attestation_id: None,
+            }),
+        )
+            .into_response();
+    }
 
-    let valid = !payload.proof.is_empty();
-    let attestation_id = if valid {
-        Some(format!("attestation_{}", uuid::Uuid::new_v4()))
-    } else {
-        None
-    };
-
-    Json(ZkmlVerifyResponse {
-        valid,
-        attestation_id,
-    })
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        Json(ZkmlVerifyResponse {
+            valid: false,
+            attestation_id: None,
+        }),
+    )
+        .into_response()
 }

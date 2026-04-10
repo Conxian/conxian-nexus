@@ -12,23 +12,34 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{Encoder, IntGauge, TextEncoder};
+use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use std::time::Duration;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge =
-        IntGauge::new("nexus_total_transactions", "Total transactions processed").unwrap();
-    pub static ref TOTAL_BLOCKS: IntGauge =
-        IntGauge::new("nexus_total_blocks", "Total blocks synchronized").unwrap();
-    pub static ref SYNC_DRIFT: IntGauge =
-        IntGauge::new("nexus_sync_drift", "Drift between Nexus and L1").unwrap();
-    pub static ref SAFETY_MODE: IntGauge = IntGauge::new(
-        "nexus_safety_mode",
-        "Safety Mode Status (1 = active, 0 = inactive)"
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
+        "nexus_total_transactions",
+        "Total number of transactions processed"
     )
     .unwrap();
+    pub static ref TOTAL_BLOCKS: IntGauge =
+        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
+    pub static ref SYNC_DRIFT: IntGauge =
+        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
+    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
+        "nexus_safety_mode",
+        "Safety mode status (1 = active, 0 = inactive)"
+    )
+    .unwrap();
+}
+
+pub fn init_prometheus_metrics() {
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
 }
 
 #[derive(Clone)]
@@ -37,6 +48,8 @@ pub struct AppState {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
+    pub gateway_url: Option<String>,
+    pub http_client: reqwest::Client,
 }
 
 #[derive(Deserialize)]
@@ -59,6 +72,14 @@ pub struct MMRProofParams {
 #[derive(Deserialize)]
 pub struct VerifyStateRequest {
     pub state_root: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
+    pub proof: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_inputs: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -99,17 +120,35 @@ pub fn app_router(
     oracle: Option<Arc<OracleService>>,
     experimental_apis_enabled: bool,
 ) -> Router {
+    init_prometheus_metrics();
+
+    let gateway_url = std::env::var("GATEWAY_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("failed to build HTTP client");
+
     let state = AppState {
         storage,
         nexus_state,
         executor,
         oracle,
+        gateway_url,
+        http_client,
     };
 
     let mut router = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
+        .route(
+            "/v1/bitvm2/verify-state-root",
+            post(verify_bitvm2_state_root),
+        )
         .route("/v1/status", get(get_status))
         .route("/v1/metrics", get(get_metrics))
         .route("/metrics", get(prometheus_metrics))
@@ -242,6 +281,108 @@ async fn verify_state(
         valid: current_root == payload.state_root,
         mmr_root: state.nexus_state.get_mmr_root(),
     })
+}
+
+fn bitvm2_gateway_error(state_root: &str, error: &'static str) -> serde_json::Value {
+    serde_json::json!({
+        "state_root": state_root,
+        "verified": false,
+        "error": error,
+    })
+}
+
+async fn verify_bitvm2_state_root(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyBitvm2StateRootRequest>,
+) -> impl IntoResponse {
+    let Some(gateway_url) = state.gateway_url.as_deref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(bitvm2_gateway_error(
+                &payload.state_root,
+                "GATEWAY_URL is not configured",
+            )),
+        )
+            .into_response();
+    };
+
+    let url = format!(
+        "{}/api/v1/bitvm2/verify-state-root",
+        gateway_url.trim_end_matches('/')
+    );
+
+    let resp = match state
+        .http_client
+        .post(url.as_str())
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                "BitVM2 verifier gateway request failed"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway request failed",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let upstream_status = resp.status();
+    let status =
+        StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = match resp.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway read failed"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway read failed",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let body: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(body) => body,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway returned invalid JSON"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway returned invalid JSON",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    (status, Json(body)).into_response()
 }
 
 async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {

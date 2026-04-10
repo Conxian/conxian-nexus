@@ -57,16 +57,16 @@ impl NexusGrpcService {
     async fn fetch_metrics_counts(&self) -> Result<(u64, u64), Status> {
         let (tx_count, block_count): (i64, i64) = sqlx::query_as(
             "SELECT \
-                (SELECT COUNT(*) FROM stacks_transactions t \
-                 JOIN stacks_blocks b ON t.block_hash = b.hash \
-                 WHERE b.state != 'orphaned') AS tx_count, \
-                (SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned') AS block_count",
+                    (SELECT COUNT(*) FROM stacks_transactions t \
+                     JOIN stacks_blocks b ON t.block_hash = b.hash \
+                     WHERE b.state != 'orphaned') AS tx_count, \
+                    (SELECT COUNT(*) FROM stacks_blocks WHERE state != 'orphaned') AS block_count",
         )
         .fetch_one(&self.storage.pg_pool)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Database error in GetMetrics (counts)");
-            Status::internal("Database error in GetMetrics (counts)")
+            Status::internal("Database error in GetMetrics")
         })?;
 
         Ok((tx_count as u64, block_count as u64))
@@ -89,24 +89,34 @@ impl NexusGrpcService {
         Ok((tx_count, block_count))
     }
 
+    /// Reads safety-mode and drift flags from Redis.
+    ///
+    /// If Redis is unavailable, this logs the error and returns `(true, 0)` to
+    /// keep read-only health/metrics RPCs available while remaining conservative.
+    ///
+    /// In this fallback, `drift=0` means "unknown (Redis unavailable)" and must
+    /// not be interpreted as "in-sync". This helper is intended only for the
+    /// read-only `GetStatus`/`GetMetrics` paths.
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
+        let default_flags = (true, 0);
+
         let redis_client = self.storage.redis_client.clone();
         let cached_conn = { self.redis_conn.lock().await.clone() };
 
         let mut conn = match cached_conn {
             Some(conn) => conn,
             None => {
-                let conn = redis_client
-                    .get_multiplexed_async_connection()
-                    .await
-                    .map_err(|e| {
+                let conn = match redis_client.get_multiplexed_async_connection().await {
+                    Ok(conn) => conn,
+                    Err(e) => {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (connect)"
+                            "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        Status::internal("Redis error reading safety flags")
-                    })?;
+                        return Ok(default_flags);
+                    }
+                };
 
                 *self.redis_conn.lock().await = Some(conn.clone());
                 conn
@@ -132,17 +142,17 @@ impl NexusGrpcService {
                     "Redis error reading safety flags (pipeline); retrying once"
                 );
 
-                let mut conn = redis_client
-                    .get_multiplexed_async_connection()
-                    .await
-                    .map_err(|e| {
+                let mut conn = match redis_client.get_multiplexed_async_connection().await {
+                    Ok(conn) => conn,
+                    Err(e) => {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (connect)"
+                            "Redis error reading safety flags (connect); defaulting safe"
                         );
-                        Status::internal("Redis error reading safety flags")
-                    })?;
+                        return Ok(default_flags);
+                    }
+                };
 
                 match redis::pipe()
                     .cmd("GET")
@@ -161,9 +171,9 @@ impl NexusGrpcService {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (pipeline)"
+                            "Redis error reading safety flags (pipeline); defaulting safe"
                         );
-                        return Err(Status::internal("Redis error reading safety flags"));
+                        return Ok(default_flags);
                     }
                 }
             }
