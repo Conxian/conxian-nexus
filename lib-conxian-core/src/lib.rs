@@ -107,7 +107,7 @@ impl ContractBridge {
         let (addr, name) = if parts.len() == 2 {
             (parts[0].to_string(), parts[1].to_string())
         } else {
-            ("SP...".to_string(), contract.to_string())
+            ("SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(), contract.to_string())
         };
 
         let call = ClarityCall {
