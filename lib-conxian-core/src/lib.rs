@@ -12,38 +12,55 @@ pub struct Wallet {
 }
 
 impl Wallet {
-    pub fn new() -> Self {
+    /// Creates a new wallet. If NEXUS_PRIVATE_KEY is set, it uses that.
+    /// Otherwise, it generates a new 12-word mnemonic.
+    pub fn new() -> Result<Self, anyhow::Error> {
         if let Ok(hex_key) = env::var("NEXUS_PRIVATE_KEY") {
             if let Ok(bytes) = hex::decode(hex_key) {
                 if let Ok(key) = SigningKey::from_slice(&bytes) {
-                    return Self {
+                    return Ok(Self {
                         signing_key: key,
                         _mnemonic: None,
-                    };
+                    });
                 }
             }
         }
 
         let mnemonic = Mnemonic::new(MnemonicType::Words12, Language::English);
         let seed = Seed::new(&mnemonic, "");
-        let xprv = XPrv::new(seed.as_bytes()).expect("Invalid seed");
-        let child = xprv
-            .derive_child(ChildNumber::new(44, true).unwrap())
-            .unwrap();
-        let signing_key = SigningKey::from_slice(&child.to_bytes()).expect("Invalid seed length");
+        let xprv = XPrv::new(seed.as_bytes()).map_err(|e| anyhow::anyhow!("Invalid seed: {}", e))?;
 
-        Self {
+        let path_index = ChildNumber::new(44, true)
+            .map_err(|e| anyhow::anyhow!("Invalid derivation path index: {}", e))?;
+
+        let child = xprv
+            .derive_child(path_index)
+            .map_err(|e| anyhow::anyhow!("Child derivation failed: {}", e))?;
+
+        let signing_key = SigningKey::from_slice(&child.to_bytes())
+            .map_err(|e| anyhow::anyhow!("Invalid signing key length: {}", e))?;
+
+        Ok(Self {
             signing_key,
             _mnemonic: Some(mnemonic.into_phrase()),
-        }
+        })
     }
 
     pub fn from_mnemonic(phrase: &str, passphrase: &str) -> Result<Self, anyhow::Error> {
-        let mnemonic = Mnemonic::from_phrase(phrase, Language::English)?;
+        let mnemonic = Mnemonic::from_phrase(phrase, Language::English)
+            .map_err(|e| anyhow::anyhow!("Invalid mnemonic: {}", e))?;
         let seed = Seed::new(&mnemonic, passphrase);
-        let xprv = XPrv::new(seed.as_bytes())?;
-        let child = xprv.derive_child(ChildNumber::new(44, true).unwrap())?;
-        let signing_key = SigningKey::from_slice(&child.to_bytes())?;
+        let xprv = XPrv::new(seed.as_bytes()).map_err(|e| anyhow::anyhow!("Invalid seed: {}", e))?;
+
+        let path_index = ChildNumber::new(44, true)
+            .map_err(|e| anyhow::anyhow!("Invalid derivation path index: {}", e))?;
+
+        let child = xprv.derive_child(path_index)
+            .map_err(|e| anyhow::anyhow!("Child derivation failed: {}", e))?;
+
+        let signing_key = SigningKey::from_slice(&child.to_bytes())
+            .map_err(|e| anyhow::anyhow!("Invalid signing key: {}", e))?;
+
         Ok(Self {
             signing_key,
             _mnemonic: Some(phrase.to_string()),
@@ -74,9 +91,9 @@ impl Wallet {
     }
 }
 
-pub fn sign_transaction(tx_id: &str) -> String {
-    let wallet = Wallet::new();
-    wallet.sign(tx_id)
+pub fn sign_transaction(tx_id: &str) -> Result<String, anyhow::Error> {
+    let wallet = Wallet::new()?;
+    Ok(wallet.sign(tx_id))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -102,7 +119,7 @@ impl ContractBridge {
         contract: &str,
         function: &str,
         args: Vec<String>,
-    ) -> SignedContractCall {
+    ) -> Result<SignedContractCall, anyhow::Error> {
         let parts: Vec<&str> = contract.split('.').collect();
         let (addr, name) = if parts.len() == 2 {
             (parts[0].to_string(), parts[1].to_string())
@@ -118,14 +135,15 @@ impl ContractBridge {
             sender_address: wallet.stacks_address_hash(),
         };
 
-        let serialized = serde_json::to_string(&call).unwrap_or_default();
+        let serialized = serde_json::to_string(&call)
+            .map_err(|e| anyhow::anyhow!("Serialization failed: {}", e))?;
         let signature = wallet.sign(&serialized);
 
-        SignedContractCall {
+        Ok(SignedContractCall {
             payload: call,
             signature,
             public_key: wallet.public_key(),
-        }
+        })
     }
 }
 
@@ -247,5 +265,63 @@ pub mod cjcs {
         pub receiver_address: String,
         pub task_id: String,
         pub amount_sbtc: u64,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wallet_new_random() {
+        let wallet = Wallet::new().expect("Should create wallet");
+        assert_eq!(wallet.public_key_bytes().len(), 33);
+        assert!(!wallet.public_key().is_empty());
+        assert_eq!(wallet.stacks_address_hash().len(), 40);
+    }
+
+    #[test]
+    fn test_wallet_from_mnemonic() {
+        let mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+        let wallet = Wallet::from_mnemonic(mnemonic, "").expect("Should create wallet from mnemonic");
+        let expected_pubkey = wallet.public_key();
+
+        let wallet2 = Wallet::from_mnemonic(mnemonic, "").expect("Should create wallet from same mnemonic");
+        assert_eq!(wallet2.public_key(), expected_pubkey);
+    }
+
+    #[test]
+    fn test_wallet_signing() {
+        let wallet = Wallet::new().expect("Should create wallet");
+        let message = "conxian-test-message";
+        let signature = wallet.sign(message);
+        assert!(!signature.is_empty());
+        assert_eq!(signature.len(), 128); // 64 bytes in hex
+    }
+
+    #[test]
+    fn test_contract_bridge_signed_call() {
+        let wallet = Wallet::new().expect("Should create wallet");
+        let contract = "SP1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.asset-vault";
+        let function = "deposit";
+        let args = vec!["1000".to_string()];
+
+        let signed_call = ContractBridge::create_signed_call(&wallet, contract, function, args)
+            .expect("Should create signed call");
+
+        assert_eq!(signed_call.payload.contract_name, "asset-vault");
+        assert_eq!(signed_call.payload.function_name, "deposit");
+        assert!(!signed_call.signature.is_empty());
+    }
+
+    #[test]
+    fn test_contract_bridge_default_address() {
+        let wallet = Wallet::new().expect("Should create wallet");
+        let contract = "default-vault";
+        let signed_call = ContractBridge::create_signed_call(&wallet, contract, "init", vec![])
+            .expect("Should create signed call");
+
+        assert_eq!(signed_call.payload.contract_address, "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM");
+        assert_eq!(signed_call.payload.contract_name, "default-vault");
     }
 }
