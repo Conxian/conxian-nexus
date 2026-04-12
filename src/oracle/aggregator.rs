@@ -71,7 +71,7 @@ impl OracleAggregator {
                 .collect();
 
             if !values.is_empty() {
-                values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
                 let median = values[values.len() / 2];
                 aggregated_rates.insert(key, median);
             }
@@ -94,7 +94,7 @@ impl OracleAggregator {
             ppp_indices,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .map_err(|e| anyhow::anyhow!("Time failure: {}", e))?
                 .as_secs(),
         })
     }
@@ -103,15 +103,16 @@ impl OracleAggregator {
         &self,
         state: PppState,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let wallet = Wallet::new();
-        let state_json = serde_json::to_string(&state).unwrap_or_default();
+        let wallet = Wallet::new().map_err(|e| anyhow::anyhow!("Wallet creation failed: {}", e))?;
+        let state_json = serde_json::to_string(&state)
+            .map_err(|e| anyhow::anyhow!("State serialization failed: {}", e))?;
 
         let signed_call = ContractBridge::create_signed_call(
             &wallet,
             &self.contract_principal,
             "update-fx-rates",
             vec![state_json],
-        );
+        ).map_err(|e| anyhow::anyhow!("Contract call signing failed: {}", e))?;
 
         tracing::info!("Pushing Signed Oracle Call: {:?}", signed_call.payload);
         Ok(format!("0x{}", signed_call.signature))
