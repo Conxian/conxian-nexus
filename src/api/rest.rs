@@ -6,7 +6,7 @@ use crate::state::NexusState;
 use crate::storage::Storage;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -17,6 +17,23 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
 
+fn register_metric_best_effort(
+    metric_name: &'static str,
+    collector: Box<dyn prometheus::core::Collector>,
+) {
+    match prometheus::register(collector) {
+        Ok(()) => {}
+        Err(prometheus::Error::AlreadyReg(_)) => {}
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                metric = metric_name,
+                "Prometheus metrics registration failed"
+            );
+        }
+    }
+}
+
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = {
         let gauge = IntGauge::new(
@@ -25,12 +42,7 @@ lazy_static! {
         )
         .expect("nexus_total_transactions metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_total_transactions"
-            );
-        }
+        register_metric_best_effort("nexus_total_transactions", Box::new(gauge.clone()));
 
         gauge
     };
@@ -38,12 +50,7 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
             .expect("nexus_total_blocks metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_total_blocks"
-            );
-        }
+        register_metric_best_effort("nexus_total_blocks", Box::new(gauge.clone()));
 
         gauge
     };
@@ -51,12 +58,7 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
             .expect("nexus_sync_drift metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_sync_drift"
-            );
-        }
+        register_metric_best_effort("nexus_sync_drift", Box::new(gauge.clone()));
 
         gauge
     };
@@ -67,12 +69,7 @@ lazy_static! {
         )
         .expect("nexus_safety_mode metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_safety_mode"
-            );
-        }
+        register_metric_best_effort("nexus_safety_mode", Box::new(gauge.clone()));
 
         gauge
     };
@@ -398,9 +395,14 @@ async fn prometheus_metrics() -> impl IntoResponse {
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer).unwrap();
 
-    String::from_utf8(buffer).unwrap()
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(()) => ([(header::CONTENT_TYPE, encoder.format_type())], buffer).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "Prometheus metrics encoding failed");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 async fn execute_tx(
