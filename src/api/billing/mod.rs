@@ -24,6 +24,8 @@ type HmacSha256 = Hmac<Sha256>;
 const GRACE_PERIOD_DURATION_SECONDS: i64 = 86400; // 24 hours
 const GRACE_PERIOD_EFFICIENCY: f32 = 0.4;
 const MAX_ORGANIZATION_ID_LEN: usize = 128;
+const MAX_DEVELOPER_EMAIL_LEN: usize = 320;
+const MAX_PROJECT_NAME_LEN: usize = 256;
 
 #[derive(Debug, Deserialize)]
 pub struct GenerateKeyRequest {
@@ -91,6 +93,16 @@ async fn generate_developer_key(
         return (StatusCode::BAD_REQUEST, "Invalid organization_id").into_response();
     }
 
+    let developer_email = payload.developer_email.trim();
+    if developer_email.is_empty() || developer_email.len() > MAX_DEVELOPER_EMAIL_LEN {
+        return (StatusCode::BAD_REQUEST, "Invalid developer_email").into_response();
+    }
+
+    let project_name = payload.project_name.trim();
+    if project_name.is_empty() || project_name.len() > MAX_PROJECT_NAME_LEN {
+        return (StatusCode::BAD_REQUEST, "Invalid project_name").into_response();
+    }
+
     let (api_key, api_secret) = {
         let mut rng = rand::thread_rng();
         let mut raw_key = [0u8; 32];
@@ -118,14 +130,19 @@ async fn generate_developer_key(
     };
 
     let redis_key = format!("apikey:{}", api_key);
-    let _: redis::RedisResult<()> = redis::cmd("HSET")
+    let redis_result: redis::RedisResult<()> = redis::cmd("HSET")
         .arg(&redis_key)
         .arg("org_id").arg(organization_id)
-        .arg("email").arg(&payload.developer_email)
-        .arg("project").arg(&payload.project_name)
+        .arg("email").arg(developer_email)
+        .arg("project").arg(project_name)
         .arg("secret").arg(&api_secret)
         .arg("usage").arg(0)
         .query_async(&mut conn).await;
+
+    if let Err(e) = redis_result {
+        tracing::error!("Failed to persist generated API key {} in Redis: {}", api_key, e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Redis Error").into_response();
+    }
 
     Json(GenerateKeyResponse {
         api_key,
