@@ -15,7 +15,7 @@ use sqlx::Row;
 #[derive(Debug, Deserialize)]
 pub struct AnalyticsParams {
     pub asset: Option<String>,
-    pub metric: String, // "tx_volume", "active_senders", "whale_distribution"
+    pub metric: String, // "tx_count" (alias: "tx_volume"), "active_senders", "whale_distribution"
     pub days: Option<i64>,
 }
 
@@ -56,8 +56,8 @@ pub async fn get_analytics_metrics(
 
     let mut values = Vec::new();
 
-    match params.metric.as_str() {
-        "tx_volume" => {
+    let metric = match params.metric.as_str() {
+        "tx_count" | "tx_volume" => {
             let rows = sqlx::query(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(*) as count
                  FROM stacks_transactions
@@ -77,6 +77,8 @@ pub async fn get_analytics_metrics(
                     value: count as f64,
                 });
             }
+
+            "tx_count"
         }
         "active_senders" => {
             let rows = sqlx::query(
@@ -98,6 +100,8 @@ pub async fn get_analytics_metrics(
                     value: count as f64,
                 });
             }
+
+            "active_senders"
         }
         "whale_distribution" => {
             let rows = sqlx::query(
@@ -129,12 +133,14 @@ pub async fn get_analytics_metrics(
                     value: count as f64,
                 });
             }
+
+            "whale_distribution"
         }
         _ => return Err(StatusCode::BAD_REQUEST),
-    }
+    };
 
     Ok(Json(AnalyticsResponse {
-        metric: params.metric,
+        metric: metric.to_string(),
         asset,
         values,
     }))

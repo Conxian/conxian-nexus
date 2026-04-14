@@ -90,7 +90,7 @@ pub async fn erp_sync_handler(
         } else {
             if errors.len() < MAX_ERP_ERRORS {
                 errors.push(format!(
-                    "Transaction {} not found or orphaned in local state",
+                    "Transaction {} not found or not finalized in local state",
                     tx_id
                 ));
             }
