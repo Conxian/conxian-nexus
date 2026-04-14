@@ -1,4 +1,4 @@
-# Conxian Nexus & BOS Enhancement Research Summary (v0.5.0)
+# Conxian Nexus & BOS Enhancement Research Summary (v0.4.1)
 
 ## 1. Competitive Landscape & Architecture Alignment
 Research conducted against top-tier decentralized node and business operation systems identifies the following target states for the Conxian ecosystem:
