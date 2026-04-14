@@ -10,7 +10,7 @@ use crate::api::identity::resolve_identity_handler;
 use crate::api::dlc::create_dlc_bond_handler;
 
 use axum::{
-    extract::{Query, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::{header, StatusCode},
     response::IntoResponse,
     routing::{get, post},
@@ -81,6 +81,9 @@ lazy_static! {
     };
 }
 
+const BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+const BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+
 pub fn init_prometheus_metrics() {
     lazy_static::initialize(&TOTAL_TRANSACTIONS);
     lazy_static::initialize(&TOTAL_BLOCKS);
@@ -96,7 +99,7 @@ pub struct AppState {
     pub oracle: Option<Arc<OracleService>>,
     pub tableland: Arc<TablelandAdapter>,
     pub nostr: Option<Arc<NostrTelemetry>>,
-    pub gateway_url: Option<String>,
+    pub gateway_url: Option<reqwest::Url>,
     pub http_client: reqwest::Client,
 }
 
@@ -131,6 +134,9 @@ pub struct VerifyStateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyBitvm2StateRootRequest {
     pub state_root: String,
+    pub proof: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_inputs: Option<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -169,10 +175,28 @@ pub fn app_router(
 ) -> Router {
     init_prometheus_metrics();
 
-    let gateway_url = std::env::var("GATEWAY_URL")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    let gateway_url = std::env::var("GATEWAY_URL").ok().and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() {
+            return None;
+        }
+
+        let base = match reqwest::Url::parse(s) {
+            Ok(base) => base,
+            Err(err) => {
+                tracing::warn!(error = %err, "Invalid GATEWAY_URL");
+                return None;
+            }
+        };
+
+        match base.join("./") {
+            Ok(base) => Some(base),
+            Err(err) => {
+                tracing::warn!(error = %err, "Invalid GATEWAY_URL");
+                None
+            }
+        }
+    });
 
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -211,7 +235,8 @@ pub fn app_router(
     if experimental_apis_enabled {
         router = router.route(
             "/v1/bitvm2/verify-state-root",
-            post(verify_bitvm2_state_root),
+            post(verify_bitvm2_state_root)
+                .layer(DefaultBodyLimit::max(BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES)),
         );
     }
 
@@ -336,25 +361,43 @@ async fn verify_bitvm2_state_root(
     State(state): State<AppState>,
     Json(payload): Json<VerifyBitvm2StateRootRequest>,
 ) -> impl IntoResponse {
-    let Some(gateway_url) = state.gateway_url.as_deref() else {
+    let Some(gateway_url) = state.gateway_url.as_ref() else {
+        tracing::warn!(
+            state_root = %payload.state_root,
+            "BitVM2 verifier gateway unavailable: GATEWAY_URL not configured"
+        );
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(bitvm2_gateway_error(
                 &payload.state_root,
-                "GATEWAY_URL is not configured",
+                "bitvm2 verifier gateway unavailable",
             )),
         )
             .into_response();
     };
 
-    let url = format!(
-        "{}/api/v1/bitvm2/verify-state-root",
-        gateway_url.trim_end_matches('/')
-    );
+    let url = match gateway_url.join("api/v1/bitvm2/verify-state-root") {
+        Ok(url) => url,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                "Invalid gateway URL configuration"
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway unavailable",
+                )),
+            )
+                .into_response();
+        }
+    };
 
-    let resp = match state
+    let mut resp = match state
         .http_client
-        .post(url.as_str())
+        .post(url.clone())
         .json(&payload)
         .send()
         .await
@@ -381,28 +424,76 @@ async fn verify_bitvm2_state_root(
     let upstream_status = resp.status();
     let status =
         StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = match resp.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
+
+    if let Some(len) = resp.content_length() {
+        if len > BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES as u64 {
             tracing::warn!(
-                error = %err,
                 state_root = %payload.state_root,
                 url = %url,
                 upstream_status = %upstream_status,
-                "BitVM2 verifier gateway read failed"
+                content_length = len,
+                "BitVM2 verifier gateway response too large"
             );
             return (
                 StatusCode::BAD_GATEWAY,
                 Json(bitvm2_gateway_error(
                     &payload.state_root,
-                    "bitvm2 verifier gateway read failed",
+                    "bitvm2 verifier gateway response too large",
                 )),
             )
                 .into_response();
         }
-    };
+    }
 
-    let body: serde_json::Value = match serde_json::from_slice(&bytes) {
+    let mut bytes: Vec<u8> = Vec::new();
+
+    loop {
+        let chunk = match resp.chunk().await {
+            Ok(chunk) => chunk,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    state_root = %payload.state_root,
+                    url = %url,
+                    upstream_status = %upstream_status,
+                    "BitVM2 verifier gateway read failed"
+                );
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(bitvm2_gateway_error(
+                        &payload.state_root,
+                        "bitvm2 verifier gateway read failed",
+                    )),
+                )
+                    .into_response();
+            }
+        };
+
+        let Some(chunk) = chunk else {
+            break;
+        };
+
+        if bytes.len() + chunk.len() > BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES {
+            tracing::warn!(
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway response too large"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway response too large",
+                )),
+            )
+                .into_response();
+        }
+
+        bytes.extend_from_slice(&chunk);
+    }
+
+    let body: serde_json::Value = match serde_json::from_slice(bytes.as_slice()) {
         Ok(body) => body,
         Err(err) => {
             tracing::warn!(
