@@ -11,6 +11,7 @@ use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::sync::NexusSync;
+use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
@@ -114,6 +115,13 @@ async fn main() -> anyhow::Result<()> {
         config.gateway_url.clone(),
     ));
 
+    // Initialize Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orchestrator = Arc::new(AutonomousOrchestrator::new(
+        storage.clone(),
+        state_tracker.clone(),
+        nostr.clone(),
+    ));
+
     // Load Initial State from DB
     sync_service.load_initial_state().await?;
 
@@ -169,6 +177,34 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = rebalance_executor.execute_rebalance().await {
                 tracing::error!("Rebalance task failed: {}", e);
             }
+        }
+    });
+
+    // [NEXUS-04] Spawn Sovereign Health Reporting (Nostr)
+    let health_nostr = nostr.clone();
+    let health_storage = storage.clone();
+    let health_state = state_tracker.clone();
+    let health_report_handle = tokio::spawn(async move {
+        if let Some(n) = health_nostr {
+            let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
+            loop {
+                interval.tick().await;
+                let max_height: i64 = sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
+                    .fetch_one(&health_storage.pg_pool).await.unwrap_or(0);
+                let state_root = health_state.get_state_root();
+
+                if let Err(e) = n.report_health_nostr("ALIVE", max_height as u64, &state_root).await {
+                    tracing::error!("Failed to report health to Nostr: {}", e);
+                }
+            }
+        }
+    });
+
+    // Spawn Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orch_worker = orchestrator.clone();
+    let orch_handle = tokio::spawn(async move {
+        if let Err(e) = orch_worker.run().await {
+            tracing::error!("Orchestrator failed: {}", e);
         }
     });
 
@@ -229,6 +265,8 @@ async fn main() -> anyhow::Result<()> {
         res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
         res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
+        res = health_report_handle => tracing::error!("Health report task exited: {:?}", res),
+        res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
     }
