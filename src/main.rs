@@ -57,14 +57,23 @@ async fn main() -> anyhow::Result<()> {
         (&config.kwil_provider_url, &config.kwil_db_id)
     {
         let wallet = Arc::new(Wallet::new()?);
-        Some(Arc::new(KwilAdapter::new(
+        match KwilAdapter::new(
             storage.clone(),
             KwilConfig {
                 provider_url: provider_url.clone(),
                 db_id: db_id.clone(),
             },
             wallet,
-        )))
+        ) {
+            Ok(adapter) => Some(Arc::new(adapter)),
+            Err(e) => {
+                tracing::error!(
+                    error = %e,
+                    "Failed to initialize Kwil adapter; disabling Kwil persistence"
+                );
+                None
+            }
+        }
     } else {
         tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
         None
