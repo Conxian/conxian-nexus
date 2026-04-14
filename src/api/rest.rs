@@ -6,6 +6,9 @@ use crate::state::NexusState;
 use crate::storage::Storage;
 use crate::storage::tableland::TablelandAdapter;
 use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::identity::resolve_identity_handler;
+use crate::api::dlc::create_dlc_bond_handler;
+
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -156,6 +159,8 @@ pub fn app_router(
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
         .route("/health", get(health_check))
+        .route("/v1/identity/resolve", post(resolve_identity_handler))
+        .route("/v1/dlc/bond", post(create_dlc_bond_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
@@ -245,7 +250,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -255,8 +260,8 @@ async fn get_mmr_proof(
             })?;
 
         if let Some(r) = row {
-            let hash_bytes: Vec<u8> = r.get(0);
-            siblings.push((pos, format!("0x{}", hex::encode(hash_bytes))));
+            let hash_str: String = r.get(0);
+            siblings.push((pos, format!("0x{}", hash_str)));
         }
     }
 
