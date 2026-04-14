@@ -638,7 +638,6 @@ async fn execute_tx(
 ) -> impl IntoResponse {
     match state.executor.validate_transaction(&request).await {
         Ok(true) => {
-            TOTAL_TRANSACTIONS.set(TOTAL_TRANSACTIONS.get() + 1);
             // Simulate execution success
             Json(ExecutionResponse {
                 tx_id: request.tx_id,

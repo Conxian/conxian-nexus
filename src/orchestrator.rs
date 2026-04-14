@@ -18,7 +18,7 @@ impl AutonomousOrchestrator {
         Self { storage, state, nostr }
     }
 
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(&self) {
         tracing::info!("Autonomous Orchestrator active. Monitoring system health...");
         let mut interval = time::interval(Duration::from_secs(60));
 

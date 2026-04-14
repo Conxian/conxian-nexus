@@ -230,9 +230,7 @@ async fn main() -> anyhow::Result<()> {
     // Spawn Autonomous Orchestrator [NEXUS-ORCH-01]
     let orch_worker = orchestrator.clone();
     let orch_handle = tokio::spawn(async move {
-        if let Err(e) = orch_worker.run().await {
-            tracing::error!("Orchestrator failed: {}", e);
-        }
+        orch_worker.run().await;
     });
 
     // Start REST API Server
