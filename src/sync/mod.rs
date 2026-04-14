@@ -18,7 +18,7 @@ use tokio::time::{self, Duration};
 pub enum StacksEvent {
     /// Soft-finality block (microblock).
     Microblock(MicroblockData),
-    /// Hard-finality block (burn block).
+    /// Hard-finality tip (Stacks tip).
     BurnBlock(BurnBlockData),
 }
 
@@ -40,7 +40,7 @@ pub struct TransactionData {
     pub payload: Option<String>,
 }
 
-/// Data payload for a Stacks burn block.
+/// Data payload for the Stacks hard-finality tip.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BurnBlockData {
     pub hash: String,

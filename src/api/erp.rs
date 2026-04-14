@@ -59,12 +59,11 @@ pub async fn erp_sync_handler(
         if let Some(tx_id) = entry.get("TransactionId").and_then(|t| t.as_str()) {
             if seen.insert(tx_id) {
                 tx_ids.push(tx_id.to_owned());
+                if tx_ids.len() > MAX_ERP_TX_IDS {
+                    return Err(StatusCode::PAYLOAD_TOO_LARGE);
+                }
             }
         }
-    }
-
-    if tx_ids.len() > MAX_ERP_TX_IDS {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     let found: HashSet<String> = if tx_ids.is_empty() {
@@ -84,6 +83,8 @@ pub async fn erp_sync_handler(
         .collect()
     };
 
+    // Note: `tx_ids` is deduplicated; `reconciled_entries` is the count of unique transaction IDs.
+    let mut truncated_errors = false;
     for tx_id in &tx_ids {
         if found.contains(tx_id) {
             reconciled_entries += 1;
@@ -93,8 +94,17 @@ pub async fn erp_sync_handler(
                     "Transaction {} not found or not finalized in local state",
                     tx_id
                 ));
+            } else {
+                truncated_errors = true;
             }
         }
+    }
+
+    if truncated_errors {
+        errors.push(format!(
+            "Additional reconciliation errors were omitted after {} entries",
+            MAX_ERP_ERRORS
+        ));
     }
 
     // OData v4 to x402 Mandate Translation
