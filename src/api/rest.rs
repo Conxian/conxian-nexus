@@ -23,6 +23,23 @@ use sqlx::Row;
 use std::sync::Arc;
 use std::time::Duration;
 
+fn register_metric_best_effort(
+    metric_name: &'static str,
+    collector: Box<dyn prometheus::core::Collector>,
+) {
+    match prometheus::register(collector) {
+        Ok(()) => {}
+        Err(prometheus::Error::AlreadyReg(_)) => {}
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                metric = metric_name,
+                "Prometheus metrics registration failed"
+            );
+        }
+    }
+}
+
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = {
         let gauge = IntGauge::new(
@@ -31,14 +48,7 @@ lazy_static! {
         )
         .expect("nexus_total_transactions metric must be valid");
 
-        match prometheus::register(Box::new(gauge.clone())) {
-            Ok(()) => {}
-            Err(prometheus::Error::AlreadyReg(_)) => {}
-            Err(e) => tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_total_transactions"
-            ),
-        };
+        register_metric_best_effort("nexus_total_transactions", Box::new(gauge.clone()));
 
         gauge
     };
@@ -46,14 +56,7 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
             .expect("nexus_total_blocks metric must be valid");
 
-        match prometheus::register(Box::new(gauge.clone())) {
-            Ok(()) => {}
-            Err(prometheus::Error::AlreadyReg(_)) => {}
-            Err(e) => tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_total_blocks"
-            ),
-        };
+        register_metric_best_effort("nexus_total_blocks", Box::new(gauge.clone()));
 
         gauge
     };
@@ -61,14 +64,7 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
             .expect("nexus_sync_drift metric must be valid");
 
-        match prometheus::register(Box::new(gauge.clone())) {
-            Ok(()) => {}
-            Err(prometheus::Error::AlreadyReg(_)) => {}
-            Err(e) => tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_sync_drift"
-            ),
-        };
+        register_metric_best_effort("nexus_sync_drift", Box::new(gauge.clone()));
 
         gauge
     };
@@ -79,14 +75,7 @@ lazy_static! {
         )
         .expect("nexus_safety_mode metric must be valid");
 
-        match prometheus::register(Box::new(gauge.clone())) {
-            Ok(()) => {}
-            Err(prometheus::Error::AlreadyReg(_)) => {}
-            Err(e) => tracing::error!(
-                error = %e,
-                "Prometheus metrics registration failed for nexus_safety_mode"
-            ),
-        };
+        register_metric_best_effort("nexus_safety_mode", Box::new(gauge.clone()));
 
         gauge
     };
