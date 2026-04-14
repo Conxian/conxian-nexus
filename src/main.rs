@@ -183,18 +183,28 @@ async fn main() -> anyhow::Result<()> {
     let health_storage = storage.clone();
     let health_state = state_tracker.clone();
     let health_report_handle = tokio::spawn(async move {
-        if let Some(n) = health_nostr {
-            let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
-            loop {
-                interval.tick().await;
-                let max_height: i64 = sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
-                    .fetch_one(&health_storage.pg_pool).await.unwrap_or(0);
-                let state_root = health_state.get_state_root();
+        match health_nostr {
+            Some(n) => {
+                let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
+                loop {
+                    interval.tick().await;
+                    let max_height: i64 = sqlx::query_scalar(
+                        "SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'",
+                    )
+                    .fetch_one(&health_storage.pg_pool)
+                    .await
+                    .unwrap_or(0);
+                    let state_root = health_state.get_state_root();
 
-                if let Err(e) = n.report_health_nostr("ALIVE", max_height as u64, &state_root).await {
-                    tracing::error!("Failed to report health to Nostr: {}", e);
+                    if let Err(e) = n
+                        .report_health_nostr("ALIVE", max_height as u64, &state_root)
+                        .await
+                    {
+                        tracing::error!("Failed to report health to Nostr: {}", e);
+                    }
                 }
             }
+            None => future::pending::<()>().await,
         }
     });
 
