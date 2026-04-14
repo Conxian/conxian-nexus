@@ -192,7 +192,7 @@ impl NexusSync {
 
         // [CON-330] Commit block + state root to Kwil (Sovereign SQL Pilot)
         if let Some(kwil) = &self.kwil {
-            let _ = kwil
+            if let Err(e) = kwil
                 .persist_block(KwilBlockCommitment {
                     hash: data.hash.clone(),
                     height: data.height,
@@ -200,15 +200,29 @@ impl NexusSync {
                     state: "soft".to_string(),
                 })
                 .await
-                .ok();
+            {
+                tracing::warn!(
+                    error = %e,
+                    height = data.height,
+                    hash = %data.hash,
+                    "kwil persist_block failed"
+                );
+            }
 
-            let _ = kwil
+            if let Err(e) = kwil
                 .persist_state_root(KwilStateRootCommitment {
                     block_height: data.height,
                     state_root: root.clone(),
                 })
                 .await
-                .ok();
+            {
+                tracing::warn!(
+                    error = %e,
+                    height = data.height,
+                    state_root = %root,
+                    "kwil persist_state_root failed"
+                );
+            }
         }
 
         Ok(())
