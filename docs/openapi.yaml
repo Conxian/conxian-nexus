@@ -146,6 +146,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+        default:
+          description: Unexpected gateway error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer

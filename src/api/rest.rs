@@ -382,6 +382,16 @@ async fn verify_bitvm2_state_root(
             .into_response();
     };
 
+    let state_root = payload.state_root.trim().to_string();
+    if state_root.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(bitvm2_gateway_error(&payload.state_root, "field `state_root` is required")),
+        )
+            .into_response();
+    }
+    payload.state_root = state_root;
+
     let proof = payload.proof.trim().to_string();
     if proof.is_empty() {
         return (
