@@ -4,6 +4,8 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::Storage;
+use crate::storage::tableland::TablelandAdapter;
+use crate::api::billing::nostr::NostrTelemetry;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -48,6 +50,8 @@ pub struct AppState {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
+    pub tableland: Arc<TablelandAdapter>,
+    pub nostr: Option<Arc<NostrTelemetry>>,
     pub gateway_url: Option<String>,
     pub http_client: reqwest::Client,
 }
@@ -65,8 +69,8 @@ pub struct ProofResponse {
 
 #[derive(Deserialize)]
 pub struct MMRProofParams {
-    pub tx_id: Option<String>,
     pub index: Option<usize>,
+    pub tx_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -74,18 +78,15 @@ pub struct VerifyStateRequest {
     pub state_root: String,
 }
 
-#[derive(Deserialize, Serialize)]
-pub struct VerifyBitvm2StateRootRequest {
-    pub state_root: String,
-    pub proof: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub public_inputs: Option<Vec<String>>,
-}
-
 #[derive(Serialize)]
 pub struct VerifyStateResponse {
     pub valid: bool,
     pub mmr_root: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
 }
 
 #[derive(Serialize)]
@@ -118,6 +119,8 @@ pub fn app_router(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    nostr: Option<Arc<NostrTelemetry>>,
     experimental_apis_enabled: bool,
 ) -> Router {
     init_prometheus_metrics();
@@ -137,6 +140,8 @@ pub fn app_router(
         nexus_state,
         executor,
         oracle,
+        tableland,
+        nostr,
         gateway_url,
         http_client,
     };
@@ -145,41 +150,25 @@ pub fn app_router(
         .route("/v1/proof", get(get_proof))
         .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
-        .route(
-            "/v1/bitvm2/verify-state-root",
-            post(verify_bitvm2_state_root),
-        )
         .route("/v1/status", get(get_status))
         .route("/v1/metrics", get(get_metrics))
         .route("/metrics", get(prometheus_metrics))
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
-        .route("/health", get(health_check));
+        .route("/health", get(health_check))
+        .nest("/v1/billing", crate::api::billing::billing_routes())
+        .nest("/v1/erp", crate::api::erp::erp_routes())
+        .nest("/v1/zkml", crate::api::zkml::zkml_routes())
+        .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 
     if experimental_apis_enabled {
-        router = router
-            .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
-            .route(
-                "/v1/zkml/verify",
-                post(crate::api::zkml::verify_zkml_handler),
-            )
-            .route(
-                "/v1/identity/resolve",
-                post(crate::api::identity::resolve_identity_handler),
-            )
-            .route(
-                "/v1/dlc/create-bond",
-                post(crate::api::dlc::create_dlc_bond_handler),
-            )
-            .route(
-                "/v1/settlement/trigger",
-                post(crate::api::settlement::settlement_trigger_handler),
-            );
+        router = router.route(
+            "/v1/bitvm2/verify-state-root",
+            post(verify_bitvm2_state_root),
+        );
     }
 
-    router
-        .nest("/v1/billing", crate::api::billing::billing_routes())
-        .with_state(state)
+    router.with_state(state)
 }
 
 pub async fn start_rest_server(
@@ -187,6 +176,8 @@ pub async fn start_rest_server(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    nostr: Option<Arc<NostrTelemetry>>,
     port: u16,
     experimental_apis_enabled: bool,
 ) -> anyhow::Result<()> {
@@ -195,11 +186,14 @@ pub async fn start_rest_server(
         nexus_state,
         executor,
         oracle,
+        tableland,
+        nostr,
         experimental_apis_enabled,
     );
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    tracing::info!("REST server listening on {}", listener.local_addr()?);
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    tracing::info!("REST API server listening on {}", addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -251,7 +245,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await

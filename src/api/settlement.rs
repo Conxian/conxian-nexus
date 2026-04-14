@@ -1,6 +1,8 @@
 //! [CON-162] External Settlement Trigger Module.
 //! Handles ISO 20022, PAPSS, and BRICS triggers for TEE-verified proposals.
 
+use axum::routing::post;
+use axum::Router;
 use crate::api::rest::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -25,6 +27,10 @@ pub struct SettlementProposalResponse {
 
 /// [CON-162] Handles external settlement triggers.
 /// Verifies TEE attestation and initiates a 144-block time-lock proposal.
+pub fn settlement_routes() -> Router<AppState> {
+    Router::new().route("/trigger", post(settlement_trigger_handler))
+}
+
 pub async fn settlement_trigger_handler(
     State(state): State<AppState>,
     Json(payload): Json<ExternalSettlementTrigger>,

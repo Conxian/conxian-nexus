@@ -7,6 +7,8 @@ use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::sync::NexusSync;
 use std::future;
 use std::sync::Arc;
@@ -41,6 +43,23 @@ async fn main() -> anyhow::Result<()> {
     // Initialize Executor
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
+    // Initialize Tableland Adapter [CON-69]
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), config.tableland_base_url.clone()));
+
+    // Initialize Nostr Telemetry [CON-473]
+    let nostr = if let Some(sk) = &config.nostr_secret_key {
+        match NostrTelemetry::new(sk, config.nostr_relays.clone()).await {
+            Ok(n) => Some(Arc::new(n)),
+            Err(e) => {
+                tracing::error!("Failed to initialize Nostr telemetry: {}", e);
+                None
+            }
+        }
+    } else {
+        tracing::info!("Nostr telemetry disabled (NOSTR_SECRET_KEY not set)");
+        None
+    };
+
     // Initialize Oracle Service
     let oracle_service = if config.oracle_enabled {
         use anyhow::Context;
@@ -65,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
     let sync_service = Arc::new(NexusSync::new(
         storage.clone(),
         state_tracker.clone(),
+        tableland.clone(),
         config.stacks_node_rpc_url.clone(),
     ));
     let safety_service = Arc::new(NexusSafety::new(
@@ -136,6 +156,8 @@ async fn main() -> anyhow::Result<()> {
     let rest_state = state_tracker.clone();
     let rest_executor = executor.clone();
     let rest_oracle = oracle_service.clone();
+    let rest_tableland = tableland.clone();
+    let rest_nostr = nostr.clone();
     let rest_port = config.rest_port;
     let experimental_apis_enabled = config.experimental_apis_enabled;
     let rest_handle = tokio::spawn(async move {
@@ -144,6 +166,8 @@ async fn main() -> anyhow::Result<()> {
             rest_state,
             rest_executor,
             rest_oracle,
+            rest_tableland,
+            rest_nostr,
             rest_port,
             experimental_apis_enabled,
         )
