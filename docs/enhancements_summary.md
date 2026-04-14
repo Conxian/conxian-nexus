@@ -1,39 +1,25 @@
-# Conxian Nexus Enhancements Summary (v0.4.0-Final)
+# Conxian Nexus & BOS Enhancement Research Summary (v0.5.0)
 
-## 1. Persistent Audit Logs & MMR (src/state/mod.rs, src/sync/mod.rs)
-- **Problem**: MMR state was transient and lost on node restart.
-- **Solution**: Implemented **Persistent MMR Peaks** in PostgreSQL (`mmr_peaks` table).
-- **Impact**: Instant node recovery and immutable historical state anchoring.
+## 1. Competitive Landscape & Architecture Alignment
+Research conducted against top-tier decentralized node and business operation systems identifies the following target states for the Conxian ecosystem:
 
-## 2. Secure B2B Telemetry & Billing (src/api/billing/mod.rs)
-- **Problem**: SDK usage reporting was vulnerable to spoofing.
-- **Solution**: Upgraded to **HMAC-SHA256 authenticated telemetry**.
-- **Impact**: Robust license enforcement.
+### Decentralized Infrastructure (The "Sovereign Stack")
+*   **Deployment (Akash Network)**: Transition from centralized Cloud Run/Render environments to Akash. This enables fully autonomous, unstoppable service orchestration using SDL (Stacks Deployment Language) templates.
+*   **Indexing (The Graph / Subgraphs)**: Enhance the "Glass Node" capabilities by implementing a decentralized indexing layer. This allows for verifiable, complex state queries against the Stacks MMR state root, similar to Graph Nodes but optimized for Bitcoin/Stacks finality.
+*   **Intelligence (Bittensor)**: Replace hardcoded FSOC heuristics with sovereign intelligence sourced from Bittensor subnets. Specifically, for "Revenue Intelligence" and "Risk Attestation" (e.g., predicting LTV rebalance thresholds).
 
-## 3. MEV Transparency & FSOC (src/executor/mod.rs)
-- **Problem**: Transaction rejections were not audited, leading to "black box" sequencer behavior.
-- **Solution**: Implemented **MEV Transparency Logging** (`mev_audit_log` table). Every rejected transaction is now logged with a specific reason (e.g., Sandwich detection, Liquidation front-running).
-- **Impact**: Verifiable and transparent MEV mitigation for the Conxian ecosystem.
+### Autonomous Business Operations (BOS)
+*   **Interoperability (Chainlink CCIP)**: Hardening the cross-chain settlement logic (ISO 20022/PAPSS) by adopting CCIP-style decentralized oracle communication patterns. This ensures high-fidelity messaging without centralized relay bottlenecks.
+*   **Persistence (Tableland & Kwil)**: Finalize the "Sovereign SQL" pilot. Moving transactional state from hosted PostgreSQL to decentralized relational layers ensures data sovereignty and jurisdictional resilience.
+*   **Telemetry (Nostr)**: Fully transition usage reporting to the Nostr Telemetry Bridge (Kind 26001). This removes API key exposure in centralized logs and enables censorship-resistant billing audit trails.
 
-## 4. On-Chain Oracle Integration (src/oracle/ppp_tracker.rs, lib-conxian-core)
-- **Problem**: Oracle was using mock IDs and didn't persist historical FX rates.
-- **Solution**:
-    - Developed **ContractBridge** in `lib-conxian-core` for signed Clarity contract calls.
-    - Implemented **Historical FX Persistence** (`oracle_fx_history` table).
-    - Upgraded Oracle to return a **signed transaction hash**.
-- **Impact**: Professional-grade oracle operations and verifiable PPP (Purchasing Power Parity) adjustments.
+## 2. Technical Enhancement Roadmap (Target v0.6.0+)
+1.  **Autonomous Deployment**: Implement Akash SDL configurations for Nexus, Gateway, and UI.
+2.  **Verifiable Indexing Layer**: Develop a query-engine that generates inclusion proofs for indexed relational data against the MMR root.
+3.  **Cross-Chain Hardening**: Integrate verifiable TEE attestations with pull-based oracle reports (Nostr/Chainlink) for all settlement proposals.
+4.  **Multi-Tenancy BOS**: Standardize the BOS Platforming interfaces (CON-474) to allow third-party businesses to deploy "White-Label Sovereign Nodes."
 
-## 5. Dynamic Rebalancing (src/executor/mod.rs)
-- **Problem**: Rebalancing was based on static mocks.
-- **Solution**: Upgraded `execute_rebalance` to perform **Dynamic LTV calculations** using real-time Oracle FX rates from the database.
-- **Impact**: Accurate and safe collateral management for automated vault operations.
-
-## 6. Systemic Alignment & Production Readiness (v0.5.0-Final)
-- **Problem**: Gaps between "Done" Linear issues and the actual codebase (ERP, Tableland, ZKML).
-- **Solution**:
-    - Implemented **OData/ERP Translation Layer** (`src/api/erp.rs`) for SAP/Oracle bridging (CON-63).
-    - Implemented **Sovereign Sharding Persistence** (`src/storage/tableland.rs`) for Tableland integration (CON-69).
-    - Implemented **ZKML Verification Logic** (`src/api/zkml.rs`) for Guardian: Attestation (CON-70).
-    - Deployed **CJCS v2.0 JSON-LD** and **BitVM2 Verification Floor** in `lib-conxian-core` (CON-73/75).
-    - Integrated **Revenue Intelligence Mapping** in `NexusExecutor` (CON-68).
-- **Impact**: Full alignment across all business units and repositories, ensuring the Conxian stack is mainnet-ready.
+## 3. Reference Standards
+*   **BitVM2**: Optimistic bridge patterns utilizing Groth16 SNARK verifiers on Bitcoin.
+*   **ISO 20022**: Standardized financial messaging for institutional settlement (pacs.008).
+*   **BIP-340**: Schnorr signatures for Nostr-based agent coordination.

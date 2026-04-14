@@ -1,14 +1,10 @@
-//! REST API handlers for Conxian Nexus.
-
+use crate::api::billing::nostr::NostrTelemetry;
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::Storage;
 use crate::storage::tableland::TablelandAdapter;
-use crate::api::billing::nostr::NostrTelemetry;
-use crate::api::identity::resolve_identity_handler;
-use crate::api::dlc::create_dlc_bond_handler;
-
+use crate::storage::kwil::KwilAdapter;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -17,34 +13,30 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
-use std::time::Duration;
+use tokio::time::Duration;
+use crate::api::identity::resolve_identity_handler;
+use crate::api::dlc::create_dlc_bond_handler;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
-        "nexus_total_transactions",
-        "Total number of transactions processed"
-    )
-    .unwrap();
-    pub static ref TOTAL_BLOCKS: IntGauge =
-        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
+    pub static ref TOTAL_TRANSACTIONS: IntCounter =
+        IntCounter::new("nexus_total_transactions", "Total transactions processed").unwrap();
+    pub static ref TOTAL_BLOCKS: IntCounter =
+        IntCounter::new("nexus_total_blocks", "Total blocks processed").unwrap();
     pub static ref SYNC_DRIFT: IntGauge =
-        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
-    pub static ref SAFETY_MODE: IntGauge = register_int_gauge!(
-        "nexus_safety_mode",
-        "Safety mode status (1 = active, 0 = inactive)"
-    )
-    .unwrap();
+        IntGauge::new("nexus_sync_drift", "Block height drift from Stacks L1").unwrap();
+    pub static ref SAFETY_MODE: IntGauge =
+        IntGauge::new("nexus_safety_mode", "Safety Mode active (1 = yes, 0 = no)").unwrap();
 }
 
 pub fn init_prometheus_metrics() {
-    lazy_static::initialize(&TOTAL_TRANSACTIONS);
-    lazy_static::initialize(&TOTAL_BLOCKS);
-    lazy_static::initialize(&SYNC_DRIFT);
-    lazy_static::initialize(&SAFETY_MODE);
+    prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone())).ok();
+    prometheus::register(Box::new(TOTAL_BLOCKS.clone())).ok();
+    prometheus::register(Box::new(SYNC_DRIFT.clone())).ok();
+    prometheus::register(Box::new(SAFETY_MODE.clone())).ok();
 }
 
 #[derive(Clone)]
@@ -54,45 +46,35 @@ pub struct AppState {
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
     pub tableland: Arc<TablelandAdapter>,
+    pub kwil: Option<Arc<KwilAdapter>>,
     pub nostr: Option<Arc<NostrTelemetry>>,
     pub gateway_url: Option<String>,
     pub http_client: reqwest::Client,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct ProofParams {
     pub key: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ProofResponse {
     pub hash: String,
     pub proof: String,
 }
 
-#[derive(Deserialize)]
-pub struct MMRProofParams {
-    pub index: Option<usize>,
-    pub tx_id: Option<String>,
-}
-
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct VerifyStateRequest {
     pub state_root: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct VerifyStateResponse {
     pub valid: bool,
     pub mmr_root: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct VerifyBitvm2StateRootRequest {
-    pub state_root: String,
-}
-
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct StatusResponse {
     pub state_root: String,
     pub mmr_root: String,
@@ -101,7 +83,7 @@ pub struct StatusResponse {
     pub drift: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct MetricsResponse {
     pub total_transactions: u64,
     pub total_blocks: u64,
@@ -110,11 +92,50 @@ pub struct MetricsResponse {
     pub uptime_seconds: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ExecutionResponse {
     pub tx_id: String,
     pub status: String,
     pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MMRProofParams {
+    pub index: Option<u64>,
+    pub tx_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
+}
+
+pub async fn start_rest_server(
+    storage: Arc<Storage>,
+    nexus_state: Arc<NexusState>,
+    executor: Arc<NexusExecutor>,
+    oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
+    nostr: Option<Arc<NostrTelemetry>>,
+    port: u16,
+    experimental_apis_enabled: bool,
+) -> anyhow::Result<()> {
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        oracle,
+        tableland,
+        kwil,
+        nostr,
+        experimental_apis_enabled,
+    );
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    tracing::info!("REST server listening on {}", addr);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 pub fn app_router(
@@ -123,6 +144,7 @@ pub fn app_router(
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
     tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
     nostr: Option<Arc<NostrTelemetry>>,
     experimental_apis_enabled: bool,
 ) -> Router {
@@ -144,6 +166,7 @@ pub fn app_router(
         executor,
         oracle,
         tableland,
+        kwil,
         nostr,
         gateway_url,
         http_client,
@@ -168,39 +191,12 @@ pub fn app_router(
 
     if experimental_apis_enabled {
         router = router.route(
-            "/v1/bitvm2/verify-state-root",
+            "/v1/experimental/verify-bitvm2-state-root",
             post(verify_bitvm2_state_root),
         );
     }
 
     router.with_state(state)
-}
-
-pub async fn start_rest_server(
-    storage: Arc<Storage>,
-    nexus_state: Arc<NexusState>,
-    executor: Arc<NexusExecutor>,
-    oracle: Option<Arc<OracleService>>,
-    tableland: Arc<TablelandAdapter>,
-    nostr: Option<Arc<NostrTelemetry>>,
-    port: u16,
-    experimental_apis_enabled: bool,
-) -> anyhow::Result<()> {
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        oracle,
-        tableland,
-        nostr,
-        experimental_apis_enabled,
-    );
-
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("REST API server listening on {}", addr);
-    axum::serve(listener, app).await?;
-    Ok(())
 }
 
 async fn get_proof(
@@ -226,7 +222,7 @@ async fn get_mmr_proof(
 ) -> Result<Json<crate::state::MMRProof>, StatusCode> {
     let index = match (params.index, params.tx_id) {
         (Some(i), _) => Some(i),
-        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
+        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id).map(|i| i as u64),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
@@ -234,12 +230,12 @@ async fn get_mmr_proof(
 
     let leaf = state
         .nexus_state
-        .get_leaf_by_index(leaf_index)
+        .get_leaf_by_index(leaf_index as usize)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let (leaf_pos, sibling_positions) = state
         .nexus_state
-        .get_mmr_proof_metadata(leaf_index)
+        .get_mmr_proof_metadata(leaf_index as usize)
         .ok_or_else(|| {
             tracing::error!(
                 "MMR proof metadata could not be computed for leaf_index {}",
@@ -250,7 +246,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -462,8 +458,8 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     // Update Prometheus metrics
-    TOTAL_TRANSACTIONS.set(tx_count);
-    TOTAL_BLOCKS.set(block_count);
+    TOTAL_TRANSACTIONS.inc_by(tx_count as u64);
+    TOTAL_BLOCKS.inc_by(block_count as u64);
     SYNC_DRIFT.set(drift as i64);
     SAFETY_MODE.set(if safety_mode_active { 1 } else { 0 });
 
@@ -493,7 +489,7 @@ async fn execute_tx(
 ) -> impl IntoResponse {
     match state.executor.validate_transaction(&request).await {
         Ok(true) => {
-            TOTAL_TRANSACTIONS.set(TOTAL_TRANSACTIONS.get() + 1);
+            TOTAL_TRANSACTIONS.inc();
             // Simulate execution success
             Json(ExecutionResponse {
                 tx_id: request.tx_id,

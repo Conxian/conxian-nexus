@@ -7,16 +7,14 @@ use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::storage::tableland::TablelandAdapter;
 use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
 
 #[tokio::test]
 async fn test_external_settlement_trigger_unauthorized() {
-    let mut config = Config::default_test();
-    // Use an in-memory or easily accessible DB if possible, but here we assume the environment
-    // should have been set up. Since it's failing on pool timeout, we'll try to check if we can
-    // use a mock or just skip if DB is not available.
+    let config = Config::default_test();
 
     let storage = match Storage::from_config(&config).await {
         Ok(s) => Arc::new(s),
@@ -33,8 +31,9 @@ async fn test_external_settlement_trigger_unauthorized() {
 
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
 
-    let app = app_router(storage, nexus_state, executor, None, true);
+    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
 
     let response = app
         .oneshot(
@@ -61,7 +60,7 @@ async fn test_external_settlement_trigger_unauthorized() {
 
 #[tokio::test]
 async fn test_external_settlement_trigger_success() {
-    let mut config = Config::default_test();
+    let config = Config::default_test();
 
     let storage = match Storage::from_config(&config).await {
         Ok(s) => Arc::new(s),
@@ -84,8 +83,9 @@ async fn test_external_settlement_trigger_success() {
 
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
 
-    let app = app_router(storage, nexus_state, executor, None, true);
+    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
 
     let response = app
         .oneshot(
