@@ -128,12 +128,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
-        default:
-          description: Gateway response
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
         '502':
           description: Bad Gateway
           content:

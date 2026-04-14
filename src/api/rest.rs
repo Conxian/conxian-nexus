@@ -1,42 +1,95 @@
-use crate::api::billing::nostr::NostrTelemetry;
+//! REST API handlers for Conxian Nexus.
+
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::Storage;
-use crate::storage::tableland::TablelandAdapter;
 use crate::storage::kwil::KwilAdapter;
+use crate::storage::tableland::TablelandAdapter;
+use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::identity::resolve_identity_handler;
+use crate::api::dlc::create_dlc_bond_handler;
+
 use axum::{
-    extract::{Query, State},
+    extract::{DefaultBodyLimit, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
-use tokio::time::Duration;
-use crate::api::identity::resolve_identity_handler;
-use crate::api::dlc::create_dlc_bond_handler;
+use std::time::Duration;
 
-lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntCounter =
-        IntCounter::new("nexus_total_transactions", "Total transactions processed").unwrap();
-    pub static ref TOTAL_BLOCKS: IntCounter =
-        IntCounter::new("nexus_total_blocks", "Total blocks processed").unwrap();
-    pub static ref SYNC_DRIFT: IntGauge =
-        IntGauge::new("nexus_sync_drift", "Block height drift from Stacks L1").unwrap();
-    pub static ref SAFETY_MODE: IntGauge =
-        IntGauge::new("nexus_safety_mode", "Safety Mode active (1 = yes, 0 = no)").unwrap();
+fn register_metric_best_effort(
+    metric_name: &'static str,
+    collector: Box<dyn prometheus::core::Collector>,
+) {
+    match prometheus::register(collector) {
+        Ok(()) => {}
+        Err(prometheus::Error::AlreadyReg) => {}
+        Err(e) => {
+            tracing::error!(
+                error = %e,
+                metric = metric_name,
+                "Prometheus metrics registration failed"
+            );
+        }
+    }
 }
 
+lazy_static! {
+    pub static ref TOTAL_TRANSACTIONS: IntGauge = {
+        let gauge = IntGauge::new(
+            "nexus_total_transactions",
+            "Total number of transactions processed",
+        )
+        .expect("nexus_total_transactions metric must be valid");
+
+        register_metric_best_effort("nexus_total_transactions", Box::new(gauge.clone()));
+
+        gauge
+    };
+    pub static ref TOTAL_BLOCKS: IntGauge = {
+        let gauge = IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
+            .expect("nexus_total_blocks metric must be valid");
+
+        register_metric_best_effort("nexus_total_blocks", Box::new(gauge.clone()));
+
+        gauge
+    };
+    pub static ref SYNC_DRIFT: IntGauge = {
+        let gauge = IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
+            .expect("nexus_sync_drift metric must be valid");
+
+        register_metric_best_effort("nexus_sync_drift", Box::new(gauge.clone()));
+
+        gauge
+    };
+    pub static ref SAFETY_MODE: IntGauge = {
+        let gauge = IntGauge::new(
+            "nexus_safety_mode",
+            "Safety mode status (1 = active, 0 = inactive)",
+        )
+        .expect("nexus_safety_mode metric must be valid");
+
+        register_metric_best_effort("nexus_safety_mode", Box::new(gauge.clone()));
+
+        gauge
+    };
+}
+
+const BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+const BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES: usize = 2 * 1024 * 1024;
+
 pub fn init_prometheus_metrics() {
-    prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone())).ok();
-    prometheus::register(Box::new(TOTAL_BLOCKS.clone())).ok();
-    prometheus::register(Box::new(SYNC_DRIFT.clone())).ok();
-    prometheus::register(Box::new(SAFETY_MODE.clone())).ok();
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
 }
 
 #[derive(Clone)]
@@ -48,33 +101,47 @@ pub struct AppState {
     pub tableland: Arc<TablelandAdapter>,
     pub kwil: Option<Arc<KwilAdapter>>,
     pub nostr: Option<Arc<NostrTelemetry>>,
-    pub gateway_url: Option<String>,
+    pub gateway_url: Option<reqwest::Url>,
     pub http_client: reqwest::Client,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct ProofParams {
     pub key: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ProofResponse {
     pub hash: String,
     pub proof: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
+pub struct MMRProofParams {
+    pub index: Option<usize>,
+    pub tx_id: Option<String>,
+}
+
+#[derive(Deserialize)]
 pub struct VerifyStateRequest {
     pub state_root: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct VerifyStateResponse {
     pub valid: bool,
     pub mmr_root: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
+    pub proof: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub public_inputs: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
 pub struct StatusResponse {
     pub state_root: String,
     pub mmr_root: String,
@@ -83,7 +150,7 @@ pub struct StatusResponse {
     pub drift: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct MetricsResponse {
     pub total_transactions: u64,
     pub total_blocks: u64,
@@ -92,50 +159,11 @@ pub struct MetricsResponse {
     pub uptime_seconds: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Serialize)]
 pub struct ExecutionResponse {
     pub tx_id: String,
     pub status: String,
     pub message: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct MMRProofParams {
-    pub index: Option<u64>,
-    pub tx_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct VerifyBitvm2StateRootRequest {
-    pub state_root: String,
-}
-
-pub async fn start_rest_server(
-    storage: Arc<Storage>,
-    nexus_state: Arc<NexusState>,
-    executor: Arc<NexusExecutor>,
-    oracle: Option<Arc<OracleService>>,
-    tableland: Arc<TablelandAdapter>,
-    kwil: Option<Arc<KwilAdapter>>,
-    nostr: Option<Arc<NostrTelemetry>>,
-    port: u16,
-    experimental_apis_enabled: bool,
-) -> anyhow::Result<()> {
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        oracle,
-        tableland,
-        kwil,
-        nostr,
-        experimental_apis_enabled,
-    );
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("REST server listening on {}", addr);
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
-    Ok(())
 }
 
 pub fn app_router(
@@ -150,10 +178,28 @@ pub fn app_router(
 ) -> Router {
     init_prometheus_metrics();
 
-    let gateway_url = std::env::var("GATEWAY_URL")
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty());
+    let gateway_url = std::env::var("GATEWAY_URL").ok().and_then(|s| {
+        let s = s.trim();
+        if s.is_empty() {
+            return None;
+        }
+
+        let base = match reqwest::Url::parse(s) {
+            Ok(base) => base,
+            Err(err) => {
+                tracing::warn!(error = %err, "Invalid GATEWAY_URL");
+                return None;
+            }
+        };
+
+        match base.join("./") {
+            Ok(base) => Some(base),
+            Err(err) => {
+                tracing::warn!(error = %err, "Invalid GATEWAY_URL");
+                None
+            }
+        }
+    });
 
     let http_client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -186,17 +232,48 @@ pub fn app_router(
         .route("/v1/dlc/bond", post(create_dlc_bond_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
+        .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
         .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 
     if experimental_apis_enabled {
         router = router.route(
-            "/v1/experimental/verify-bitvm2-state-root",
-            post(verify_bitvm2_state_root),
+            "/v1/bitvm2/verify-state-root",
+            post(verify_bitvm2_state_root)
+                .layer(DefaultBodyLimit::max(BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES)),
         );
     }
 
     router.with_state(state)
+}
+
+pub async fn start_rest_server(
+    storage: Arc<Storage>,
+    nexus_state: Arc<NexusState>,
+    executor: Arc<NexusExecutor>,
+    oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
+    nostr: Option<Arc<NostrTelemetry>>,
+    port: u16,
+    experimental_apis_enabled: bool,
+) -> anyhow::Result<()> {
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        oracle,
+        tableland,
+        kwil,
+        nostr,
+        experimental_apis_enabled,
+    );
+
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    tracing::info!("REST API server listening on {}", addr);
+    axum::serve(listener, app).await?;
+    Ok(())
 }
 
 async fn get_proof(
@@ -222,7 +299,7 @@ async fn get_mmr_proof(
 ) -> Result<Json<crate::state::MMRProof>, StatusCode> {
     let index = match (params.index, params.tx_id) {
         (Some(i), _) => Some(i),
-        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id).map(|i| i as u64),
+        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
@@ -230,12 +307,12 @@ async fn get_mmr_proof(
 
     let leaf = state
         .nexus_state
-        .get_leaf_by_index(leaf_index as usize)
+        .get_leaf_by_index(leaf_index)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let (leaf_pos, sibling_positions) = state
         .nexus_state
-        .get_mmr_proof_metadata(leaf_index as usize)
+        .get_mmr_proof_metadata(leaf_index)
         .ok_or_else(|| {
             tracing::error!(
                 "MMR proof metadata could not be computed for leaf_index {}",
@@ -246,7 +323,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -290,25 +367,43 @@ async fn verify_bitvm2_state_root(
     State(state): State<AppState>,
     Json(payload): Json<VerifyBitvm2StateRootRequest>,
 ) -> impl IntoResponse {
-    let Some(gateway_url) = state.gateway_url.as_deref() else {
+    let Some(gateway_url) = state.gateway_url.as_ref() else {
+        tracing::warn!(
+            state_root = %payload.state_root,
+            "BitVM2 verifier gateway unavailable: GATEWAY_URL not configured"
+        );
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(bitvm2_gateway_error(
                 &payload.state_root,
-                "GATEWAY_URL is not configured",
+                "bitvm2 verifier gateway unavailable",
             )),
         )
             .into_response();
     };
 
-    let url = format!(
-        "{}/api/v1/bitvm2/verify-state-root",
-        gateway_url.trim_end_matches('/')
-    );
+    let url = match gateway_url.join("api/v1/bitvm2/verify-state-root") {
+        Ok(url) => url,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                "Invalid gateway URL configuration"
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway unavailable",
+                )),
+            )
+                .into_response();
+        }
+    };
 
-    let resp = match state
+    let mut resp = match state
         .http_client
-        .post(url.as_str())
+        .post(url.clone())
         .json(&payload)
         .send()
         .await
@@ -335,28 +430,76 @@ async fn verify_bitvm2_state_root(
     let upstream_status = resp.status();
     let status =
         StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = match resp.bytes().await {
-        Ok(bytes) => bytes,
-        Err(err) => {
+
+    if let Some(len) = resp.content_length() {
+        if len > BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES as u64 {
             tracing::warn!(
-                error = %err,
                 state_root = %payload.state_root,
                 url = %url,
                 upstream_status = %upstream_status,
-                "BitVM2 verifier gateway read failed"
+                content_length = len,
+                "BitVM2 verifier gateway response too large"
             );
             return (
                 StatusCode::BAD_GATEWAY,
                 Json(bitvm2_gateway_error(
                     &payload.state_root,
-                    "bitvm2 verifier gateway read failed",
+                    "bitvm2 verifier gateway response too large",
                 )),
             )
                 .into_response();
         }
-    };
+    }
 
-    let body: serde_json::Value = match serde_json::from_slice(&bytes) {
+    let mut bytes: Vec<u8> = Vec::new();
+
+    loop {
+        let chunk = match resp.chunk().await {
+            Ok(chunk) => chunk,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    state_root = %payload.state_root,
+                    url = %url,
+                    upstream_status = %upstream_status,
+                    "BitVM2 verifier gateway read failed"
+                );
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(bitvm2_gateway_error(
+                        &payload.state_root,
+                        "bitvm2 verifier gateway read failed",
+                    )),
+                )
+                    .into_response();
+            }
+        };
+
+        let Some(chunk) = chunk else {
+            break;
+        };
+
+        if bytes.len() + chunk.len() > BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES {
+            tracing::warn!(
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway response too large"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway response too large",
+                )),
+            )
+                .into_response();
+        }
+
+        bytes.extend_from_slice(&chunk);
+    }
+
+    let body: serde_json::Value = match serde_json::from_slice(bytes.as_slice()) {
         Ok(body) => body,
         Err(err) => {
             tracing::warn!(
@@ -458,8 +601,8 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     // Update Prometheus metrics
-    TOTAL_TRANSACTIONS.inc_by(tx_count as u64);
-    TOTAL_BLOCKS.inc_by(block_count as u64);
+    TOTAL_TRANSACTIONS.set(tx_count);
+    TOTAL_BLOCKS.set(block_count);
     SYNC_DRIFT.set(drift as i64);
     SAFETY_MODE.set(if safety_mode_active { 1 } else { 0 });
 
@@ -475,12 +618,18 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
 }
 
 async fn prometheus_metrics() -> impl IntoResponse {
+    init_prometheus_metrics();
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer).unwrap();
 
-    String::from_utf8(buffer).unwrap()
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(()) => ([(header::CONTENT_TYPE, encoder.format_type())], buffer).into_response(),
+        Err(err) => {
+            tracing::warn!(error = %err, "Prometheus metrics encoding failed");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 async fn execute_tx(
@@ -489,7 +638,7 @@ async fn execute_tx(
 ) -> impl IntoResponse {
     match state.executor.validate_transaction(&request).await {
         Ok(true) => {
-            TOTAL_TRANSACTIONS.inc();
+            TOTAL_TRANSACTIONS.set(TOTAL_TRANSACTIONS.get() + 1);
             // Simulate execution success
             Json(ExecutionResponse {
                 tx_id: request.tx_id,
