@@ -474,7 +474,7 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     // Update Prometheus metrics
-    let tx_total = tx_count as u64;
+    let tx_total = tx_count.max(0) as u64;
     let prev_tx_total = LAST_REDIS_TOTAL_TRANSACTIONS.swap(tx_total, Ordering::Relaxed);
     if tx_total >= prev_tx_total {
         TOTAL_TRANSACTIONS.inc_by(tx_total - prev_tx_total);
@@ -483,7 +483,7 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         TOTAL_TRANSACTIONS.inc_by(tx_total);
     }
 
-    let block_total = block_count as u64;
+    let block_total = block_count.max(0) as u64;
     let prev_block_total = LAST_REDIS_TOTAL_BLOCKS.swap(block_total, Ordering::Relaxed);
     if block_total >= prev_block_total {
         TOTAL_BLOCKS.inc_by(block_total - prev_block_total);
@@ -497,8 +497,8 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
     let uptime = crate::api::get_uptime();
 
     Ok(Json(MetricsResponse {
-        total_transactions: tx_count as u64,
-        total_blocks: block_count as u64,
+        total_transactions: tx_total,
+        total_blocks: block_total,
         safety_mode: safety_mode_active,
         drift,
         uptime_seconds: uptime,
