@@ -23,7 +23,7 @@ fn register_metric_best_effort(
 ) {
     match prometheus::register(collector) {
         Ok(()) => {}
-        Err(prometheus::Error::AlreadyReg(_)) => {}
+        Err(prometheus::Error::AlreadyReg) => {}
         Err(e) => {
             tracing::error!(
                 error = %e,
