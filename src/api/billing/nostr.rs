@@ -65,7 +65,8 @@ impl NostrTelemetry {
             "state_root": state_root,
             "timestamp": Timestamp::now().as_u64(),
             "kind": "nexus_health_v1"
-        }).to_string();
+        })
+        .to_string();
 
         // Using Kind 26002 for health reporting
         let builder = EventBuilder::new(Kind::Custom(26002), content, []);

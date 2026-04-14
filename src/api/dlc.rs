@@ -8,7 +8,6 @@ use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct DlcBondRequest {
-    pub organization_id: String,
     pub bond_id: String,
     pub principal_sbtc: u64,
     pub expiry_height: u64,
@@ -29,7 +28,7 @@ pub async fn create_dlc_bond_handler(
     State(state): State<AppState>,
     Json(payload): Json<DlcBondRequest>,
 ) -> impl IntoResponse {
-    tracing::info!("Creating DLC bond for id {} (Org: {})", payload.bond_id, payload.organization_id);
+    tracing::info!("Creating DLC bond for id {}", payload.bond_id);
 
     // 1. Validation
     if payload.bond_id.is_empty() || payload.principal_sbtc == 0 {
@@ -65,7 +64,6 @@ pub async fn create_dlc_bond_handler(
 
     let _: () = redis::cmd("HSET")
         .arg(format!("dlc_bond:{}", dlc_contract_id))
-        .arg("org_id").arg(&payload.organization_id)
         .arg("bond_id").arg(&payload.bond_id)
         .arg("principal").arg(payload.principal_sbtc)
         .arg("status").arg("Initialized")
@@ -79,7 +77,7 @@ pub async fn create_dlc_bond_handler(
             dlc_contract_id,
             status: "Initialized".to_string(),
             oracle_announcement,
-            next_coupon_height: payload.expiry_height / 10, // Deterministic coupon interval
+            next_coupon_height: payload.expiry_height / 10, // Mocked coupon interval
         }),
     )
         .into_response()

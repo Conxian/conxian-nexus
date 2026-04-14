@@ -2,10 +2,11 @@
 //! Bridges application state to Kwil's decentralized relational database.
 
 use crate::storage::Storage;
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 use lib_conxian_core::Wallet;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use reqwest::Client;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilBlockCommitment {
@@ -48,21 +49,38 @@ pub struct KwilReceipt {
     pub payload_signature: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct KwilExecuteRequest {
+    pub db_id: String,
+    pub action: String,
+    pub params: serde_json::Value,
+    pub payload: String,
+    pub signature: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct KwilExecuteResponse {
+    pub tx_hash: Option<String>,
+    pub error: Option<String>,
+}
+
 /// [NEXUS-SQL-01] Kwil persistence layer.
 pub struct KwilAdapter {
     _storage: Arc<Storage>,
-    _provider_url: String,
-    _db_id: String,
+    provider_url: String,
+    db_id: String,
     wallet: Arc<Wallet>,
+    client: Client,
 }
 
 impl KwilAdapter {
     pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> Self {
         Self {
             _storage: storage,
-            _provider_url: cfg.provider_url,
-            _db_id: cfg.db_id,
+            provider_url: cfg.provider_url,
+            db_id: cfg.db_id,
             wallet,
+            client: Client::new(),
         }
     }
 
@@ -78,15 +96,55 @@ impl KwilAdapter {
         );
 
         let payload = canonical_block_payload(&commitment);
-        let _signature = self.wallet.sign(&payload);
+        let signature = self.wallet.sign(&payload);
 
-        tracing::warn!(
-            db_id = %self._db_id,
-            provider = %self._provider_url,
-            "Kwil persistence is not implemented"
-        );
+        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
 
-        Err(anyhow!("Kwil persistence is not implemented"))
+        let params = serde_json::json!({
+            "hash": commitment.hash,
+            "height": commitment.height,
+            "type": commitment.block_type,
+            "state": commitment.state,
+        });
+
+        let response = self.client
+            .post(&url)
+            .json(&KwilExecuteRequest {
+                db_id: self.db_id.clone(),
+                action: "insert_block".to_string(),
+                params,
+                payload: payload.clone(),
+                signature: signature.clone(),
+            })
+            .send()
+            .await
+            .context("Failed to send request to Kwil")?;
+
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("Failed to read Kwil response")?;
+
+        if !status.is_success() {
+            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
+        }
+
+        let result: KwilExecuteResponse =
+            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
+
+        if let Some(err) = result.error {
+            return Err(anyhow!("Kwil execution error: {}", err));
+        }
+
+        let tx_hash = result.tx_hash.ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
+
+        tracing::info!("Block committed to Kwil. Tx: {}", tx_hash);
+
+        Ok(KwilReceipt {
+            tx_hash,
+            payload_signature: signature,
+        })
     }
 
     /// Pilot: Persist state root to Kwil with cryptographic signature.
@@ -100,27 +158,59 @@ impl KwilAdapter {
         );
 
         let payload = canonical_state_root_payload(&commitment);
-        let _signature = self.wallet.sign(&payload);
+        let signature = self.wallet.sign(&payload);
 
-        tracing::warn!(
-            db_id = %self._db_id,
-            provider = %self._provider_url,
-            "Kwil persistence is not implemented"
-        );
+        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
 
-        Err(anyhow!("Kwil persistence is not implemented"))
+        let params = serde_json::json!({
+            "block_height": commitment.block_height,
+            "state_root": commitment.state_root,
+        });
+
+        let response = self.client
+            .post(&url)
+            .json(&KwilExecuteRequest {
+                db_id: self.db_id.clone(),
+                action: "upsert_state_root".to_string(),
+                params,
+                payload: payload.clone(),
+                signature: signature.clone(),
+            })
+            .send()
+            .await
+            .context("Failed to send request to Kwil")?;
+
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("Failed to read Kwil response")?;
+
+        if !status.is_success() {
+            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
+        }
+
+        let result: KwilExecuteResponse =
+            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
+
+        if let Some(err) = result.error {
+            return Err(anyhow!("Kwil execution error: {}", err));
+        }
+
+        let tx_hash = result.tx_hash.ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
+
+        tracing::info!("State root committed to Kwil. Tx: {}", tx_hash);
+
+        Ok(KwilReceipt {
+            tx_hash,
+            payload_signature: signature,
+        })
     }
 }
 
 /// Percent-encodes payload values so canonical payloads are delimiter-safe.
-///
-/// Encoding rules:
-/// - `%` => `%25`
-/// - `|` => `%7C`
-/// - `=` => `%3D`
 fn encode_payload_value(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
-
     for ch in value.chars() {
         match ch {
             '%' => out.push_str("%25"),
@@ -129,7 +219,6 @@ fn encode_payload_value(value: &str) -> String {
             _ => out.push(ch),
         }
     }
-
     out
 }
 

@@ -2,6 +2,7 @@
 //! maintaining a local representation of the Stacks L1 state.
 
 use crate::state::NexusState;
+use crate::storage::kwil::{KwilAdapter, KwilBlockCommitment, KwilStateRootCommitment};
 use crate::storage::tableland::{TablelandAdapter, TablelandStateCommitment};
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
@@ -53,6 +54,7 @@ pub struct NexusSync {
     storage: Arc<Storage>,
     state: Arc<NexusState>,
     tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
     rpc_url: String,
     http_client: Client,
     event_tx: mpsc::Sender<StacksEvent>,
@@ -64,6 +66,7 @@ impl NexusSync {
         storage: Arc<Storage>,
         state: Arc<NexusState>,
         tableland: Arc<TablelandAdapter>,
+        kwil: Option<Arc<KwilAdapter>>,
         rpc_url: String,
     ) -> Self {
         let (tx, rx) = mpsc::channel(1000);
@@ -71,6 +74,7 @@ impl NexusSync {
             storage,
             state,
             tableland,
+            kwil,
             rpc_url,
             http_client: Client::new(),
             event_tx: tx,
@@ -185,6 +189,27 @@ impl NexusSync {
             })
             .await
             .ok();
+
+        // [CON-330] Commit block + state root to Kwil (Sovereign SQL Pilot)
+        if let Some(kwil) = &self.kwil {
+            let _ = kwil
+                .persist_block(KwilBlockCommitment {
+                    hash: data.hash.clone(),
+                    height: data.height,
+                    block_type: "microblock".to_string(),
+                    state: "soft".to_string(),
+                })
+                .await
+                .ok();
+
+            let _ = kwil
+                .persist_state_root(KwilStateRootCommitment {
+                    block_height: data.height,
+                    state_root: root.clone(),
+                })
+                .await
+                .ok();
+        }
 
         Ok(())
     }
