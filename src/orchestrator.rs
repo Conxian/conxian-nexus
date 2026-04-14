@@ -41,7 +41,29 @@ impl AutonomousOrchestrator {
             tracing::warn!("Critical Drift Detected ({}). Initiating autonomous recovery sequence...", drift);
 
             if let Some(n) = &self.nostr {
-                let _ = n.report_health_nostr("CRITICAL_DRIFT", drift, &self.state.get_state_root()).await;
+                let processed_height: Option<i64> = match sqlx::query_scalar(
+                    "SELECT MAX(height) FROM stacks_blocks WHERE type = 'burn_block' AND state = 'hard'",
+                )
+                .fetch_one(&self.storage.pg_pool)
+                .await
+                {
+                    Ok(h) => h,
+                    Err(e) => {
+                        tracing::error!("Orchestrator processed height query failed: {}", e);
+                        None
+                    }
+                };
+
+                let processed_height = processed_height.unwrap_or(0) as u64;
+
+                let _ = n
+                    .report_health_nostr(
+                        "CRITICAL_DRIFT",
+                        processed_height,
+                        &self.state.get_state_root(),
+                        Some(drift),
+                    )
+                    .await;
             }
 
             // In a full implementation, we might trigger a DB vacuum or re-connection here.
