@@ -40,9 +40,6 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Running database migrations...");
     storage.run_migrations().await?;
 
-    // Initialize Wallet (for Kwil and other signing operations)
-    let wallet = Arc::new(Wallet::new()?);
-
     // Initialize State Tracker
     let state_tracker = Arc::new(NexusState::new());
 
@@ -54,13 +51,14 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Kwil Adapter [CON-330]
     let kwil = if let (Some(url), Some(db_id)) = (&config.kwil_provider_url, &config.kwil_db_id) {
+        let wallet = Arc::new(Wallet::new()?);
         Some(Arc::new(KwilAdapter::new(
             storage.clone(),
             KwilConfig {
                 provider_url: url.clone(),
                 db_id: db_id.clone(),
             },
-            wallet.clone(),
+            wallet,
         )))
     } else {
         tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
