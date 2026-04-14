@@ -53,17 +53,15 @@ async fn main() -> anyhow::Result<()> {
     ));
 
     // Initialize Kwil Adapter [CON-330]
-    let kwil = if let (Some(provider_url), Some(db_id)) =
-        (&config.kwil_provider_url, &config.kwil_db_id)
-    {
+    let kwil = if let (Some(provider_url), Some(db_id), Some(private_key_hex)) = (
+        &config.kwil_provider_url,
+        &config.kwil_db_id,
+        &config.kwil_private_key_hex,
+    ) {
         use anyhow::Context;
 
-        let private_key_hex = config.kwil_private_key_hex.as_deref().with_context(|| {
-            "Kwil persistence requires KWIL_PRIVATE_KEY_HEX when KWIL_PROVIDER_URL and KWIL_DB_ID are set"
-        })?;
         let wallet = Arc::new(
-            Wallet::from_private_key_hex(private_key_hex)
-                .context("Invalid KWIL_PRIVATE_KEY_HEX")?,
+            Wallet::from_private_key_hex(private_key_hex).context("Invalid KWIL_PRIVATE_KEY_HEX")?,
         );
 
         Some(Arc::new(KwilAdapter::new(

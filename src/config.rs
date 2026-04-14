@@ -204,6 +204,12 @@ impl Config {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
+        if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
+            if kwil_provider_url.is_none() || kwil_db_id.is_none() || kwil_private_key_hex.is_none() {
+                bail!("Kwil persistence requires KWIL_PROVIDER_URL, KWIL_DB_ID, and KWIL_PRIVATE_KEY_HEX to all be set");
+            }
+        }
+
         Ok(Self {
             nostr_secret_key,
             nostr_relays,
