@@ -11,7 +11,7 @@ use crate::api::dlc::create_dlc_bond_handler;
 
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{header, StatusCode},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -532,12 +532,18 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
 }
 
 async fn prometheus_metrics() -> impl IntoResponse {
+    init_prometheus_metrics();
     let encoder = TextEncoder::new();
     let metric_families = prometheus::gather();
     let mut buffer = vec![];
-    encoder.encode(&metric_families, &mut buffer).unwrap();
 
-    String::from_utf8(buffer).unwrap()
+    match encoder.encode(&metric_families, &mut buffer) {
+        Ok(()) => ([(header::CONTENT_TYPE, encoder.format_type())], buffer).into_response(),
+        Err(err) => {
+            tracing::warn!(error = %err, "Prometheus metrics encoding failed");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
 }
 
 async fn execute_tx(
