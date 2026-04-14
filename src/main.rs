@@ -172,7 +172,7 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 interval.tick().await;
                 let max_height: Option<i64> = match sqlx::query_scalar(
-                    "SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'",
+                    "SELECT MAX(height) FROM stacks_blocks WHERE type = 'burn_block' AND state = 'hard'",
                 )
                 .fetch_one(&health_storage.pg_pool)
                 .await

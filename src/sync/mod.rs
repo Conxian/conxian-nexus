@@ -190,10 +190,10 @@ impl NexusSync {
     }
 
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
-        tracing::info!("Processing burn block: {}", data.hash);
+        tracing::info!("Processing hard-finality tip: {}", data.hash);
 
-        // Invariant: `BurnBlockData.height` is expressed in the same height scale as
-        // `stacks_blocks.height` for microblocks.
+        // `BurnBlockData.height` must be expressed in the same height domain as
+        // `stacks_blocks.height` for microblocks (Stacks chain height).
         sqlx::query(
             "UPDATE stacks_blocks
              SET state = 'hard'
@@ -215,10 +215,10 @@ impl NexusSync {
         let info_url = format!("{}/v2/info", rpc_url);
         let info: serde_json::Value = http_client.get(info_url).send().await?.json().await?;
 
-        let burn_block_height = info["burn_block_height"].as_u64().unwrap_or(0);
-        let burn_block_hash = info["burn_block_hash"].as_str().unwrap_or("");
+        let stacks_tip_height = info["stacks_tip_height"].as_u64().unwrap_or(0);
+        let stacks_tip_hash = info["stacks_tip"].as_str().unwrap_or("");
 
-        if burn_block_hash.is_empty() || burn_block_height == 0 {
+        if stacks_tip_hash.is_empty() || stacks_tip_height == 0 {
             return Ok(());
         }
 
@@ -227,8 +227,8 @@ impl NexusSync {
              VALUES ($1, $2, 'burn_block', 'hard', $3)
              ON CONFLICT (hash) DO NOTHING",
         )
-        .bind(burn_block_hash)
-        .bind(burn_block_height as i64)
+        .bind(stacks_tip_hash)
+        .bind(stacks_tip_height as i64)
         .bind(Utc::now())
         .execute(&storage.pg_pool)
         .await?
@@ -237,14 +237,14 @@ impl NexusSync {
 
         if inserted {
             tracing::info!(
-                "Found new burn block tip: height={}, hash={}",
-                burn_block_height,
-                burn_block_hash
+                "Found new hard-finality tip: height={}, hash={}",
+                stacks_tip_height,
+                stacks_tip_hash
             );
 
             tx.send(StacksEvent::BurnBlock(BurnBlockData {
-                hash: burn_block_hash.to_string(),
-                height: burn_block_height,
+                hash: stacks_tip_hash.to_string(),
+                height: stacks_tip_height,
                 timestamp: Utc::now(),
             }))
             .await?;
