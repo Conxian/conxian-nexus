@@ -4,9 +4,9 @@
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
 use lib_conxian_core::Wallet;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use reqwest::Client;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilBlockCommitment {
@@ -36,10 +36,7 @@ impl KwilConfig {
             std::env::var("KWIL_PROVIDER_URL").context("Missing env var: KWIL_PROVIDER_URL")?;
         let db_id = std::env::var("KWIL_DB_ID").context("Missing env var: KWIL_DB_ID")?;
 
-        Ok(Self {
-            provider_url,
-            db_id,
-        })
+        Ok(Self { provider_url, db_id })
     }
 }
 
@@ -54,6 +51,7 @@ struct KwilExecuteRequest {
     pub db_id: String,
     pub action: String,
     pub params: serde_json::Value,
+    pub payload: String,
     pub signature: String,
 }
 
@@ -83,6 +81,58 @@ impl KwilAdapter {
         }
     }
 
+    async fn execute_action(
+        &self,
+        action: &'static str,
+        params: serde_json::Value,
+        payload: String,
+        signature: String,
+    ) -> anyhow::Result<KwilReceipt> {
+        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
+
+        let request = KwilExecuteRequest {
+            db_id: self.db_id.clone(),
+            action: action.to_string(),
+            params,
+            payload,
+            signature: signature.clone(),
+        };
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send request to Kwil")?;
+
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .context("Failed to read Kwil response body")?;
+
+        if !status.is_success() {
+            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
+        }
+
+        let result: KwilExecuteResponse =
+            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
+
+        if let Some(err) = result.error {
+            return Err(anyhow!("Kwil execution error: {}", err));
+        }
+
+        let tx_hash = result
+            .tx_hash
+            .ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
+
+        Ok(KwilReceipt {
+            tx_hash,
+            payload_signature: signature,
+        })
+    }
+
     /// Pilot: Persist block to Kwil with cryptographic signature.
     pub async fn persist_block(
         &self,
@@ -97,43 +147,19 @@ impl KwilAdapter {
         let payload = canonical_block_payload(&commitment);
         let signature = self.wallet.sign(&payload);
 
-        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
-
         let params = serde_json::json!({
             "hash": commitment.hash,
             "height": commitment.height,
             "type": commitment.block_type,
             "state": commitment.state,
-            "created_at": chrono::Utc::now().to_rfc3339(),
         });
 
-        let response = self.client
-            .post(&url)
-            .json(&KwilExecuteRequest {
-                db_id: self.db_id.clone(),
-                action: "insert_block".to_string(),
-                params,
-                signature: signature.clone(),
-            })
-            .send()
-            .await
-            .context("Failed to send request to Kwil")?;
+        let receipt = self
+            .execute_action("insert_block", params, payload, signature)
+            .await?;
 
-        let result: KwilExecuteResponse = response.json().await
-            .context("Failed to parse Kwil response")?;
-
-        if let Some(err) = result.error {
-            return Err(anyhow!("Kwil execution error: {}", err));
-        }
-
-        let tx_hash = result.tx_hash.ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
-
-        tracing::info!("Block committed to Kwil. Tx: {}", tx_hash);
-
-        Ok(KwilReceipt {
-            tx_hash,
-            payload_signature: signature,
-        })
+        tracing::info!("Block committed to Kwil. Tx: {}", receipt.tx_hash);
+        Ok(receipt)
     }
 
     /// Pilot: Persist state root to Kwil with cryptographic signature.
@@ -149,41 +175,17 @@ impl KwilAdapter {
         let payload = canonical_state_root_payload(&commitment);
         let signature = self.wallet.sign(&payload);
 
-        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
-
         let params = serde_json::json!({
             "block_height": commitment.block_height,
             "state_root": commitment.state_root,
-            "created_at": chrono::Utc::now().to_rfc3339(),
         });
 
-        let response = self.client
-            .post(&url)
-            .json(&KwilExecuteRequest {
-                db_id: self.db_id.clone(),
-                action: "upsert_state_root".to_string(),
-                params,
-                signature: signature.clone(),
-            })
-            .send()
-            .await
-            .context("Failed to send request to Kwil")?;
+        let receipt = self
+            .execute_action("upsert_state_root", params, payload, signature)
+            .await?;
 
-        let result: KwilExecuteResponse = response.json().await
-            .context("Failed to parse Kwil response")?;
-
-        if let Some(err) = result.error {
-            return Err(anyhow!("Kwil execution error: {}", err));
-        }
-
-        let tx_hash = result.tx_hash.ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
-
-        tracing::info!("State root committed to Kwil. Tx: {}", tx_hash);
-
-        Ok(KwilReceipt {
-            tx_hash,
-            payload_signature: signature,
-        })
+        tracing::info!("State root committed to Kwil. Tx: {}", receipt.tx_hash);
+        Ok(receipt)
     }
 }
 

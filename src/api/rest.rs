@@ -13,30 +13,45 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
+use prometheus::{
+    register_int_counter, register_int_gauge, Encoder, IntCounter, IntGauge, TextEncoder,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::time::Duration;
 use crate::api::identity::resolve_identity_handler;
 use crate::api::dlc::create_dlc_bond_handler;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntCounter =
-        IntCounter::new("nexus_total_transactions", "Total transactions processed").unwrap();
+    pub static ref TOTAL_TRANSACTIONS: IntCounter = register_int_counter!(
+        "nexus_total_transactions",
+        "Total number of transactions processed"
+    )
+    .unwrap();
     pub static ref TOTAL_BLOCKS: IntCounter =
-        IntCounter::new("nexus_total_blocks", "Total blocks processed").unwrap();
+        register_int_counter!("nexus_total_blocks", "Total number of blocks processed").unwrap();
     pub static ref SYNC_DRIFT: IntGauge =
-        IntGauge::new("nexus_sync_drift", "Block height drift from Stacks L1").unwrap();
+        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
     pub static ref SAFETY_MODE: IntGauge =
-        IntGauge::new("nexus_safety_mode", "Safety Mode active (1 = yes, 0 = no)").unwrap();
+        register_int_gauge!(
+            "nexus_safety_mode",
+            "Safety mode status (1 = active, 0 = inactive)"
+        )
+        .unwrap();
+
+    static ref LAST_REDIS_TOTAL_TRANSACTIONS: AtomicU64 = AtomicU64::new(0);
+    static ref LAST_REDIS_TOTAL_BLOCKS: AtomicU64 = AtomicU64::new(0);
 }
 
 pub fn init_prometheus_metrics() {
-    prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone())).ok();
-    prometheus::register(Box::new(TOTAL_BLOCKS.clone())).ok();
-    prometheus::register(Box::new(SYNC_DRIFT.clone())).ok();
-    prometheus::register(Box::new(SAFETY_MODE.clone())).ok();
+    lazy_static::initialize(&TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&TOTAL_BLOCKS);
+    lazy_static::initialize(&SYNC_DRIFT);
+    lazy_static::initialize(&SAFETY_MODE);
+    lazy_static::initialize(&LAST_REDIS_TOTAL_TRANSACTIONS);
+    lazy_static::initialize(&LAST_REDIS_TOTAL_BLOCKS);
 }
 
 #[derive(Clone)]
@@ -220,13 +235,14 @@ async fn get_mmr_proof(
     State(state): State<AppState>,
     Query(params): Query<MMRProofParams>,
 ) -> Result<Json<crate::state::MMRProof>, StatusCode> {
-    let index = match (params.index, params.tx_id) {
-        (Some(i), _) => Some(i),
-        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id).map(|i| i as u64),
+    let leaf_index = match (params.index, params.tx_id) {
+        (Some(i), _) => usize::try_from(i).map_err(|_| StatusCode::BAD_REQUEST)?,
+        (None, Some(tx_id)) => state
+            .nexus_state
+            .get_leaf_index(&tx_id)
+            .ok_or(StatusCode::NOT_FOUND)?,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
-
-    let leaf_index = index.ok_or(StatusCode::NOT_FOUND)?;
 
     let leaf = state
         .nexus_state
@@ -246,7 +262,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -458,8 +474,23 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     // Update Prometheus metrics
-    TOTAL_TRANSACTIONS.inc_by(tx_count as u64);
-    TOTAL_BLOCKS.inc_by(block_count as u64);
+    let tx_total = tx_count as u64;
+    let prev_tx_total = LAST_REDIS_TOTAL_TRANSACTIONS.swap(tx_total, Ordering::Relaxed);
+    if tx_total >= prev_tx_total {
+        TOTAL_TRANSACTIONS.inc_by(tx_total - prev_tx_total);
+    } else {
+        TOTAL_TRANSACTIONS.reset();
+        TOTAL_TRANSACTIONS.inc_by(tx_total);
+    }
+
+    let block_total = block_count as u64;
+    let prev_block_total = LAST_REDIS_TOTAL_BLOCKS.swap(block_total, Ordering::Relaxed);
+    if block_total >= prev_block_total {
+        TOTAL_BLOCKS.inc_by(block_total - prev_block_total);
+    } else {
+        TOTAL_BLOCKS.reset();
+        TOTAL_BLOCKS.inc_by(block_total);
+    }
     SYNC_DRIFT.set(drift as i64);
     SAFETY_MODE.set(if safety_mode_active { 1 } else { 0 });
 
