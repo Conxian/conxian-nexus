@@ -1,6 +1,8 @@
 //! [CON-63] OData/ERP Translation Layer for Conxian Gateway.
 //! Bridges SAP/Oracle OData payloads to x402 mandates.
 
+use axum::routing::post;
+use axum::Router;
 use crate::api::rest::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,10 @@ pub struct ErpSyncResponse {
 }
 
 /// [NEXUS-ERP-01] OData v4 compatible parser for SAP/Oracle payloads.
+pub fn erp_routes() -> Router<AppState> {
+    Router::new().route("/sync", post(erp_sync_handler))
+}
+
 pub async fn erp_sync_handler(
     State(_state): State<AppState>,
     Json(payload): Json<ErpSyncRequest>,

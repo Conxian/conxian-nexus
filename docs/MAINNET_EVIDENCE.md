@@ -27,3 +27,23 @@ This document serves as the canonical evidence pack for the Nexus repository rea
 - **Finding**: Microblock reorg detection and MMR persistence are fully implemented.
 - **Evidence**: `NexusSync` handles automated rollback to burn-block tip; MMR peaks and nodes are persisted in PostgreSQL.
 - **Status**: ✅ **VERIFIED**
+
+## 6. Sovereign Sharding Persistence [CON-69]
+- **Finding**: Implemented decentralized RELATIONAL state persistence via Tableland.
+- **Evidence**: `src/storage/tableland.rs` implements `TablelandAdapter` with REST-based state commitment to decentralized tables.
+- **Status**: ✅ **VERIFIED**
+
+## 7. Decentralized Telemetry PoC [CON-473]
+- **Finding**: Implemented signed telemetry bridge via Nostr protocol.
+- **Evidence**: `src/api/billing/nostr.rs` implements `NostrTelemetry` to publish signed events to relays, reducing reliance on centralized ingest.
+- **Status**: ✅ **VERIFIED**
+
+## 8. Multi-Protocol Gateway & ERP Integration [CON-63, CON-70]
+- **Finding**: Implemented modular routing for ERP, ZKML, and Settlement modules.
+- **Evidence**: `src/api/rest.rs` now nests dedicated routers for `/v1/erp`, `/v1/zkml`, and `/v1/settlement`, improving separation of concerns.
+- **Status**: ✅ **VERIFIED**
+
+## 9. Automated Branch Hygiene [CON-475]
+- **Finding**: Standardized portfolio-wide merged branch cleanup.
+- **Evidence**: Executed `git branch -d` for all merged local branches and pruned remote tracking branches.
+- **Status**: ✅ **VERIFIED**

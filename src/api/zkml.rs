@@ -2,6 +2,8 @@
 //! Full implementation of ZKML verification for the compliance module.
 //! Requirement: Zero Secret Egress (ZSE) compliance.
 
+use axum::routing::post;
+use axum::Router;
 use crate::api::rest::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,10 @@ pub struct ZkmlVerifyResponse {
 }
 
 /// [NEXUS-ZK-01] Zero-knowledge machine learning verification.
+pub fn zkml_routes() -> Router<AppState> {
+    Router::new().route("/verify", post(verify_zkml_handler))
+}
+
 pub async fn verify_zkml_handler(
     State(_state): State<AppState>,
     Json(payload): Json<ZkmlVerifyRequest>,
