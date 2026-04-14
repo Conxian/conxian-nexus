@@ -12,7 +12,7 @@ fn is_hex(s: &str) -> bool {
 
 fn make_test_cfg() -> KwilConfig {
     KwilConfig {
-        provider_url: "http://127.0.0.1:0".to_string(),
+        provider_url: "http://127.0.0.1:0".to_string(), // Invalid port to trigger error or we can use a mock
         db_id: "nexus_pilot".to_string(),
     }
 }
@@ -42,11 +42,14 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
     assert!(is_hex(&signature));
     assert_eq!(signature.len(), 128);
 
+    // Since we don't have a live Kwil node, we expect a connection error
     let err = adapter
         .persist_block(commitment)
         .await
-        .expect_err("expected fail-closed Kwil persistence");
-    assert!(err.to_string().to_ascii_lowercase().contains("not implemented"));
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send request") || err_msg.contains("kwil execution error") || err_msg.contains("connect"));
 
     Ok(())
 }
@@ -67,11 +70,14 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     assert!(is_hex(&signature));
     assert_eq!(signature.len(), 128);
 
+    // Since we don't have a live Kwil node, we expect a connection error
     let err = adapter
         .persist_state_root(commitment)
         .await
-        .expect_err("expected fail-closed Kwil persistence");
-    assert!(err.to_string().to_ascii_lowercase().contains("not implemented"));
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send request") || err_msg.contains("kwil execution error") || err_msg.contains("connect"));
 
     Ok(())
 }

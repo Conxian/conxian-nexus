@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Conxian Nexus (Glass Node) API
   description: High-performance middleware for Stacks L1 state synchronization and multi-protocol support.
-  version: 0.1.0
+  version: 0.4.1
 servers:
   - url: http://localhost:3000
     description: Local development server

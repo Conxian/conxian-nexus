@@ -8,9 +8,11 @@ use conxian_nexus::oracle::OracleService;
 use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
+use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
+use lib_conxian_core::Wallet;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
@@ -49,6 +51,24 @@ async fn main() -> anyhow::Result<()> {
         storage.clone(),
         config.tableland_base_url.clone(),
     ));
+
+    // Initialize Kwil Adapter [CON-330]
+    let kwil = if let (Some(provider_url), Some(db_id)) =
+        (&config.kwil_provider_url, &config.kwil_db_id)
+    {
+        let wallet = Arc::new(Wallet::new()?);
+        Some(Arc::new(KwilAdapter::new(
+            storage.clone(),
+            KwilConfig {
+                provider_url: provider_url.clone(),
+                db_id: db_id.clone(),
+            },
+            wallet,
+        )))
+    } else {
+        tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
+        None
+    };
 
     // Initialize Nostr Telemetry [CON-473]
     let nostr = if let Some(sk) = &config.nostr_secret_key {
@@ -89,6 +109,7 @@ async fn main() -> anyhow::Result<()> {
         storage.clone(),
         state_tracker.clone(),
         tableland.clone(),
+        kwil.clone(),
         config.stacks_node_rpc_url.clone(),
     ));
     let safety_service = Arc::new(NexusSafety::new(
@@ -220,6 +241,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_executor = executor.clone();
     let rest_oracle = oracle_service.clone();
     let rest_tableland = tableland.clone();
+    let rest_kwil = kwil.clone();
     let rest_nostr = nostr.clone();
     let rest_port = config.rest_port;
     let experimental_apis_enabled = config.experimental_apis_enabled;
@@ -230,6 +252,7 @@ async fn main() -> anyhow::Result<()> {
             rest_executor,
             rest_oracle,
             rest_tableland,
+            rest_kwil,
             rest_nostr,
             rest_port,
             experimental_apis_enabled,

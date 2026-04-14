@@ -27,6 +27,8 @@ pub struct Config {
     pub nostr_secret_key: Option<String>,
     pub nostr_relays: Vec<String>,
     pub tableland_base_url: String,
+    pub kwil_provider_url: Option<String>,
+    pub kwil_db_id: Option<String>,
     pub database_url: String,
     pub redis_url: String,
     pub rest_port: u16,
@@ -53,6 +55,8 @@ impl Config {
             nostr_secret_key: None,
             nostr_relays: vec![],
             tableland_base_url: "https://validator.tableland.xyz".to_string(),
+            kwil_provider_url: None,
+            kwil_db_id: None,
             oracle_enabled: false,
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
@@ -191,11 +195,15 @@ impl Config {
         let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
 
         let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
+        let kwil_provider_url = env::var("KWIL_PROVIDER_URL").ok().filter(|s| !s.is_empty());
+        let kwil_db_id = env::var("KWIL_DB_ID").ok().filter(|s| !s.is_empty());
 
         Ok(Self {
             nostr_secret_key,
             nostr_relays,
             tableland_base_url,
+            kwil_provider_url,
+            kwil_db_id,
             database_url,
             redis_url,
             rest_port: env::var("REST_PORT")

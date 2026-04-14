@@ -33,7 +33,7 @@ async fn test_external_settlement_trigger_unauthorized() {
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
     let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
 
-    let app = app_router(storage, nexus_state, executor, None, tableland, None, true);
+    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
 
     let response = app
         .oneshot(
@@ -85,7 +85,7 @@ async fn test_external_settlement_trigger_success() {
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
     let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
 
-    let app = app_router(storage, nexus_state, executor, None, tableland, None, true);
+    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
 
     let response = app
         .oneshot(

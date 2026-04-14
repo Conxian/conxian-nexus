@@ -33,22 +33,17 @@ This document serves as the canonical evidence pack for the Nexus repository rea
 - **Evidence**: `src/storage/tableland.rs` implements `TablelandAdapter` with REST-based state commitment to decentralized tables.
 - **Status**: ✅ **VERIFIED**
 
-## 7. Decentralized Telemetry & Health [CON-473][NEXUS-04]
-- **Finding**: Implemented signed telemetry bridge and autonomous health reporting via Nostr.
-- **Evidence**: `src/api/billing/nostr.rs` implements `NostrTelemetry` to publish signed events and health reports (`Kind 26002`) to relays.
+## 7. Decentralized Telemetry PoC [CON-473]
+- **Finding**: Implemented signed telemetry bridge via Nostr protocol.
+- **Evidence**: `src/api/billing/nostr.rs` implements `NostrTelemetry` to publish signed events to relays, reducing reliance on centralized ingest.
 - **Status**: ✅ **VERIFIED**
 
 ## 8. Multi-Protocol Gateway & ERP Integration [CON-63, CON-70]
 - **Finding**: Implemented modular routing for ERP, ZKML, and Settlement modules.
-- **Evidence**: `src/api/rest.rs` now nests dedicated routers for `/v1/erp`, `/v1/zkml`, and `/v1/settlement`.
+- **Evidence**: `src/api/rest.rs` now nests dedicated routers for `/v1/erp`, `/v1/zkml`, and `/v1/settlement`, improving separation of concerns.
 - **Status**: ✅ **VERIFIED**
 
-## 9. Real-time Analytics [NEXUS-ANALYTICS-01]
-- **Finding**: Deep on-chain insight via Analytics module.
-- **Evidence**: `src/api/analytics.rs` provides daily transaction volume and active sender metrics inspired by Glassnode.
-- **Status**: ✅ **VERIFIED**
-
-## 10. Real-time Sync Polling [NEXUS-02]
-- **Finding**: Nexus stays in sync with Stacks mainnet tip via Hiro RPC.
-- **Evidence**: `src/sync/mod.rs` implements `poll_stacks_node` to monitor and ingest new blocks.
+## 9. Automated Branch Hygiene [CON-475]
+- **Finding**: Standardized portfolio-wide merged branch cleanup.
+- **Evidence**: Executed `git branch -d` for all merged local branches and pruned remote tracking branches.
 - **Status**: ✅ **VERIFIED**

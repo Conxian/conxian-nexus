@@ -4,6 +4,7 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::Storage;
+use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::api::billing::nostr::NostrTelemetry;
 use crate::api::identity::resolve_identity_handler;
@@ -98,6 +99,7 @@ pub struct AppState {
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
     pub tableland: Arc<TablelandAdapter>,
+    pub kwil: Option<Arc<KwilAdapter>>,
     pub nostr: Option<Arc<NostrTelemetry>>,
     pub gateway_url: Option<reqwest::Url>,
     pub http_client: reqwest::Client,
@@ -170,6 +172,7 @@ pub fn app_router(
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
     tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
     nostr: Option<Arc<NostrTelemetry>>,
     experimental_apis_enabled: bool,
 ) -> Router {
@@ -209,6 +212,7 @@ pub fn app_router(
         executor,
         oracle,
         tableland,
+        kwil,
         nostr,
         gateway_url,
         http_client,
@@ -249,6 +253,7 @@ pub async fn start_rest_server(
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
     tableland: Arc<TablelandAdapter>,
+    kwil: Option<Arc<KwilAdapter>>,
     nostr: Option<Arc<NostrTelemetry>>,
     port: u16,
     experimental_apis_enabled: bool,
@@ -259,6 +264,7 @@ pub async fn start_rest_server(
         executor,
         oracle,
         tableland,
+        kwil,
         nostr,
         experimental_apis_enabled,
     );

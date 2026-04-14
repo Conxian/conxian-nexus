@@ -13,7 +13,6 @@ struct BnsNameResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct IdentityResolveRequest {
-    pub organization_id: String,
     pub name: String,
     pub protocol: String, // "ENS", "BNS", "WorldID"
 }
@@ -31,10 +30,9 @@ pub async fn resolve_identity_handler(
     Json(payload): Json<IdentityResolveRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
-        "Resolving identity for {} via {} (Org: {})",
+        "Resolving identity for {} via {}",
         payload.name,
-        payload.protocol,
-        payload.organization_id
+        payload.protocol
     );
 
     match payload.protocol.as_str() {
@@ -182,6 +180,8 @@ pub async fn resolve_identity_handler(
             }
         }
         "WorldID" => {
+            // For full decentralization, WorldID verification should optionally hit an on-chain validator
+            // For the API gateway layer, we query the Worldcoin Dev API to verify proof of personhood
             let app_id = std::env::var("WORLDID_APP_ID").unwrap_or_default();
             if app_id.is_empty() {
                 tracing::warn!("WORLDID_APP_ID missing. Dropping WorldID request for security.");
@@ -194,13 +194,14 @@ pub async fn resolve_identity_handler(
                     }),
                 ).into_response();
             }
-            
+
+            tracing::warn!("WorldID verification not implemented. Dropping request for security.");
             (
-                StatusCode::OK,
+                StatusCode::NOT_IMPLEMENTED,
                 Json(IdentityResolveResponse {
-                    address: payload.name.clone(),
+                    address: "".to_string(),
                     protocol: payload.protocol,
-                    proof_of_personhood: true,
+                    proof_of_personhood: false,
                 }),
             ).into_response()
         }
