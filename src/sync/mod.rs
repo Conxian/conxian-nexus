@@ -152,11 +152,11 @@ impl NexusSync {
         }
 
         let mut tx = self.storage.pg_pool.begin().await?;
-        sqlx::query("INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES (, , 'microblock', 'soft', ) ON CONFLICT (hash) DO NOTHING")
+        sqlx::query("INSERT INTO stacks_blocks (hash, height, type, state, created_at) VALUES ($1, $2, 'microblock', 'soft', $3) ON CONFLICT (hash) DO NOTHING")
             .bind(&data.hash).bind(data.height as i64).bind(data.timestamp).execute(&mut *tx).await?;
 
         for tx_data in &data.txs {
-            sqlx::query("INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES (, , , , ) ON CONFLICT (tx_id) DO NOTHING")
+            sqlx::query("INSERT INTO stacks_transactions (tx_id, block_hash, sender, payload, created_at) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tx_id) DO NOTHING")
                 .bind(&tx_data.tx_id).bind(&data.hash).bind(&tx_data.sender).bind(&tx_data.payload).bind(data.timestamp).execute(&mut *tx).await?;
         }
         tx.commit().await?;
@@ -196,16 +196,8 @@ impl NexusSync {
 
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {}", data.hash);
-        sqlx::query("UPDATE stacks_blocks SET state = 'hard' WHERE height <=  AND state = 'soft'")
+        sqlx::query("UPDATE stacks_blocks SET state = 'hard' WHERE height <= $1 AND state = 'soft'")
             .bind(data.height as i64).execute(&self.storage.pg_pool).await?;
-
-        // Finalize in Kwil if enabled
-        if let Some(kwil) = &self.kwil {
-            // Note: In a production KwilAdapter, we would add an action for multi-row updates
-            // For the pilot, we assume block state management is handled.
-            tracing::info!("Pilot: Burn block {} processed in Kwil context", data.hash);
-        }
-
         Ok(())
     }
 
@@ -224,7 +216,7 @@ impl NexusSync {
     async fn handle_microblock_reorg(&self, data: &MicroblockData) -> anyhow::Result<()> {
         tracing::info!("Rolling back to last valid burn block height...");
         // 1. Mark orphaned blocks
-        sqlx::query("UPDATE stacks_blocks SET state = 'orphaned' WHERE height >=  AND state = 'soft'")
+        sqlx::query("UPDATE stacks_blocks SET state = 'orphaned' WHERE height >= $1 AND state = 'soft'")
             .bind(data.height as i64)
             .execute(&self.storage.pg_pool).await?;
 
@@ -235,7 +227,7 @@ impl NexusSync {
 
     async fn persist_mmr_state(&self, height: u64, nodes: &[(u64, [u8; 32])]) -> anyhow::Result<()> {
         for (pos, hash) in nodes {
-            sqlx::query("INSERT INTO mmr_nodes (pos, hash, block_height) VALUES (, , ) ON CONFLICT (pos) DO UPDATE SET hash = , block_height = ")
+            sqlx::query("INSERT INTO mmr_nodes (pos, hash, block_height) VALUES ($1, $2, $3) ON CONFLICT (pos) DO UPDATE SET hash = $2, block_height = $3")
                 .bind(*pos as i64)
                 .bind(hex::encode(hash))
                 .bind(height as i64)
