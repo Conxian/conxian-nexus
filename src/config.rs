@@ -22,7 +22,7 @@ pub(crate) fn parse_flag(value: &str) -> bool {
     )
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     pub nostr_secret_key: Option<String>,
     pub nostr_relays: Vec<String>,
@@ -41,6 +41,36 @@ pub struct Config {
     pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field(
+                "nostr_secret_key",
+                &self.nostr_secret_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field("nostr_relays", &self.nostr_relays)
+            .field("tableland_base_url", &self.tableland_base_url)
+            .field("kwil_provider_url", &self.kwil_provider_url)
+            .field("kwil_db_id", &self.kwil_db_id)
+            .field(
+                "kwil_private_key_hex",
+                &self.kwil_private_key_hex.as_ref().map(|_| "<redacted>"),
+            )
+            .field("database_url", &"<redacted>")
+            .field("redis_url", &"<redacted>")
+            .field("rest_port", &self.rest_port)
+            .field("grpc_port", &self.grpc_port)
+            .field("stacks_node_rpc_url", &self.stacks_node_rpc_url)
+            .field("gateway_url", &self.gateway_url)
+            .field("experimental_apis_enabled", &self.experimental_apis_enabled)
+            .field("oracle_enabled", &self.oracle_enabled)
+            .field("oracle_stub_ok", &self.oracle_stub_ok)
+            .field("oracle_endpoint_url", &self.oracle_endpoint_url)
+            .field("oracle_contract_principal", &self.oracle_contract_principal)
+            .finish()
+    }
 }
 
 impl Config {
