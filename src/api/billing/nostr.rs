@@ -58,14 +58,27 @@ impl NostrTelemetry {
         status: &str,
         processed_height: u64,
         state_root: &str,
+        drift: Option<u64>,
     ) -> anyhow::Result<EventId> {
-        let content = json!({
-            "status": status,
-            "processed_height": processed_height,
-            "state_root": state_root,
-            "timestamp": Timestamp::now().as_u64(),
-            "kind": "nexus_health_v1"
-        }).to_string();
+        let mut payload = serde_json::Map::from_iter([
+            ("status".to_string(), json!(status)),
+            (
+                "processed_height".to_string(),
+                json!(processed_height),
+            ),
+            ("state_root".to_string(), json!(state_root)),
+            (
+                "timestamp".to_string(),
+                json!(Timestamp::now().as_u64()),
+            ),
+            ("kind".to_string(), json!("nexus_health_v1")),
+        ]);
+
+        if let Some(drift) = drift {
+            payload.insert("drift".to_string(), json!(drift));
+        }
+
+        let content = serde_json::Value::Object(payload).to_string();
 
         // Using Kind 26002 for health reporting
         let builder = EventBuilder::new(Kind::Custom(26002), content, []);

@@ -188,7 +188,7 @@ async fn main() -> anyhow::Result<()> {
                 let state_root = health_state.get_state_root();
 
                 if let Err(e) = n
-                    .report_health_nostr("ALIVE", max_height, &state_root)
+                    .report_health_nostr("ALIVE", max_height, &state_root, None)
                     .await
                 {
                     tracing::error!("Failed to report health to Nostr: {}", e);
