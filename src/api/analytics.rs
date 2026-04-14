@@ -46,7 +46,6 @@ pub async fn get_analytics_metrics(
     }
 
     let asset = "STX".to_string();
-
     let days = params.days.unwrap_or(7);
     if days < 1 {
         return Err(StatusCode::BAD_REQUEST);
@@ -62,6 +61,7 @@ pub async fn get_analytics_metrics(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(*) as count
                  FROM stacks_transactions
                  WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                 GROUP BY 1 ORDER BY 1 ASC",
                  GROUP BY 1 ORDER BY 1 ASC",
             )
             .bind(days)
@@ -83,6 +83,7 @@ pub async fn get_analytics_metrics(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(DISTINCT sender) as count
                  FROM stacks_transactions
                  WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                 GROUP BY 1 ORDER BY 1 ASC",
                  GROUP BY 1 ORDER BY 1 ASC",
             )
             .bind(days)

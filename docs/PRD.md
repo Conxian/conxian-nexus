@@ -35,7 +35,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.8 B2B License & Billing Enforcement (Sovereign Grace Period)
 - **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
-- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification. **Decentralized (v0.5.0)**: Integrated **Nostr Telemetry Integrated **Nostr Telemetry Bridge** for signed, decentralized usage reporting. Health Bridge** for signed, decentralized reporting (v0.5.0).
+- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification. **Decentralized (v0.5.0)**: Integrated **Nostr Telemetry Bridge** for signed, decentralized usage and health reporting.
 
 ### 2.9 Sovereign Transactional SQL (Pilot)
 - **Requirement**: Evaluate and pilot Kwil and Tableland as sovereign OLTP and commitment layers to replace hosted PostgreSQL for critical state.
