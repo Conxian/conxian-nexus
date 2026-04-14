@@ -23,6 +23,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 const GRACE_PERIOD_DURATION_SECONDS: i64 = 86400; // 24 hours
 const GRACE_PERIOD_EFFICIENCY: f32 = 0.4;
+const MAX_ORGANIZATION_ID_LEN: usize = 128;
 
 #[derive(Debug, Deserialize)]
 pub struct GenerateKeyRequest {
@@ -85,6 +86,11 @@ async fn generate_developer_key(
     State(state): State<AppState>,
     Json(payload): Json<GenerateKeyRequest>,
 ) -> impl IntoResponse {
+    let organization_id = payload.organization_id.trim();
+    if organization_id.is_empty() || organization_id.len() > MAX_ORGANIZATION_ID_LEN {
+        return (StatusCode::BAD_REQUEST, "Invalid organization_id").into_response();
+    }
+
     let (api_key, api_secret) = {
         let mut rng = rand::thread_rng();
         let mut raw_key = [0u8; 32];
@@ -114,7 +120,7 @@ async fn generate_developer_key(
     let redis_key = format!("apikey:{}", api_key);
     let _: redis::RedisResult<()> = redis::cmd("HSET")
         .arg(&redis_key)
-        .arg("org_id").arg(&payload.organization_id)
+        .arg("org_id").arg(organization_id)
         .arg("email").arg(&payload.developer_email)
         .arg("project").arg(&payload.project_name)
         .arg("secret").arg(&api_secret)
