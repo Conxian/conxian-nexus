@@ -7,7 +7,10 @@ use conxian_nexus::oracle::OracleService;
 use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::sync::NexusSync;
+use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
@@ -41,6 +44,23 @@ async fn main() -> anyhow::Result<()> {
     // Initialize Executor
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
+    // Initialize Tableland Adapter [CON-69]
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), config.tableland_base_url.clone()));
+
+    // Initialize Nostr Telemetry [CON-473]
+    let nostr = if let Some(sk) = &config.nostr_secret_key {
+        match NostrTelemetry::new(sk, config.nostr_relays.clone()).await {
+            Ok(n) => Some(Arc::new(n)),
+            Err(e) => {
+                tracing::error!("Failed to initialize Nostr telemetry: {}", e);
+                None
+            }
+        }
+    } else {
+        tracing::info!("Nostr telemetry disabled (NOSTR_SECRET_KEY not set)");
+        None
+    };
+
     // Initialize Oracle Service
     let oracle_service = if config.oracle_enabled {
         use anyhow::Context;
@@ -65,12 +85,20 @@ async fn main() -> anyhow::Result<()> {
     let sync_service = Arc::new(NexusSync::new(
         storage.clone(),
         state_tracker.clone(),
+        tableland.clone(),
         config.stacks_node_rpc_url.clone(),
     ));
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),
         config.stacks_node_rpc_url.clone(),
         config.gateway_url.clone(),
+    ));
+
+    // Initialize Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orchestrator = Arc::new(AutonomousOrchestrator::new(
+        storage.clone(),
+        state_tracker.clone(),
+        nostr.clone(),
     ));
 
     // Load Initial State from DB
@@ -131,11 +159,41 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // [NEXUS-04] Spawn Sovereign Health Reporting (Nostr)
+    let health_nostr = nostr.clone();
+    let health_storage = storage.clone();
+    let health_state = state_tracker.clone();
+    let health_report_handle = tokio::spawn(async move {
+        if let Some(n) = health_nostr {
+            let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
+            loop {
+                interval.tick().await;
+                let max_height: i64 = sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
+                    .fetch_one(&health_storage.pg_pool).await.unwrap_or(0);
+                let state_root = health_state.get_state_root();
+
+                if let Err(e) = n.report_health_nostr("ALIVE", max_height as u64, &state_root).await {
+                    tracing::error!("Failed to report health to Nostr: {}", e);
+                }
+            }
+        }
+    });
+
+    // Spawn Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orch_worker = orchestrator.clone();
+    let orch_handle = tokio::spawn(async move {
+        if let Err(e) = orch_worker.run().await {
+            tracing::error!("Orchestrator failed: {}", e);
+        }
+    });
+
     // Start REST API Server
     let rest_storage = storage.clone();
     let rest_state = state_tracker.clone();
     let rest_executor = executor.clone();
     let rest_oracle = oracle_service.clone();
+    let rest_tableland = tableland.clone();
+    let rest_nostr = nostr.clone();
     let rest_port = config.rest_port;
     let experimental_apis_enabled = config.experimental_apis_enabled;
     let rest_handle = tokio::spawn(async move {
@@ -144,6 +202,8 @@ async fn main() -> anyhow::Result<()> {
             rest_state,
             rest_executor,
             rest_oracle,
+            rest_tableland,
+            rest_nostr,
             rest_port,
             experimental_apis_enabled,
         )
@@ -182,6 +242,8 @@ async fn main() -> anyhow::Result<()> {
         res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
         res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
+        res = health_report_handle => tracing::error!("Health report task exited: {:?}", res),
+        res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
     }

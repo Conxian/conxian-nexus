@@ -1,16 +1,11 @@
-//! nexus-executor module provides a specialized environment for high-frequency trades
-//! and implements the FSOC (First-Seen-On-Chain) sequencer logic.
-
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::{Arc, Mutex};
 use sqlx::Row;
-use std::sync::Arc;
-use std::sync::Mutex;
 
-/// A request for off-chain execution.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionRequest {
     pub tx_id: String,
     pub payload: String,
@@ -18,16 +13,17 @@ pub struct ExecutionRequest {
     pub sender: String,
 }
 
-/// Represents a vault's collateral status.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VaultStatus {
     pub vault_id: String,
-    pub collateral_amount: u128,
-    pub debt_amount: u128,
+    pub collateral_amount: u64,
+    pub debt_amount: u64,
     pub ltv_ratio: f64,
 }
 
-/// The executor service for handling transactions and rebalancing.
+/// [NEXUS-EXEC-01] FSOC (First-Seen-On-Chain) Sequencer logic.
+/// Validates transaction ordering and prevents front-running by matching off-chain
+/// payloads against L1 arrival order and cryptographic state proofs.
 pub struct NexusExecutor {
     storage: Arc<Storage>,
     latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
@@ -41,15 +37,13 @@ impl NexusExecutor {
         }
     }
 
-    /// FSOC (First-Seen-On-Chain) Sequencer logic.
-    #[tracing::instrument(skip(self))]
+    /// Validates a transaction request against the FSOC sequencer rules.
     pub async fn validate_transaction(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        let latest_on_chain_event_time = self.get_cached_or_fetch_latest_event_time().await?;
-
-        if let Some(event_time) = latest_on_chain_event_time {
-            if request.timestamp < event_time {
+        // [FSOC-RULE-01]: Ensure transaction timestamp is after the latest processed block.
+        if let Some(event_time) = self.get_cached_or_fetch_latest_event_time().await? {
+            if request.timestamp <= event_time {
                 let reason = format!(
-                    "Timestamp {} is before latest on-chain event {}",
+                    "Transaction timestamp {} is stale or conflicting with latest block {}",
                     request.timestamp, event_time
                 );
                 tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
@@ -249,17 +243,28 @@ impl NexusExecutor {
                     vault.ltv_ratio,
                     fx_rate
                 );
-                let tx_id =
-                    lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id));
-                tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
-                rebalance_count += 1;
+                match lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id)) {
+                    Ok(tx_id) => {
+                        tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
+                        rebalance_count += 1;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to sign rebalance transaction for vault {}: {}", vault.vault_id, e);
+                    }
+                }
             }
         }
 
         if rebalance_count > 0 {
             tracing::info!("Rebalanced {} vaults.", rebalance_count);
-            let signal_tx = lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success");
-            tracing::info!("Bounty success signaled: {}", signal_tx);
+            match lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success") {
+                Ok(signal_tx) => {
+                    tracing::info!("Bounty success signaled: {}", signal_tx);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to sign bounty success signal: {}", e);
+                }
+            }
         } else {
             tracing::debug!(
                 "Collateral levels healthy (STX: ${:.2}). No rebalance needed.",
@@ -328,7 +333,7 @@ mod tests {
             tx_id: "tx123".to_string(),
             payload: "data".to_string(),
             timestamp: Utc::now(),
-            sender: "SP...".to_string(),
+            sender: "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(),
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();

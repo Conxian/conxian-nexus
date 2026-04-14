@@ -35,22 +35,23 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.8 B2B License & Billing Enforcement (Sovereign Grace Period)
 - **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
-- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification.
+- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification. **Decentralized (v0.5.0)**: Integrated **Nostr Telemetry Integrated **Nostr Telemetry Bridge** for signed, decentralized usage reporting. Health Bridge** for signed, decentralized reporting (v0.5.0).
 
 ### 2.9 Sovereign Transactional SQL (Pilot)
-- **Requirement**: Evaluate and pilot Kwil as a sovereign OLTP layer to replace hosted PostgreSQL.
-- **Implementation**: **New (v0.5.0)**: Implemented `KwilAdapter` for decentralized relational state persistence. Designed pilot schema (`docs/kwil_pilot_schema.sql`) for block and state-root anchoring.
+- **Requirement**: Evaluate and pilot Kwil and Tableland as sovereign OLTP and commitment layers to replace hosted PostgreSQL for critical state.
+- **Implementation**: **New (v0.5.0)**: Implemented `KwilAdapter` and `TablelandAdapter` for decentralized relational state persistence. Designed pilot schema (`docs/kwil_pilot_schema.sql`) for block and state-root anchoring.
 
 ## 3. Technical Stack
 - **Language**: Rust (Tokio, Axum, Tonic)
-- **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub), **Kwil (Sovereign Pilot)**
-- **Cryptography**: Sha256 (Merkle Tree/MMR/HMAC), k256 (ECDSA), BIP-39 (Mnemonic)
-- **Observability**: Prometheus, OpenTelemetry (Tracing), **MEV Audit Logs**
+- **Persistence**: PostgreSQL (SQLx), Redis (caching and pub/sub), **Kwil & Tableland (Sovereign Pilot)**
+- **Decentralized Comms**: **Nostr (Telemetry & Agentic Coordination)**
+- **Cryptography**: Sha256 (Merkle Tree/MMR/HMAC), k256 (ECDSA), BIP-39 (Mnemonic), BIP-340 (Schnorr/Nostr)
+- **Observability**: Prometheus, OpenTelemetry (Tracing), **MEV Audit Logs**, **Nostr Telemetry**
 
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree & MMR (Complete)
-- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**.
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**. **Real-time Polling implemented (v0.5.0)**.
 - **Next Step**: Implement full MMR audit trail visualization.
 
 ### 4.2 Real-time Sync Ingestion
@@ -70,8 +71,8 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Implement confidence interval weights for oracle sources.
 
 ### 4.6 Sovereign Infrastructure Migration (In Progress)
-- **Status**: **Kwil Pilot Implementation Complete (v0.5.0)**.
-- **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL.
+- **Status**: **Kwil and Tableland Pilot Implementations Complete (v0.5.0)**. **Nostr Health Reporting implemented (v0.5.0)**.
+- **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
 ## 5. Mainnet Readiness Evidence Pack (v0.5.0)
 
@@ -92,3 +93,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 5.4 Rollback & Finality (NEXUS-03)
 - **Microblock Reorgs**: NexusSync detects microblock reorgs and performs automated state rollbacks to the last hard-finality (burn block) tip.
 - **MMR Persistence**: Persistent MMR peaks and nodes ensure state roots can be reconstructed from the on-chain audit trail with O(1) performance.
+
+### 5.5 Sovereign Persistence & Telemetry (CON-69, CON-473)
+- **Tableland**: RELATIONAL state commitments are bridged to decentralized Tableland tables.
+- **Nostr**: Signed telemetry reporting removes centralized ingest bottlenecks and enhances agentic sovereignty.

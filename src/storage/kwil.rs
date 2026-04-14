@@ -2,9 +2,9 @@
 //! Bridges application state to Kwil's decentralized relational database.
 
 use crate::storage::Storage;
+use anyhow::anyhow;
 use lib_conxian_core::Wallet;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -66,11 +66,6 @@ impl KwilAdapter {
         }
     }
 
-    fn stub_tx_hash(payload: &str) -> String {
-        let digest = Sha256::digest(payload.as_bytes());
-        format!("kwil_tx_stub_{}", hex::encode(digest))
-    }
-
     /// Pilot: Persist block to Kwil with cryptographic signature.
     pub async fn persist_block(
         &self,
@@ -83,23 +78,15 @@ impl KwilAdapter {
         );
 
         let payload = canonical_block_payload(&commitment);
-        let signature = self.wallet.sign(&payload);
+        let _signature = self.wallet.sign(&payload);
 
-        // [STUB] Implement Kwil gRPC/REST call: insert_block action.
-        // The signature ensures that the action is authenticated by the Nexus identity.
-
-        let tx_hash = Self::stub_tx_hash(&payload);
-        tracing::debug!(
-            tx_hash = %tx_hash,
+        tracing::warn!(
             db_id = %self._db_id,
             provider = %self._provider_url,
-            "Kwil action 'insert_block' broadcasted"
+            "Kwil persistence is not implemented"
         );
 
-        Ok(KwilReceipt {
-            tx_hash,
-            payload_signature: signature,
-        })
+        Err(anyhow!("Kwil persistence is not implemented"))
     }
 
     /// Pilot: Persist state root to Kwil with cryptographic signature.
@@ -113,22 +100,15 @@ impl KwilAdapter {
         );
 
         let payload = canonical_state_root_payload(&commitment);
-        let signature = self.wallet.sign(&payload);
+        let _signature = self.wallet.sign(&payload);
 
-        // [STUB] Implement Kwil gRPC/REST call: upsert_state_root action.
-
-        let tx_hash = Self::stub_tx_hash(&payload);
-        tracing::debug!(
-            tx_hash = %tx_hash,
+        tracing::warn!(
             db_id = %self._db_id,
             provider = %self._provider_url,
-            "Kwil action 'upsert_state_root' broadcasted"
+            "Kwil persistence is not implemented"
         );
 
-        Ok(KwilReceipt {
-            tx_hash,
-            payload_signature: signature,
-        })
+        Err(anyhow!("Kwil persistence is not implemented"))
     }
 }
 

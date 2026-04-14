@@ -1,6 +1,6 @@
-pub mod ppp_tracker;
+pub mod aggregator;
 
-use crate::oracle::ppp_tracker::{OracleStub, PppState};
+use crate::oracle::aggregator::{OracleAggregator, PppState};
 use crate::storage::Storage;
 use serde_json::Value;
 use std::sync::Arc;
@@ -8,14 +8,14 @@ use tokio::time::{self, Duration};
 
 pub struct OracleService {
     pub storage: Arc<Storage>,
-    pub stub: OracleStub,
+    pub aggregator: OracleAggregator,
 }
 
 impl OracleService {
     pub fn new(storage: Arc<Storage>, endpoint_url: String, contract_principal: String) -> Self {
         Self {
             storage,
-            stub: OracleStub::new(endpoint_url, contract_principal),
+            aggregator: OracleAggregator::new(endpoint_url, contract_principal),
         }
     }
 
@@ -25,9 +25,9 @@ impl OracleService {
 
         loop {
             interval.tick().await;
-            match self.stub.fetch_universal_fx().await {
+            match self.aggregator.fetch_universal_fx().await {
                 Ok(state) => {
-                    let tx_id = match self.stub.push_state_to_contract(state.clone()).await {
+                    let tx_id = match self.aggregator.push_state_to_contract(state.clone()).await {
                         Ok(id) => Some(id),
                         Err(e) => {
                             tracing::error!("Failed to push oracle state on-chain: {}", e);
@@ -56,7 +56,7 @@ impl OracleService {
 
         // Fetch latest rates to compare or validate payload data
         let latest_rates = self
-            .stub
+            .aggregator
             .fetch_universal_fx()
             .await
             .map_err(|e| anyhow::anyhow!(e))?;

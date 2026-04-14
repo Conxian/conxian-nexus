@@ -13,7 +13,7 @@ const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
 const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
 
 // CON-394: Remediated contamination. Stubbing is now explicit and restricted.
-const ORACLE_SERVICE_IS_STUBBED: bool = false;
+const ORACLE_SERVICE_IS_STUBBED: bool = false; // Remediated;
 
 pub(crate) fn parse_flag(value: &str) -> bool {
     matches!(
@@ -24,6 +24,9 @@ pub(crate) fn parse_flag(value: &str) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub nostr_secret_key: Option<String>,
+    pub nostr_relays: Vec<String>,
+    pub tableland_base_url: String,
     pub database_url: String,
     pub redis_url: String,
     pub rest_port: u16,
@@ -47,6 +50,9 @@ impl Config {
             stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
             gateway_url: None,
             experimental_apis_enabled: true,
+            nostr_secret_key: None,
+            nostr_relays: vec![],
+            tableland_base_url: "https://validator.tableland.xyz".to_string(),
             oracle_enabled: false,
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
@@ -181,7 +187,15 @@ impl Config {
             }
         }
 
+        let nostr_secret_key = env::var("NOSTR_SECRET_KEY").ok().filter(|s| !s.is_empty());
+        let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
+
+        let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
+
         Ok(Self {
+            nostr_secret_key,
+            nostr_relays,
+            tableland_base_url,
             database_url,
             redis_url,
             rest_port: env::var("REST_PORT")

@@ -4,6 +4,11 @@ use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::Storage;
+use crate::storage::tableland::TablelandAdapter;
+use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::identity::resolve_identity_handler;
+use crate::api::dlc::create_dlc_bond_handler;
+
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -16,6 +21,7 @@ use prometheus::{Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
+use std::time::Duration;
 
 lazy_static! {
     pub static ref TOTAL_TRANSACTIONS: IntGauge = {
@@ -25,12 +31,14 @@ lazy_static! {
         )
         .expect("nexus_total_transactions metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
+        match prometheus::register(Box::new(gauge.clone())) {
+            Ok(()) => {}
+            Err(prometheus::Error::AlreadyReg(_)) => {}
+            Err(e) => tracing::error!(
                 error = %e,
                 "Prometheus metrics registration failed for nexus_total_transactions"
-            );
-        }
+            ),
+        };
 
         gauge
     };
@@ -38,12 +46,14 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_total_blocks", "Total number of blocks processed")
             .expect("nexus_total_blocks metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
+        match prometheus::register(Box::new(gauge.clone())) {
+            Ok(()) => {}
+            Err(prometheus::Error::AlreadyReg(_)) => {}
+            Err(e) => tracing::error!(
                 error = %e,
                 "Prometheus metrics registration failed for nexus_total_blocks"
-            );
-        }
+            ),
+        };
 
         gauge
     };
@@ -51,12 +61,14 @@ lazy_static! {
         let gauge = IntGauge::new("nexus_sync_drift", "Current sync drift in blocks")
             .expect("nexus_sync_drift metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
+        match prometheus::register(Box::new(gauge.clone())) {
+            Ok(()) => {}
+            Err(prometheus::Error::AlreadyReg(_)) => {}
+            Err(e) => tracing::error!(
                 error = %e,
                 "Prometheus metrics registration failed for nexus_sync_drift"
-            );
-        }
+            ),
+        };
 
         gauge
     };
@@ -67,18 +79,20 @@ lazy_static! {
         )
         .expect("nexus_safety_mode metric must be valid");
 
-        if let Err(e) = prometheus::register(Box::new(gauge.clone())) {
-            tracing::error!(
+        match prometheus::register(Box::new(gauge.clone())) {
+            Ok(()) => {}
+            Err(prometheus::Error::AlreadyReg(_)) => {}
+            Err(e) => tracing::error!(
                 error = %e,
                 "Prometheus metrics registration failed for nexus_safety_mode"
-            );
-        }
+            ),
+        };
 
         gauge
     };
 }
 
-fn init_prometheus_metrics() {
+pub fn init_prometheus_metrics() {
     lazy_static::initialize(&TOTAL_TRANSACTIONS);
     lazy_static::initialize(&TOTAL_BLOCKS);
     lazy_static::initialize(&SYNC_DRIFT);
@@ -91,6 +105,10 @@ pub struct AppState {
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
     pub oracle: Option<Arc<OracleService>>,
+    pub tableland: Arc<TablelandAdapter>,
+    pub nostr: Option<Arc<NostrTelemetry>>,
+    pub gateway_url: Option<String>,
+    pub http_client: reqwest::Client,
 }
 
 #[derive(Deserialize)]
@@ -106,8 +124,8 @@ pub struct ProofResponse {
 
 #[derive(Deserialize)]
 pub struct MMRProofParams {
-    pub tx_id: Option<String>,
     pub index: Option<usize>,
+    pub tx_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -119,6 +137,11 @@ pub struct VerifyStateRequest {
 pub struct VerifyStateResponse {
     pub valid: bool,
     pub mmr_root: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VerifyBitvm2StateRootRequest {
+    pub state_root: String,
 }
 
 #[derive(Serialize)]
@@ -151,15 +174,31 @@ pub fn app_router(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    nostr: Option<Arc<NostrTelemetry>>,
     experimental_apis_enabled: bool,
 ) -> Router {
     init_prometheus_metrics();
+
+    let gateway_url = std::env::var("GATEWAY_URL")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .expect("failed to build HTTP client");
 
     let state = AppState {
         storage,
         nexus_state,
         executor,
         oracle,
+        tableland,
+        nostr,
+        gateway_url,
+        http_client,
     };
 
     let mut router = Router::new()
@@ -171,32 +210,23 @@ pub fn app_router(
         .route("/metrics", get(prometheus_metrics))
         .route("/v1/execute", post(execute_tx))
         .route("/v1/services", get(get_services_status))
-        .route("/health", get(health_check));
+        .route("/health", get(health_check))
+        .route("/v1/identity/resolve", post(resolve_identity_handler))
+        .route("/v1/dlc/bond", post(create_dlc_bond_handler))
+        .nest("/v1/billing", crate::api::billing::billing_routes())
+        .nest("/v1/erp", crate::api::erp::erp_routes())
+        .nest("/v1/analytics", crate::api::analytics::analytics_routes())
+        .nest("/v1/zkml", crate::api::zkml::zkml_routes())
+        .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 
     if experimental_apis_enabled {
-        router = router
-            .route("/v1/erp/sync", post(crate::api::erp::erp_sync_handler))
-            .route(
-                "/v1/zkml/verify",
-                post(crate::api::zkml::verify_zkml_handler),
-            )
-            .route(
-                "/v1/identity/resolve",
-                post(crate::api::identity::resolve_identity_handler),
-            )
-            .route(
-                "/v1/dlc/create-bond",
-                post(crate::api::dlc::create_dlc_bond_handler),
-            )
-            .route(
-                "/v1/settlement/trigger",
-                post(crate::api::settlement::settlement_trigger_handler),
-            );
+        router = router.route(
+            "/v1/bitvm2/verify-state-root",
+            post(verify_bitvm2_state_root),
+        );
     }
 
-    router
-        .nest("/v1/billing", crate::api::billing::billing_routes())
-        .with_state(state)
+    router.with_state(state)
 }
 
 pub async fn start_rest_server(
@@ -204,6 +234,8 @@ pub async fn start_rest_server(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     oracle: Option<Arc<OracleService>>,
+    tableland: Arc<TablelandAdapter>,
+    nostr: Option<Arc<NostrTelemetry>>,
     port: u16,
     experimental_apis_enabled: bool,
 ) -> anyhow::Result<()> {
@@ -212,11 +244,14 @@ pub async fn start_rest_server(
         nexus_state,
         executor,
         oracle,
+        tableland,
+        nostr,
         experimental_apis_enabled,
     );
 
-    let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    tracing::info!("REST server listening on {}", listener.local_addr()?);
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    tracing::info!("REST API server listening on {}", addr);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -278,8 +313,8 @@ async fn get_mmr_proof(
             })?;
 
         if let Some(r) = row {
-            let hash_bytes: Vec<u8> = r.get(0);
-            siblings.push((pos, format!("0x{}", hex::encode(hash_bytes))));
+            let hash_str: String = r.get(0);
+            siblings.push((pos, format!("0x{}", hash_str)));
         }
     }
 
@@ -298,6 +333,108 @@ async fn verify_state(
         valid: current_root == payload.state_root,
         mmr_root: state.nexus_state.get_mmr_root(),
     })
+}
+
+fn bitvm2_gateway_error(state_root: &str, error: &'static str) -> serde_json::Value {
+    serde_json::json!({
+        "state_root": state_root,
+        "verified": false,
+        "error": error,
+    })
+}
+
+async fn verify_bitvm2_state_root(
+    State(state): State<AppState>,
+    Json(payload): Json<VerifyBitvm2StateRootRequest>,
+) -> impl IntoResponse {
+    let Some(gateway_url) = state.gateway_url.as_deref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(bitvm2_gateway_error(
+                &payload.state_root,
+                "GATEWAY_URL is not configured",
+            )),
+        )
+            .into_response();
+    };
+
+    let url = format!(
+        "{}/api/v1/bitvm2/verify-state-root",
+        gateway_url.trim_end_matches('/')
+    );
+
+    let resp = match state
+        .http_client
+        .post(url.as_str())
+        .json(&payload)
+        .send()
+        .await
+    {
+        Ok(resp) => resp,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                "BitVM2 verifier gateway request failed"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway request failed",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let upstream_status = resp.status();
+    let status =
+        StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let bytes = match resp.bytes().await {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway read failed"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway read failed",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let body: serde_json::Value = match serde_json::from_slice(&bytes) {
+        Ok(body) => body,
+        Err(err) => {
+            tracing::warn!(
+                error = %err,
+                state_root = %payload.state_root,
+                url = %url,
+                upstream_status = %upstream_status,
+                "BitVM2 verifier gateway returned invalid JSON"
+            );
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(bitvm2_gateway_error(
+                    &payload.state_root,
+                    "bitvm2 verifier gateway returned invalid JSON",
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    (status, Json(body)).into_response()
 }
 
 async fn get_status(State(state): State<AppState>) -> Result<Json<StatusResponse>, StatusCode> {

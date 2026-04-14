@@ -27,7 +27,8 @@ fn make_test_storage() -> anyhow::Result<Arc<Storage>> {
 #[tokio::test]
 async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
     let storage = make_test_storage()?;
-    let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone());
 
     let commitment = KwilBlockCommitment {
         hash: "0xabc123".to_string(),
@@ -36,17 +37,16 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
         state: "soft".to_string(),
     };
 
-    let receipt = adapter.persist_block(commitment).await?;
-    assert!(receipt.tx_hash.starts_with("kwil_tx_stub_"));
+    let payload = canonical_block_payload(&commitment);
+    let signature = wallet.sign(&payload);
+    assert!(is_hex(&signature));
+    assert_eq!(signature.len(), 128);
 
-    let stub_digest = receipt
-        .tx_hash
-        .strip_prefix("kwil_tx_stub_")
-        .expect("stub prefix");
-    assert_eq!(stub_digest.len(), 64);
-    assert!(is_hex(stub_digest));
-    assert!(is_hex(&receipt.payload_signature));
-    assert_eq!(receipt.payload_signature.len(), 128);
+    let err = adapter
+        .persist_block(commitment)
+        .await
+        .expect_err("expected fail-closed Kwil persistence");
+    assert!(err.to_string().to_ascii_lowercase().contains("not implemented"));
 
     Ok(())
 }
@@ -54,24 +54,24 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     let storage = make_test_storage()?;
-    let adapter = KwilAdapter::new(storage, make_test_cfg(), Arc::new(Wallet::new()));
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone());
 
     let commitment = KwilStateRootCommitment {
         block_height: 1000,
         state_root: "0xroot123".to_string(),
     };
 
-    let receipt = adapter.persist_state_root(commitment).await?;
-    assert!(receipt.tx_hash.starts_with("kwil_tx_stub_"));
+    let payload = canonical_state_root_payload(&commitment);
+    let signature = wallet.sign(&payload);
+    assert!(is_hex(&signature));
+    assert_eq!(signature.len(), 128);
 
-    let stub_digest = receipt
-        .tx_hash
-        .strip_prefix("kwil_tx_stub_")
-        .expect("stub prefix");
-    assert_eq!(stub_digest.len(), 64);
-    assert!(is_hex(stub_digest));
-    assert!(is_hex(&receipt.payload_signature));
-    assert_eq!(receipt.payload_signature.len(), 128);
+    let err = adapter
+        .persist_state_root(commitment)
+        .await
+        .expect_err("expected fail-closed Kwil persistence");
+    assert!(err.to_string().to_ascii_lowercase().contains("not implemented"));
 
     Ok(())
 }
