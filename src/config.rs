@@ -197,8 +197,14 @@ impl Config {
         let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
 
         let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
-        let kwil_provider_url = env::var("KWIL_PROVIDER_URL").ok().filter(|s| !s.is_empty());
-        let kwil_db_id = env::var("KWIL_DB_ID").ok().filter(|s| !s.is_empty());
+        let kwil_provider_url = env::var("KWIL_PROVIDER_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let kwil_db_id = env::var("KWIL_DB_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         let kwil_private_key_hex = env::var("KWIL_PRIVATE_KEY_HEX")
             .ok()
             .map(|s| s.trim().to_string())
