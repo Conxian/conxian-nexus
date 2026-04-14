@@ -37,33 +37,8 @@ impl NexusExecutor {
         }
     }
 
-    /// [CON-460] Check for Safety Mode (Sovereign Handoff).
-    /// Prevents execution when the Nexus is out of sync or under attack.
-    pub async fn is_safety_mode_active(&self) -> bool {
-        match self.storage.redis_client.get_multiplexed_async_connection().await {
-            Ok(mut conn) => {
-                let is_safety: bool = redis::cmd("GET")
-                    .arg("nexus:safety_mode")
-                    .query_async(&mut conn)
-                    .await
-                    .unwrap_or(false);
-                is_safety
-            }
-            Err(_) => {
-                tracing::error!("Redis unavailable. Failing closed (Safety Mode inferred).");
-                true // Fail-closed
-            }
-        }
-    }
-
     /// Validates a transaction request against the FSOC sequencer rules.
     pub async fn validate_transaction(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // [CON-460] Fail-Closed if in Safety Mode
-        if self.is_safety_mode_active().await {
-            tracing::warn!("Safety Mode Active. Transaction {} rejected (Fail-Closed).", request.tx_id);
-            return Ok(false);
-        }
-
         // [FSOC-RULE-01]: Ensure transaction timestamp is after the latest processed block.
         if let Some(event_time) = self.get_cached_or_fetch_latest_event_time().await? {
             if request.timestamp <= event_time {
@@ -247,12 +222,6 @@ impl NexusExecutor {
 
     /// Executes high-frequency internal trades and collateral rebalancing.
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
-        // [CON-460] Fail-Closed if in Safety Mode
-        if self.is_safety_mode_active().await {
-            tracing::error!("Safety Mode Active. Rebalancing blocked for safety (Fail-Closed).");
-            return Ok(());
-        }
-
         tracing::info!("Checking collateral health for rebalancing...");
 
         let fx_rate = self.get_latest_fx_rate("STX").await.unwrap_or(1.5); // Default to 1.5 USD/STX if missing

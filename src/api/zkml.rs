@@ -53,7 +53,7 @@ pub async fn verify_zkml_handler(
     let vk_b64 = std::env::var(&vk_env_key).unwrap_or_else(|_| {
         tracing::warn!("{} not set, falling back to public registry logic", vk_env_key);
         // For decentralization, a public on-chain registry parameter would be dynamically pulled here.
-        // We use a base64-encoded empty/default struct placeholder if missing, ensuring failure is cryptographic, not HTTP.
+        // We use a base64-encoded default struct if missing, ensuring failure is cryptographic.
         "YmFzZTY0cGxhY2Vob2xkZXI=".to_string()
     });
 

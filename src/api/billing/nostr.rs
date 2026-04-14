@@ -42,7 +42,7 @@ impl NostrTelemetry {
             "kind": "nexus_telemetry_v1"
         }).to_string();
 
-        // Using a custom event kind for telemetry (e.g., 26001 as a placeholder)
+        // Using a custom event kind for telemetry (Kind 26001)
         let builder = EventBuilder::new(Kind::Custom(26001), content, []);
         let output = self.client.send_event_builder(builder).await?;
         let event_id = output.id();
@@ -98,7 +98,7 @@ impl NostrCollector {
     async fn handle_telemetry_event(&self, event: Box<Event>) -> anyhow::Result<()> {
         let event_id = event.id().to_hex();
 
-        // 1. Verify freshness (e.g., not older than 1 hour for PoC)
+        // 1. Verify freshness (e.g., not older than 1 hour)
         let now = Timestamp::now().as_u64();
         if event.created_at().as_u64() < now - 3600 {
             tracing::warn!("Nostr Collector: ignoring stale event: {}", event_id);

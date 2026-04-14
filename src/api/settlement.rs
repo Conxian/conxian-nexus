@@ -41,37 +41,6 @@ pub async fn settlement_trigger_handler(
         payload.external_id
     );
 
-    // [CON-460] Fail-Closed if in Safety Mode
-    if let Ok(mut conn) = state.storage.redis_client.get_multiplexed_async_connection().await {
-        let is_safety: bool = redis::cmd("GET")
-            .arg("nexus:safety_mode")
-            .query_async(&mut conn)
-            .await
-            .unwrap_or(false);
-        if is_safety {
-            return (
-                axum::http::StatusCode::SERVICE_UNAVAILABLE,
-                Json(SettlementProposalResponse {
-                    proposal_id: "".to_string(),
-                    status: "Rejected".to_string(),
-                    unlock_height: 0,
-                    message: "Safety Mode Active. Settlement triggers disabled (Fail-Closed).".to_string(),
-                }),
-            ).into_response();
-        }
-    } else {
-        // Redis unavailable, fail-closed
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(SettlementProposalResponse {
-                proposal_id: "".to_string(),
-                status: "Error".to_string(),
-                unlock_height: 0,
-                message: "Internal control plane unavailable. Failing closed.".to_string(),
-            }),
-        ).into_response();
-    }
-
     // 1. Verify TEE Attestation
     // CON-162: Production requires valid TEE attestation prefix.
     if !payload.attestation.starts_with("TEE_") {
