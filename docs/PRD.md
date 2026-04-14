@@ -35,7 +35,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.8 B2B License & Billing Enforcement (Sovereign Grace Period)
 - **Requirement**: Prevent hard-failures for B2B SDK clients when limits are exceeded.
-- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification. **Decentralized (v0.5.0)**: Integrated **Nostr Telemetry Integrated **Nostr Telemetry Bridge** for signed, decentralized usage reporting. Health Bridge** for signed, decentralized reporting (v0.5.0).
+- **Implementation**: Billing module implements a 24-hour "Sovereign Grace Period" with 40% efficiency. **Secure (v0.4.0)**: Telemetry reporting utilizes HMAC-SHA256 verification. **Decentralized (v0.5.0)**: Integrated **Nostr Telemetry Bridge** for signed, decentralized usage reporting.
 
 ### 2.9 Sovereign Transactional SQL (Pilot)
 - **Requirement**: Evaluate and pilot Kwil and Tableland as sovereign OLTP and commitment layers to replace hosted PostgreSQL for critical state.
@@ -51,7 +51,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree & MMR (Complete)
-- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**. **Real-time Polling implemented (v0.5.0)**.
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**.
 - **Next Step**: Implement full MMR audit trail visualization.
 
 ### 4.2 Real-time Sync Ingestion
@@ -71,7 +71,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Implement confidence interval weights for oracle sources.
 
 ### 4.6 Sovereign Infrastructure Migration (In Progress)
-- **Status**: **Kwil and Tableland Pilot Implementations Complete (v0.5.0)**. **Nostr Health Reporting implemented (v0.5.0)**.
+- **Status**: **Kwil and Tableland Pilot Implementations Complete (v0.5.0)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
 ## 5. Mainnet Readiness Evidence Pack (v0.5.0)

@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use lazy_static::lazy_static;
-use prometheus::{register_int_gauge, Encoder, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntCounter, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
@@ -22,28 +22,21 @@ use crate::api::identity::resolve_identity_handler;
 use crate::api::dlc::create_dlc_bond_handler;
 
 lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = register_int_gauge!(
-        "nexus_total_transactions",
-        "Total number of transactions processed"
-    )
-    .unwrap();
-    pub static ref TOTAL_BLOCKS: IntGauge =
-        register_int_gauge!("nexus_total_blocks", "Total number of blocks processed").unwrap();
+    pub static ref TOTAL_TRANSACTIONS: IntCounter =
+        IntCounter::new("nexus_total_transactions", "Total transactions processed").unwrap();
+    pub static ref TOTAL_BLOCKS: IntCounter =
+        IntCounter::new("nexus_total_blocks", "Total blocks processed").unwrap();
     pub static ref SYNC_DRIFT: IntGauge =
-        register_int_gauge!("nexus_sync_drift", "Current sync drift in blocks").unwrap();
+        IntGauge::new("nexus_sync_drift", "Block height drift from Stacks L1").unwrap();
     pub static ref SAFETY_MODE: IntGauge =
-        register_int_gauge!(
-            "nexus_safety_mode",
-            "Safety mode status (1 = active, 0 = inactive)"
-        )
-        .unwrap();
+        IntGauge::new("nexus_safety_mode", "Safety Mode active (1 = yes, 0 = no)").unwrap();
 }
 
 pub fn init_prometheus_metrics() {
-    lazy_static::initialize(&TOTAL_TRANSACTIONS);
-    lazy_static::initialize(&TOTAL_BLOCKS);
-    lazy_static::initialize(&SYNC_DRIFT);
-    lazy_static::initialize(&SAFETY_MODE);
+    prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone())).ok();
+    prometheus::register(Box::new(TOTAL_BLOCKS.clone())).ok();
+    prometheus::register(Box::new(SYNC_DRIFT.clone())).ok();
+    prometheus::register(Box::new(SAFETY_MODE.clone())).ok();
 }
 
 #[derive(Clone)]
@@ -108,7 +101,7 @@ pub struct ExecutionResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct MMRProofParams {
-    pub index: Option<usize>,
+    pub index: Option<u64>,
     pub tx_id: Option<String>,
 }
 
@@ -193,7 +186,6 @@ pub fn app_router(
         .route("/v1/dlc/bond", post(create_dlc_bond_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
-        .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
         .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 
@@ -230,7 +222,7 @@ async fn get_mmr_proof(
 ) -> Result<Json<crate::state::MMRProof>, StatusCode> {
     let index = match (params.index, params.tx_id) {
         (Some(i), _) => Some(i),
-        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
+        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id).map(|i| i as u64),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
@@ -238,12 +230,12 @@ async fn get_mmr_proof(
 
     let leaf = state
         .nexus_state
-        .get_leaf_by_index(leaf_index)
+        .get_leaf_by_index(leaf_index as usize)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let (leaf_pos, sibling_positions) = state
         .nexus_state
-        .get_mmr_proof_metadata(leaf_index)
+        .get_mmr_proof_metadata(leaf_index as usize)
         .ok_or_else(|| {
             tracing::error!(
                 "MMR proof metadata could not be computed for leaf_index {}",
@@ -254,7 +246,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await
@@ -466,8 +458,8 @@ async fn get_metrics(State(state): State<AppState>) -> Result<Json<MetricsRespon
         .unwrap_or(0);
 
     // Update Prometheus metrics
-    TOTAL_TRANSACTIONS.set(tx_count);
-    TOTAL_BLOCKS.set(block_count);
+    TOTAL_TRANSACTIONS.inc_by(tx_count as u64);
+    TOTAL_BLOCKS.inc_by(block_count as u64);
     SYNC_DRIFT.set(drift as i64);
     SAFETY_MODE.set(if safety_mode_active { 1 } else { 0 });
 

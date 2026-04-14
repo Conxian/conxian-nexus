@@ -26,7 +26,6 @@ const GRACE_PERIOD_EFFICIENCY: f32 = 0.4;
 
 #[derive(Debug, Deserialize)]
 pub struct GenerateKeyRequest {
-    pub organization_id: String,
     pub developer_email: String,
     pub project_name: String,
 }
@@ -114,7 +113,6 @@ async fn generate_developer_key(
     let redis_key = format!("apikey:{}", api_key);
     let _: redis::RedisResult<()> = redis::cmd("HSET")
         .arg(&redis_key)
-        .arg("org_id").arg(&payload.organization_id)
         .arg("email").arg(&payload.developer_email)
         .arg("project").arg(&payload.project_name)
         .arg("secret").arg(&api_secret)

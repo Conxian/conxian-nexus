@@ -51,31 +51,6 @@ impl NostrTelemetry {
         Ok(*event_id)
     }
 
-    /// [NEXUS-04] Sovereign Health Reporting via Nostr.
-    /// Periodically reports Nexus health status to decentralized relays.
-    pub async fn report_health_nostr(
-        &self,
-        status: &str,
-        processed_height: u64,
-        state_root: &str,
-    ) -> anyhow::Result<EventId> {
-        let content = json!({
-            "status": status,
-            "processed_height": processed_height,
-            "state_root": state_root,
-            "timestamp": Timestamp::now().as_u64(),
-            "kind": "nexus_health_v1"
-        }).to_string();
-
-        // Using Kind 26002 for health reporting
-        let builder = EventBuilder::new(Kind::Custom(26002), content, []);
-        let output = self.client.send_event_builder(builder).await?;
-        let event_id = output.id();
-
-        tracing::info!("Reported health to Nostr. EventId: {:?}, Status: {}", event_id, status);
-        Ok(*event_id)
-    }
-
     pub async fn shutdown(&self) -> anyhow::Result<()> {
         self.client.disconnect().await?;
         Ok(())
