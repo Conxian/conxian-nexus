@@ -140,7 +140,13 @@ async fn generate_developer_key(
         .query_async(&mut conn).await;
 
     if let Err(e) = redis_result {
-        tracing::error!("Failed to persist generated API key {} in Redis: {}", api_key, e);
+        tracing::error!(
+            error = %e,
+            org_id = organization_id,
+            email = developer_email,
+            project = project_name,
+            "Failed to persist generated API key in Redis",
+        );
         return (StatusCode::INTERNAL_SERVER_ERROR, "Redis Error").into_response();
     }
 
