@@ -134,7 +134,8 @@ pub struct VerifyStateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyBitvm2StateRootRequest {
     pub state_root: String,
-    pub proof: String,
+    #[serde(default)]
+    pub proof: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_inputs: Option<Vec<String>>,
 }
@@ -181,7 +182,7 @@ pub fn app_router(
             return None;
         }
 
-        let base = match reqwest::Url::parse(s) {
+        let mut base = match reqwest::Url::parse(s) {
             Ok(base) => base,
             Err(err) => {
                 tracing::warn!(error = %err, "Invalid GATEWAY_URL");
@@ -189,13 +190,19 @@ pub fn app_router(
             }
         };
 
-        match base.join("./") {
-            Ok(base) => Some(base),
-            Err(err) => {
-                tracing::warn!(error = %err, "Invalid GATEWAY_URL");
-                None
+        if !base.path().ends_with('/') {
+            match base.path_segments_mut() {
+                Ok(mut segments) => {
+                    segments.push("");
+                }
+                Err(()) => {
+                    tracing::warn!("Invalid GATEWAY_URL");
+                    return None;
+                }
             }
         }
+
+        Some(base)
     });
 
     let http_client = reqwest::Client::builder()
@@ -359,7 +366,7 @@ fn bitvm2_gateway_error(state_root: &str, error: &'static str) -> serde_json::Va
 
 async fn verify_bitvm2_state_root(
     State(state): State<AppState>,
-    Json(payload): Json<VerifyBitvm2StateRootRequest>,
+    Json(mut payload): Json<VerifyBitvm2StateRootRequest>,
 ) -> impl IntoResponse {
     let Some(gateway_url) = state.gateway_url.as_ref() else {
         tracing::warn!(
@@ -375,6 +382,20 @@ async fn verify_bitvm2_state_root(
         )
             .into_response();
     };
+
+    let proof = payload
+        .proof
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("");
+    if proof.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(bitvm2_gateway_error(&payload.state_root, "field `proof` is required")),
+        )
+            .into_response();
+    }
+    payload.proof = Some(proof.to_string());
 
     let url = match gateway_url.join("api/v1/bitvm2/verify-state-root") {
         Ok(url) => url,
