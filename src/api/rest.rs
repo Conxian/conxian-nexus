@@ -134,8 +134,7 @@ pub struct VerifyStateResponse {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VerifyBitvm2StateRootRequest {
     pub state_root: String,
-    #[serde(default)]
-    pub proof: Option<String>,
+    pub proof: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_inputs: Option<Vec<String>>,
 }
@@ -383,11 +382,7 @@ async fn verify_bitvm2_state_root(
             .into_response();
     };
 
-    let proof = payload
-        .proof
-        .as_deref()
-        .map(str::trim)
-        .unwrap_or("");
+    let proof = payload.proof.trim().to_string();
     if proof.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -395,7 +390,7 @@ async fn verify_bitvm2_state_root(
         )
             .into_response();
     }
-    payload.proof = Some(proof.to_string());
+    payload.proof = proof;
 
     let url = match gateway_url.join("api/v1/bitvm2/verify-state-root") {
         Ok(url) => url,
