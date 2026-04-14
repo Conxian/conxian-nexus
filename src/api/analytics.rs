@@ -11,7 +11,7 @@ use sqlx::Row;
 #[derive(Debug, Deserialize)]
 pub struct AnalyticsParams {
     pub asset: Option<String>,
-    pub metric: String, // "tx_volume", "active_senders", "block_density"
+    pub metric: String, // "tx_volume", "active_senders", "whale_distribution"
     pub days: Option<i64>,
 }
 
@@ -24,7 +24,7 @@ pub struct AnalyticsResponse {
 
 #[derive(Debug, Serialize)]
 pub struct DataPoint {
-    pub timestamp: i64,
+    pub label: String,
     pub value: f64,
 }
 
@@ -58,7 +58,7 @@ pub async fn get_analytics_metrics(
                 let day: chrono::DateTime<chrono::Utc> = row.get("day");
                 let count: i64 = row.get("count");
                 values.push(DataPoint {
-                    timestamp: day.timestamp(),
+                    label: day.format("%Y-%m-%d").to_string(),
                     value: count as f64,
                 });
             }
@@ -79,7 +79,38 @@ pub async fn get_analytics_metrics(
                 let day: chrono::DateTime<chrono::Utc> = row.get("day");
                 let count: i64 = row.get("count");
                 values.push(DataPoint {
-                    timestamp: day.timestamp(),
+                    label: day.format("%Y-%m-%d").to_string(),
+                    value: count as f64,
+                });
+            }
+        },
+        "whale_distribution" => {
+            // [NEXUS-ANALYTICS-02] Whale Distribution (Entity Analysis)
+            // Grouping by activity levels to simulate wealth/influence tiers
+            let rows = sqlx::query(
+                "SELECT
+                    CASE
+                        WHEN count >= 100 THEN 'Whale'
+                        WHEN count >= 20 THEN 'Dolphin'
+                        ELSE 'Shrimp'
+                    END as tier,
+                    COUNT(*) as entity_count
+                 FROM (
+                    SELECT sender, COUNT(*) as count
+                    FROM stacks_transactions
+                    GROUP BY sender
+                 ) as entity_stats
+                 GROUP BY tier"
+            )
+            .fetch_all(&state.storage.pg_pool)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+            for row in rows {
+                let tier: String = row.get("tier");
+                let count: i64 = row.get("entity_count");
+                values.push(DataPoint {
+                    label: tier,
                     value: count as f64,
                 });
             }
