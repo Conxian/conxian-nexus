@@ -4,12 +4,9 @@
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
 use lib_conxian_core::Wallet;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
-
-const KWIL_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const KWIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+use std::sync::Arc;
+use reqwest::Client;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilBlockCommitment {
@@ -57,7 +54,6 @@ struct KwilExecuteRequest {
     pub db_id: String,
     pub action: String,
     pub params: serde_json::Value,
-    pub payload: String,
     pub signature: String,
 }
 
@@ -77,24 +73,14 @@ pub struct KwilAdapter {
 }
 
 impl KwilAdapter {
-    pub fn new(
-        storage: Arc<Storage>,
-        cfg: KwilConfig,
-        wallet: Arc<Wallet>,
-    ) -> anyhow::Result<Self> {
-        let client = Client::builder()
-            .connect_timeout(KWIL_CONNECT_TIMEOUT)
-            .timeout(KWIL_REQUEST_TIMEOUT)
-            .build()
-            .context("Failed to build Kwil HTTP client")?;
-
-        Ok(Self {
+    pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> Self {
+        Self {
             _storage: storage,
             provider_url: cfg.provider_url,
             db_id: cfg.db_id,
             wallet,
-            client,
-        })
+            client: Client::new(),
+        }
     }
 
     /// Pilot: Persist block to Kwil with cryptographic signature.
@@ -118,6 +104,7 @@ impl KwilAdapter {
             "height": commitment.height,
             "type": commitment.block_type,
             "state": commitment.state,
+            "created_at": chrono::Utc::now().to_rfc3339(),
         });
 
         let response = self.client
@@ -126,25 +113,14 @@ impl KwilAdapter {
                 db_id: self.db_id.clone(),
                 action: "insert_block".to_string(),
                 params,
-                payload: payload.clone(),
                 signature: signature.clone(),
             })
             .send()
             .await
             .context("Failed to send request to Kwil")?;
 
-        let status = response.status();
-        let text = response
-            .text()
-            .await
-            .context("Failed to read Kwil response")?;
-
-        if !status.is_success() {
-            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
-        }
-
-        let result: KwilExecuteResponse =
-            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
+        let result: KwilExecuteResponse = response.json().await
+            .context("Failed to parse Kwil response")?;
 
         if let Some(err) = result.error {
             return Err(anyhow!("Kwil execution error: {}", err));
@@ -178,6 +154,7 @@ impl KwilAdapter {
         let params = serde_json::json!({
             "block_height": commitment.block_height,
             "state_root": commitment.state_root,
+            "created_at": chrono::Utc::now().to_rfc3339(),
         });
 
         let response = self.client
@@ -186,25 +163,14 @@ impl KwilAdapter {
                 db_id: self.db_id.clone(),
                 action: "upsert_state_root".to_string(),
                 params,
-                payload: payload.clone(),
                 signature: signature.clone(),
             })
             .send()
             .await
             .context("Failed to send request to Kwil")?;
 
-        let status = response.status();
-        let text = response
-            .text()
-            .await
-            .context("Failed to read Kwil response")?;
-
-        if !status.is_success() {
-            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
-        }
-
-        let result: KwilExecuteResponse =
-            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
+        let result: KwilExecuteResponse = response.json().await
+            .context("Failed to parse Kwil response")?;
 
         if let Some(err) = result.error {
             return Err(anyhow!("Kwil execution error: {}", err));

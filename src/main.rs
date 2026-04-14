@@ -1,22 +1,21 @@
 use conxian_nexus::api;
-use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::config::{
     Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
 };
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::oracle::OracleService;
-use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
-use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
-use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
+use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::sync::NexusSync;
-use lib_conxian_core::Wallet;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
+use lib_conxian_core::Wallet;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -40,6 +39,9 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Running database migrations...");
     storage.run_migrations().await?;
 
+    // Initialize Wallet (for Kwil and other signing operations)
+    let wallet = Arc::new(Wallet::new()?);
+
     // Initialize State Tracker
     let state_tracker = Arc::new(NexusState::new());
 
@@ -47,33 +49,18 @@ async fn main() -> anyhow::Result<()> {
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
 
     // Initialize Tableland Adapter [CON-69]
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), config.tableland_base_url.clone()));
 
     // Initialize Kwil Adapter [CON-330]
-    let kwil = if let (Some(provider_url), Some(db_id)) =
-        (&config.kwil_provider_url, &config.kwil_db_id)
-    {
-        let wallet = Arc::new(Wallet::new()?);
-        match KwilAdapter::new(
+    let kwil = if let (Some(url), Some(db_id)) = (&config.kwil_provider_url, &config.kwil_db_id) {
+        Some(Arc::new(KwilAdapter::new(
             storage.clone(),
             KwilConfig {
-                provider_url: provider_url.clone(),
+                provider_url: url.clone(),
                 db_id: db_id.clone(),
             },
-            wallet,
-        ) {
-            Ok(adapter) => Some(Arc::new(adapter)),
-            Err(e) => {
-                tracing::error!(
-                    error = %e,
-                    "Failed to initialize Kwil adapter; disabling Kwil persistence"
-                );
-                None
-            }
-        }
+            wallet.clone(),
+        )))
     } else {
         tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
         None
@@ -125,13 +112,6 @@ async fn main() -> anyhow::Result<()> {
         storage.clone(),
         config.stacks_node_rpc_url.clone(),
         config.gateway_url.clone(),
-    ));
-
-    // Initialize Autonomous Orchestrator [NEXUS-ORCH-01]
-    let orchestrator = Arc::new(AutonomousOrchestrator::new(
-        storage.clone(),
-        state_tracker.clone(),
-        nostr.clone(),
     ));
 
     // Load Initial State from DB
@@ -192,56 +172,6 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // [NEXUS-04] Spawn Sovereign Health Reporting (Nostr)
-    let health_nostr = nostr.clone();
-    let health_report_handle = if let Some(n) = health_nostr {
-        let health_storage = storage.clone();
-        let health_state = state_tracker.clone();
-        Some(tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
-            loop {
-                interval.tick().await;
-                let max_height: Option<i64> = match sqlx::query_scalar(
-                    "SELECT MAX(height) FROM stacks_blocks WHERE type = 'burn_block' AND state = 'hard'",
-                )
-                .fetch_one(&health_storage.pg_pool)
-                .await
-                {
-                    Ok(h) => h,
-                    Err(e) => {
-                        tracing::error!("Health report height query failed: {}", e);
-                        None
-                    }
-                };
-
-                let max_height = max_height.unwrap_or(0) as u64;
-                let state_root = health_state.get_state_root();
-
-                if let Err(e) = n
-                    .report_health_nostr("ALIVE", max_height, &state_root)
-                    .await
-                {
-                    tracing::error!("Failed to report health to Nostr: {}", e);
-                }
-            }
-        }))
-    } else {
-        None
-    };
-
-    let health_join = async move {
-        match health_report_handle {
-            Some(handle) => handle.await,
-            None => future::pending::<Result<(), tokio::task::JoinError>>().await,
-        }
-    };
-
-    // Spawn Autonomous Orchestrator [NEXUS-ORCH-01]
-    let orch_worker = orchestrator.clone();
-    let orch_handle = tokio::spawn(async move {
-        orch_worker.run().await;
-    });
-
     // Start REST API Server
     let rest_storage = storage.clone();
     let rest_state = state_tracker.clone();
@@ -299,8 +229,6 @@ async fn main() -> anyhow::Result<()> {
         res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
         res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
-        res = health_join => tracing::error!("Health report task exited: {:?}", res),
-        res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
     }

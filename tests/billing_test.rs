@@ -44,7 +44,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 #[tokio::test]
 #[ignore]
 async fn test_billing_flow() {
-    let (app, storage) = setup_test_app().await;
+    let (app, _storage) = setup_test_app().await;
 
     // 1. Generate Key
     let response = app

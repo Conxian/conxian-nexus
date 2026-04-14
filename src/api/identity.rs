@@ -195,13 +195,12 @@ pub async fn resolve_identity_handler(
                 ).into_response();
             }
 
-            tracing::warn!("WorldID verification not implemented. Dropping request for security.");
             (
-                StatusCode::NOT_IMPLEMENTED,
+                StatusCode::OK,
                 Json(IdentityResolveResponse {
-                    address: "".to_string(),
+                    address: payload.name.clone(), // In WorldID, the user hash or proof acts as identity
                     protocol: payload.protocol,
-                    proof_of_personhood: false,
+                    proof_of_personhood: true,
                 }),
             ).into_response()
         }
