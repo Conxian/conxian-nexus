@@ -53,10 +53,17 @@ async fn main() -> anyhow::Result<()> {
     ));
 
     // Initialize Kwil Adapter [CON-330]
-    let kwil = if let (Some(provider_url), Some(db_id)) =
-        (&config.kwil_provider_url, &config.kwil_db_id)
-    {
-        let wallet = Arc::new(Wallet::new()?);
+    let kwil = if let (Some(provider_url), Some(db_id), Some(private_key_hex)) = (
+        &config.kwil_provider_url,
+        &config.kwil_db_id,
+        &config.kwil_private_key_hex,
+    ) {
+        use anyhow::Context;
+
+        let wallet = Arc::new(
+            Wallet::from_private_key_hex(private_key_hex).context("Invalid KWIL_PRIVATE_KEY_HEX")?,
+        );
+
         Some(Arc::new(KwilAdapter::new(
             storage.clone(),
             KwilConfig {
@@ -64,9 +71,9 @@ async fn main() -> anyhow::Result<()> {
                 db_id: db_id.clone(),
             },
             wallet,
-        )))
+        )?))
     } else {
-        tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
+        tracing::info!("Kwil persistence disabled (KWIL_* env vars not configured)");
         None
     };
 

@@ -22,13 +22,14 @@ pub(crate) fn parse_flag(value: &str) -> bool {
     )
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     pub nostr_secret_key: Option<String>,
     pub nostr_relays: Vec<String>,
     pub tableland_base_url: String,
     pub kwil_provider_url: Option<String>,
     pub kwil_db_id: Option<String>,
+    pub kwil_private_key_hex: Option<String>,
     pub database_url: String,
     pub redis_url: String,
     pub rest_port: u16,
@@ -40,6 +41,36 @@ pub struct Config {
     pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field(
+                "nostr_secret_key",
+                &self.nostr_secret_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field("nostr_relays", &self.nostr_relays)
+            .field("tableland_base_url", &self.tableland_base_url)
+            .field("kwil_provider_url", &self.kwil_provider_url)
+            .field("kwil_db_id", &self.kwil_db_id)
+            .field(
+                "kwil_private_key_hex",
+                &self.kwil_private_key_hex.as_ref().map(|_| "<redacted>"),
+            )
+            .field("database_url", &"<redacted>")
+            .field("redis_url", &"<redacted>")
+            .field("rest_port", &self.rest_port)
+            .field("grpc_port", &self.grpc_port)
+            .field("stacks_node_rpc_url", &self.stacks_node_rpc_url)
+            .field("gateway_url", &self.gateway_url)
+            .field("experimental_apis_enabled", &self.experimental_apis_enabled)
+            .field("oracle_enabled", &self.oracle_enabled)
+            .field("oracle_stub_ok", &self.oracle_stub_ok)
+            .field("oracle_endpoint_url", &self.oracle_endpoint_url)
+            .field("oracle_contract_principal", &self.oracle_contract_principal)
+            .finish()
+    }
 }
 
 impl Config {
@@ -57,6 +88,7 @@ impl Config {
             tableland_base_url: "https://validator.tableland.xyz".to_string(),
             kwil_provider_url: None,
             kwil_db_id: None,
+            kwil_private_key_hex: None,
             oracle_enabled: false,
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
@@ -195,8 +227,38 @@ impl Config {
         let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
 
         let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
-        let kwil_provider_url = env::var("KWIL_PROVIDER_URL").ok().filter(|s| !s.is_empty());
-        let kwil_db_id = env::var("KWIL_DB_ID").ok().filter(|s| !s.is_empty());
+        let kwil_provider_url = env::var("KWIL_PROVIDER_URL")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let kwil_db_id = env::var("KWIL_DB_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let kwil_private_key_hex = env::var("KWIL_PRIVATE_KEY_HEX")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
+            let mut missing = Vec::new();
+            if kwil_provider_url.is_none() {
+                missing.push("KWIL_PROVIDER_URL");
+            }
+            if kwil_db_id.is_none() {
+                missing.push("KWIL_DB_ID");
+            }
+            if kwil_private_key_hex.is_none() {
+                missing.push("KWIL_PRIVATE_KEY_HEX");
+            }
+
+            if !missing.is_empty() {
+                bail!(
+                    "Kwil persistence requires KWIL_PROVIDER_URL, KWIL_DB_ID, and KWIL_PRIVATE_KEY_HEX (missing: {})",
+                    missing.join(", ")
+                );
+            }
+        }
 
         Ok(Self {
             nostr_secret_key,
@@ -204,6 +266,7 @@ impl Config {
             tableland_base_url,
             kwil_provider_url,
             kwil_db_id,
+            kwil_private_key_hex,
             database_url,
             redis_url,
             rest_port: env::var("REST_PORT")
