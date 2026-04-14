@@ -8,6 +8,9 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+const MAX_ERP_TX_IDS: usize = 1000;
+const MAX_ERP_ERRORS: usize = 100;
+
 #[derive(Debug, Deserialize)]
 pub struct ErpSyncRequest {
     pub organization_id: String,
@@ -50,11 +53,19 @@ pub async fn erp_sync_handler(
         .and_then(|v| v.as_array())
         .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let tx_ids: Vec<String> = entries
-        .iter()
-        .filter_map(|entry| entry.get("TransactionId").and_then(|t| t.as_str()))
-        .map(ToOwned::to_owned)
-        .collect();
+    let mut seen = HashSet::new();
+    let mut tx_ids = Vec::new();
+    for entry in entries {
+        if let Some(tx_id) = entry.get("TransactionId").and_then(|t| t.as_str()) {
+            if seen.insert(tx_id) {
+                tx_ids.push(tx_id.to_owned());
+            }
+        }
+    }
+
+    if tx_ids.len() > MAX_ERP_TX_IDS {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
 
     let found: HashSet<String> = if tx_ids.is_empty() {
         HashSet::new()
@@ -63,7 +74,7 @@ pub async fn erp_sync_handler(
             "SELECT t.tx_id
              FROM stacks_transactions t
              JOIN stacks_blocks b ON t.block_hash = b.hash
-             WHERE t.tx_id = ANY($1) AND b.state != 'orphaned'",
+             WHERE t.tx_id = ANY($1) AND b.state = 'hard'",
         )
         .bind(&tx_ids)
         .fetch_all(&state.storage.pg_pool)
@@ -77,10 +88,12 @@ pub async fn erp_sync_handler(
         if found.contains(tx_id) {
             reconciled_entries += 1;
         } else {
-            errors.push(format!(
-                "Transaction {} not found or orphaned in local state",
-                tx_id
-            ));
+            if errors.len() < MAX_ERP_ERRORS {
+                errors.push(format!(
+                    "Transaction {} not found or orphaned in local state",
+                    tx_id
+                ));
+            }
         }
     }
 
