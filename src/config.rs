@@ -205,8 +205,22 @@ impl Config {
             .filter(|s| !s.is_empty());
 
         if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
-            if kwil_provider_url.is_none() || kwil_db_id.is_none() || kwil_private_key_hex.is_none() {
-                bail!("Kwil persistence requires KWIL_PROVIDER_URL, KWIL_DB_ID, and KWIL_PRIVATE_KEY_HEX to all be set");
+            let mut missing = Vec::new();
+            if kwil_provider_url.is_none() {
+                missing.push("KWIL_PROVIDER_URL");
+            }
+            if kwil_db_id.is_none() {
+                missing.push("KWIL_DB_ID");
+            }
+            if kwil_private_key_hex.is_none() {
+                missing.push("KWIL_PRIVATE_KEY_HEX");
+            }
+
+            if !missing.is_empty() {
+                bail!(
+                    "Kwil persistence requires KWIL_PROVIDER_URL, KWIL_DB_ID, and KWIL_PRIVATE_KEY_HEX (missing: {})",
+                    missing.join(", ")
+                );
             }
         }
 

@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
             wallet,
         )?))
     } else {
-        tracing::info!("Kwil persistence disabled (KWIL_PROVIDER_URL or KWIL_DB_ID not set)");
+        tracing::info!("Kwil persistence disabled (KWIL_* env vars not configured)");
         None
     };
 

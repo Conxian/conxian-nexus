@@ -74,11 +74,14 @@ pub struct KwilAdapter {
     client: Client,
 }
 
+const KWIL_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const KWIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl KwilAdapter {
     pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(10))
+            .connect_timeout(KWIL_CONNECT_TIMEOUT)
+            .timeout(KWIL_REQUEST_TIMEOUT)
             .build()
             .context("Failed to build Kwil HTTP client")?;
 
