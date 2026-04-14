@@ -245,7 +245,7 @@ async fn get_mmr_proof(
 
     let mut siblings = Vec::new();
     for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = ")
+        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
             .bind(pos as i64)
             .fetch_optional(&state.storage.pg_pool)
             .await

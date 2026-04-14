@@ -36,3 +36,18 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 - FSOC Sequencer now increments transaction metrics upon successful validation.
+
+## [0.5.0] - 2026-04-14
+
+### Added
+- **Nostr Telemetry Collector**: Implemented `NostrCollector` to subscribe to telemetry events (Kind 26001) and bridge usage metrics to Redis (CON-473).
+- **Fail-Closed Custody Controls**: Hardened `NexusExecutor` and settlement handlers with fail-closed logic when in Safety Mode or when control dependencies are unavailable (CON-460).
+- **Sovereign Relational Persistence**: Integrated state-root anchoring to Tableland for decentralized relational state commitment (CON-69).
+
+### Improved
+- **Production Boundary Security**: Validated repository hygiene against testnet contamination using standard CI guardrails (CON-411).
+- **Sync Integrity**: Hardened `NexusSync` with microblock reorg detection and automated state reconstruction from hard-finality tips (NEXUS-03).
+- **Dependency Consolidation**: Standardized on remote git dependency for `lib-conxian-core` to eliminate local drift (CON-67).
+
+### Fixed
+- **MMR Proof Endpoint**: Corrected SQL parameter binding in `/v1/mmr-proof` query.

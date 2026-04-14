@@ -8,7 +8,7 @@ use conxian_nexus::safety::NexusSafety;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::storage::tableland::TablelandAdapter;
-use conxian_nexus::api::billing::nostr::NostrTelemetry;
+use conxian_nexus::api::billing::nostr::{NostrTelemetry, NostrCollector};
 use conxian_nexus::sync::NexusSync;
 use std::future;
 use std::sync::Arc;
@@ -57,6 +57,18 @@ async fn main() -> anyhow::Result<()> {
         }
     } else {
         tracing::info!("Nostr telemetry disabled (NOSTR_SECRET_KEY not set)");
+        None
+    };
+
+    // Initialize and Spawn Nostr Collector [CON-473]
+    let collector_handle = if !config.nostr_relays.is_empty() {
+        let collector = Arc::new(NostrCollector::new(config.nostr_relays.clone(), storage.clone()).await?);
+        Some(tokio::spawn(async move {
+            if let Err(e) = collector.run().await {
+                tracing::error!("Nostr Collector failed: {}", e);
+            }
+        }))
+    } else {
         None
     };
 
@@ -208,6 +220,13 @@ async fn main() -> anyhow::Result<()> {
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
+        _ = async {
+            if let Some(h) = collector_handle {
+                h.await.ok();
+            } else {
+                future::pending::<()>().await;
+            }
+        } => tracing::error!("Nostr Collector exited"),
     }
 
     Ok(())
