@@ -192,17 +192,8 @@ impl NexusSync {
     async fn process_burn_block(&self, data: BurnBlockData) -> anyhow::Result<()> {
         tracing::info!("Processing burn block: {}", data.hash);
 
-        sqlx::query(
-            "INSERT INTO stacks_blocks (hash, height, type, state, created_at)
-             VALUES ($1, $2, 'burn_block', 'hard', $3)
-             ON CONFLICT (hash) DO NOTHING",
-        )
-        .bind(&data.hash)
-        .bind(data.height as i64)
-        .bind(data.timestamp)
-        .execute(&self.storage.pg_pool)
-        .await?;
-
+        // Invariant: `BurnBlockData.height` is expressed in the same height scale as
+        // `stacks_blocks.height` for microblocks.
         sqlx::query(
             "UPDATE stacks_blocks
              SET state = 'hard'
