@@ -163,6 +163,7 @@ pub fn app_router(
         .route("/v1/dlc/bond", post(create_dlc_bond_handler))
         .nest("/v1/billing", crate::api::billing::billing_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
+        .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
         .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 

@@ -7,6 +7,7 @@ use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::storage::tableland::TablelandAdapter;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -22,6 +23,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     );
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
     let experimental_apis_enabled = false;
 
     (
@@ -30,6 +32,8 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
             nexus_state,
             executor,
             None, // OracleService
+            tableland,
+            None, // NostrTelemetry
             experimental_apis_enabled,
         ),
         storage,

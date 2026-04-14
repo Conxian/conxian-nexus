@@ -182,8 +182,32 @@ impl NexusSync {
         Ok(())
     }
 
-    async fn poll_stacks_node(_tx: &mpsc::Sender<StacksEvent>,  _rpc_url: &str,  _storage: &Storage,  _http_client: &Client) -> anyhow::Result<()> {
-        // Implementation of polling would go here (Hiro RPC / WebSockets)
+    async fn poll_stacks_node(tx: &mpsc::Sender<StacksEvent>, rpc_url: &str, storage: &Storage, http_client: &Client) -> anyhow::Result<()> {
+        // [NEXUS-02] Real-time Sync Ingestion via Hiro RPC
+        let info_url = format!("{}/v2/info", rpc_url);
+        let info: serde_json::Value = http_client.get(info_url).send().await?.json().await?;
+
+        let stacks_tip_height = info["stacks_tip_height"].as_u64().unwrap_or(0);
+        let stacks_tip_hash = info["stacks_tip"].as_str().unwrap_or("");
+
+        // Check if we already have this block
+        let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM stacks_blocks WHERE hash = $1)")
+            .bind(stacks_tip_hash)
+            .fetch_one(&storage.pg_pool)
+            .await?;
+
+        if !exists && !stacks_tip_hash.is_empty() {
+            tracing::info!("Found new block tip: height={}, hash={}", stacks_tip_height, stacks_tip_hash);
+
+            // In a real implementation, we would fetch block details and transactions here.
+            // For this PoC, we emit a BurnBlock event to move the hard-finality tip.
+            tx.send(StacksEvent::BurnBlock(BurnBlockData {
+                hash: stacks_tip_hash.to_string(),
+                height: stacks_tip_height,
+                timestamp: Utc::now(),
+            })).await?;
+        }
+
         Ok(())
     }
 
