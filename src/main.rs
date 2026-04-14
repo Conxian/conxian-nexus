@@ -10,11 +10,11 @@ use conxian_nexus::storage::Storage;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::sync::NexusSync;
+use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
-
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -92,6 +92,13 @@ async fn main() -> anyhow::Result<()> {
         storage.clone(),
         config.stacks_node_rpc_url.clone(),
         config.gateway_url.clone(),
+    ));
+
+    // Initialize Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orchestrator = Arc::new(AutonomousOrchestrator::new(
+        storage.clone(),
+        state_tracker.clone(),
+        nostr.clone(),
     ));
 
     // Load Initial State from DB
@@ -172,6 +179,14 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Spawn Autonomous Orchestrator [NEXUS-ORCH-01]
+    let orch_worker = orchestrator.clone();
+    let orch_handle = tokio::spawn(async move {
+        if let Err(e) = orch_worker.run().await {
+            tracing::error!("Orchestrator failed: {}", e);
+        }
+    });
+
     // Start REST API Server
     let rest_storage = storage.clone();
     let rest_state = state_tracker.clone();
@@ -228,6 +243,7 @@ async fn main() -> anyhow::Result<()> {
         res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
         res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
         res = health_report_handle => tracing::error!("Health report task exited: {:?}", res),
+        res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
     }
