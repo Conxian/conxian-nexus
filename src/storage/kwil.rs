@@ -4,9 +4,10 @@
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
 use lib_conxian_core::Wallet;
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use reqwest::Client;
+use std::time::Duration;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilBlockCommitment {
@@ -74,14 +75,20 @@ pub struct KwilAdapter {
 }
 
 impl KwilAdapter {
-    pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> Self {
-        Self {
+    pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> anyhow::Result<Self> {
+        let client = Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
+            .build()
+            .context("Failed to build Kwil HTTP client")?;
+
+        Ok(Self {
             _storage: storage,
             provider_url: cfg.provider_url,
             db_id: cfg.db_id,
             wallet,
-            client: Client::new(),
-        }
+            client,
+        })
     }
 
     /// Pilot: Persist block to Kwil with cryptographic signature.

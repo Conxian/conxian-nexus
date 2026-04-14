@@ -29,6 +29,7 @@ pub struct Config {
     pub tableland_base_url: String,
     pub kwil_provider_url: Option<String>,
     pub kwil_db_id: Option<String>,
+    pub kwil_private_key_hex: Option<String>,
     pub database_url: String,
     pub redis_url: String,
     pub rest_port: u16,
@@ -57,6 +58,7 @@ impl Config {
             tableland_base_url: "https://validator.tableland.xyz".to_string(),
             kwil_provider_url: None,
             kwil_db_id: None,
+            kwil_private_key_hex: None,
             oracle_enabled: false,
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
@@ -197,6 +199,10 @@ impl Config {
         let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
         let kwil_provider_url = env::var("KWIL_PROVIDER_URL").ok().filter(|s| !s.is_empty());
         let kwil_db_id = env::var("KWIL_DB_ID").ok().filter(|s| !s.is_empty());
+        let kwil_private_key_hex = env::var("KWIL_PRIVATE_KEY_HEX")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
 
         Ok(Self {
             nostr_secret_key,
@@ -204,6 +210,7 @@ impl Config {
             tableland_base_url,
             kwil_provider_url,
             kwil_db_id,
+            kwil_private_key_hex,
             database_url,
             redis_url,
             rest_port: env::var("REST_PORT")

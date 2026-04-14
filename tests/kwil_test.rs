@@ -28,7 +28,7 @@ fn make_test_storage() -> anyhow::Result<Arc<Storage>> {
 async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
     let storage = make_test_storage()?;
     let wallet = Arc::new(Wallet::new()?);
-    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone());
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
 
     let commitment = KwilBlockCommitment {
         hash: "0xabc123".to_string(),
@@ -58,7 +58,7 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
 async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     let storage = make_test_storage()?;
     let wallet = Arc::new(Wallet::new()?);
-    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone());
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
 
     let commitment = KwilStateRootCommitment {
         block_height: 1000,
