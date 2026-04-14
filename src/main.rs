@@ -16,7 +16,6 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
 
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Load environment variables
@@ -187,6 +186,7 @@ async fn main() -> anyhow::Result<()> {
             tracing::error!("Orchestrator failed: {}", e);
         }
     });
+
     // Start REST API Server
     let rest_storage = storage.clone();
     let rest_state = state_tracker.clone();
