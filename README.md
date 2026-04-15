@@ -8,7 +8,7 @@ Provide a verifiable synchronization and proof layer between off-chain state and
 
 ## Status
 
-**Production-Ready (v0.4.0)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
+**Production-Ready (v0.4.1)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
 
 ## Repository Categorization
 
@@ -65,11 +65,26 @@ Or manually:
 cargo run
 ```
 
+### Testing
+
+Run the full test suite:
+
+```bash
+cargo test
+```
+
+For mainnet boundary validation:
+
+```bash
+./scripts/check_production_boundary.sh
+```
+
 ## Governance & Security
 
 - **Ownership**: Defined in [CODEOWNERS](./CODEOWNERS).
 - **Contributing**: See [CONTRIBUTING.md](./CONTRIBUTING.md).
 - **Security**: See [SECURITY.md](./SECURITY.md).
+- **Security Reporting**: Please report vulnerabilities to [security@conxian.com](mailto:security@conxian.com). See [SECURITY.md](./SECURITY.md) for details.
 - **BOS Boundary**: This repository enforces a strict mainnet-only production boundary.
 
 ## Documentation
