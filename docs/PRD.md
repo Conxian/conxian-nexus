@@ -23,7 +23,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.5 Cryptographic Verification
 - **Requirement**: Provide verifiable proofs of state and persist state roots.
-- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. **Superior (v0.4.0)**: Implemented Persistent Merkle Mountain Range (MMR) peaks AND full leaf persistence in PostgreSQL (`mmr_nodes`) for O(1) audit log restoration.
+- **Implementation**: `NexusState` maintains a Merkle Tree of transaction IDs. **Superior (v0.4.2)**: Implemented Persistent Merkle Mountain Range (MMR) peaks AND full leaf persistence in PostgreSQL (`mmr_nodes`). Consolidated helper functions for O(log N) sibling path calculation.
 
 ### 2.6 Multi-Protocol Gateway
 - **Requirement**: Support multiple protocols including Bisq, RGB, and BitVM.
@@ -39,7 +39,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.9 Sovereign Transactional SQL (Pilot)
 - **Requirement**: Evaluate and pilot Kwil and Tableland as sovereign OLTP and commitment layers to replace hosted PostgreSQL for critical state.
-- **Implementation**: **New (v0.4.1)**: Implemented `KwilAdapter` and `TablelandAdapter` for decentralized relational state persistence. Designed pilot schema (`docs/kwil_pilot_schema.sql`) for block and state-root anchoring.
+- **Implementation**: **New (v0.4.2)**: Aligned `KwilAdapter` with `nexus_pilot` schema, including mandatory `created_at` timestamps for block and state-root commitments.
 
 ## 3. Technical Stack
 - **Language**: Rust (Tokio, Axum, Tonic)
@@ -51,7 +51,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ## 4. Roadmap & Status
 
 ### 4.1 Persistent Merkle Tree & MMR (Complete)
-- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.0)**.
+- **Status**: Merkle Tree complete; **Persistent MMR Peaks, Leaf Nodes, and Full Inclusion Proofs implemented (v0.4.2)**.
 - **Next Step**: Implement full MMR audit trail visualization.
 
 ### 4.2 Real-time Sync Ingestion
@@ -71,10 +71,10 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Implement confidence interval weights for oracle sources.
 
 ### 4.6 Sovereign Infrastructure Migration (In Progress)
-- **Status**: **Kwil and Tableland Pilot Implementations Complete (v0.4.1)**.
+- **Status**: **Kwil and Tableland Pilot Implementations Aligned (v0.4.2)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
-## 5. Mainnet Readiness Evidence Pack (v0.4.1)
+## 5. Mainnet Readiness Evidence Pack (v0.4.2)
 
 ### 5.1 Security & TEE (CON-162)
 - **External Triggers**: ISO 20022, PAPSS, and BRICS triggers are now wired into the execution flow.
