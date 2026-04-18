@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.2] - 2024-05-26
+
+### Added
+- **Full API Specification Sync**: Synchronized `docs/openapi.yaml` with all current modules including Analytics, ZKML, ERP Sync, Identity Resolution, and Bitcoin DLC Bonds.
+- **Enhanced MMR Logic**: Consolidated helper functions in `src/state/mod.rs` for O(log N) sibling path calculation and resolved all dead code warnings.
+
+### Fixed
+- **Kwil Persistence Alignment**: Updated `KwilAdapter` to include mandatory `created_at` timestamps in block and state-root commitments, aligning with the `nexus_pilot` schema.
+- **State Proof Robustness**: Corrected MMR metadata calculation logic to properly handle right-child sibling resolution during inclusion proof generation.
+
 ## [0.4.1] - 2024-05-25
 
 ### Added
