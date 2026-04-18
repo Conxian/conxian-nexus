@@ -8,7 +8,7 @@ Provide a verifiable synchronization and proof layer between off-chain state and
 
 ## Status
 
-**Production-Ready (v0.4.1)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
+**Production-Ready (v0.4.2)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
 
 ## Repository Categorization
 

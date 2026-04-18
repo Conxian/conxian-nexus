@@ -290,12 +290,12 @@ impl NexusState {
 /// Helper to get MMR node position for a given leaf index.
 ///
 /// Uses the postorder MMR leaf-position identity: `pos = 2 * leaf_index - popcount(leaf_index)`.
-fn get_mmr_node_pos(leaf_index: u64) -> u64 {
+pub fn get_mmr_node_pos(leaf_index: u64) -> u64 {
     leaf_index * 2 - leaf_index.count_ones() as u64
 }
 
 /// Helper to get height of a node at given position in MMR.
-fn get_mmr_node_height(pos: u64) -> u32 {
+pub fn get_mmr_node_height(pos: u64) -> u32 {
     let mut h = 0;
     let mut p = pos;
     loop {
@@ -309,7 +309,7 @@ fn get_mmr_node_height(pos: u64) -> u32 {
 }
 
 /// Helper to get peak positions for a given leaf count.
-fn get_mmr_peaks(mut leaf_count: u64) -> Vec<u64> {
+pub fn get_mmr_peaks(mut leaf_count: u64) -> Vec<u64> {
     let mut peaks = Vec::new();
     let mut offset = 0;
     while leaf_count > 0 {
@@ -325,7 +325,7 @@ fn get_mmr_peaks(mut leaf_count: u64) -> Vec<u64> {
 }
 
 /// Helper to get internal siblings path for a position in MMR.
-fn get_mmr_path(pos: u64, leaf_count: u64) -> Vec<u64> {
+pub fn get_mmr_path(pos: u64, leaf_count: u64) -> Vec<u64> {
     let peaks = get_mmr_peaks(leaf_count);
     let mut path = Vec::new();
 
