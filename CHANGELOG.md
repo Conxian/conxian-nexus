@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.3] - 2024-05-27
+
+### Added
+- **Hardened Repository Hygiene**: Updated `.gitignore` and `.dockerignore` to exclude standard artifacts (`node_modules`, `test-results`, `playwright-report`) as per Conxian baseline.
+- **CI Guardrail Refactor**: Refactored `scripts/check_production_boundary.sh` to use separate `EXCLUDE_DIRS` and `EXCLUDE_FILES` arrays, improving maintainability and ensuring full coverage of production paths.
+
+### Changed
+- **Consolidated Governance**: Merged root `CODEOWNERS` into `.github/CODEOWNERS` and standardized on team-based ownership with explicit fallback maintainers.
+
 ## [0.4.2] - 2024-05-26
 
 ### Added

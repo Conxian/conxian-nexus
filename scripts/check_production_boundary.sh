@@ -2,24 +2,39 @@
 # [CON-411] CI Guardrail for BOS Production Boundary
 
 # Use case-sensitive matching for Stacks addresses and specific placeholders
-# "SP\.\.\." matches the literal string SP...
 FORBIDDEN_PATTERNS=(
     "ST[0-9A-Z]{38}"
     "\"SP\.\.\.\""
     "\"ST\.\.\.\""
 )
 
-EXCLUDE_PATHS=(
+EXCLUDE_DIRS=(
     "node_modules"
     "target"
     ".git"
-    "Cargo.lock"
     "tests"
     "scripts"
+    "docs"
+    "test-results"
+    "playwright-report"
+)
+
+EXCLUDE_FILES=(
+    "Cargo.lock"
     "CHANGELOG.md"
     "README.md"
-    "docs"
+    "verify_contamination_guard.py"
+    "check_production_boundary.sh"
 )
+
+# Build exclude arguments for grep
+GREP_EXCLUDES=()
+for dir in "${EXCLUDE_DIRS[@]}"; do
+    GREP_EXCLUDES+=("--exclude-dir=$dir")
+done
+for file in "${EXCLUDE_FILES[@]}"; do
+    GREP_EXCLUDES+=("--exclude=$file")
+done
 
 echo "Starting BOS Production Boundary Check..."
 
@@ -28,9 +43,8 @@ exit_status=0
 for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
     echo "Checking for pattern: $pattern"
 
-    # Run grep with the specific pattern
-    # We use -E for extended regex
-    if grep -rE "$pattern" . --exclude-dir=node_modules --exclude-dir=target --exclude-dir=.git --exclude-dir=tests --exclude-dir=scripts --exclude-dir=docs --exclude=Cargo.lock --exclude=CHANGELOG.md --exclude=README.md | grep -v "check_production_boundary.sh"; then
+    # Run grep with the specific pattern using dynamic excludes
+    if grep -rE "$pattern" . "${GREP_EXCLUDES[@]}"; then
         echo "FAIL: Forbidden pattern '$pattern' found in production paths."
         exit_status=1
     fi

@@ -24,6 +24,9 @@ target/
 # Testing
 tests/output/
 *.log
+node_modules/
+test-results/
+playwright-report/
 
 # Audit and Dumps
 full_audit_dump.txt
