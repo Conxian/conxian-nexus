@@ -9,7 +9,7 @@ FORBIDDEN_PATTERNS = [
 ]
 
 EXCLUDE_DIRS = [
-    "node_modules", "target", ".git", "tests", "scripts", "docs"
+    "node_modules", "target", ".git", "tests", "scripts", "docs", "test-results", "playwright-report"
 ]
 
 EXCLUDE_FILES = [

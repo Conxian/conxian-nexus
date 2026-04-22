@@ -2,7 +2,7 @@
 # This file is used to specify individuals or teams that are responsible for code in the repository.
 
 # Default owners for all files
-*       @Conxian/core-devs
+*       @Conxian/core-devs @botshelomokoka @admin-conxian-labs
 
 # API specific owners
 /src/api/       @Conxian/api-team
