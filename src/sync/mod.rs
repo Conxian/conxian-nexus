@@ -14,6 +14,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
 
+const LAST_POLLED_BURN_TIP_KEY: &str = "nexus:sync:last_polled_burn_tip:v1";
+
 /// Represents the types of events received from a Stacks node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StacksEvent {
@@ -240,11 +242,45 @@ impl NexusSync {
         let info_url = format!("{}/v2/info", rpc_url);
         let info: serde_json::Value = http_client.get(info_url).send().await?.json().await?;
 
-        let stacks_tip_height = info["stacks_tip_height"].as_u64().unwrap_or(0);
-        let stacks_tip_hash = info["stacks_tip"].as_str().unwrap_or("");
-
-        if stacks_tip_hash.is_empty() || stacks_tip_height == 0 {
+        let Some((burn_tip_height, burn_tip_hash)) = extract_burn_tip_from_info(&info) else {
+            tracing::debug!("Skipping /v2/info poll: burn tip fields missing or empty");
             return Ok(());
+        };
+
+        let burn_tip_marker = format!("{}:{}", burn_tip_height, burn_tip_hash);
+
+        let mut redis_conn = match storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await
+        {
+            Ok(conn) => Some(conn),
+            Err(err) => {
+                tracing::warn!("Unable to connect to Redis for burn-tip dedupe: {}", err);
+                None
+            }
+        };
+
+        if let Some(conn) = redis_conn.as_mut() {
+            let last_polled_tip: Option<String> = match redis::cmd("GET")
+                .arg(LAST_POLLED_BURN_TIP_KEY)
+                .query_async(conn)
+                .await
+            {
+                Ok(value) => value,
+                Err(err) => {
+                    tracing::warn!(
+                        "Unable to read burn-tip dedupe key from Redis ({}): {}",
+                        LAST_POLLED_BURN_TIP_KEY,
+                        err
+                    );
+                    None
+                }
+            };
+
+            if last_polled_tip.as_deref() == Some(burn_tip_marker.as_str()) {
+                return Ok(());
+            }
         }
 
         let inserted = sqlx::query(
@@ -252,8 +288,8 @@ impl NexusSync {
              VALUES ($1, $2, 'burn_block', 'hard', $3)
              ON CONFLICT (hash) DO NOTHING",
         )
-        .bind(stacks_tip_hash)
-        .bind(stacks_tip_height as i64)
+        .bind(&burn_tip_hash)
+        .bind(burn_tip_height as i64)
         .bind(Utc::now())
         .execute(&storage.pg_pool)
         .await?
@@ -262,17 +298,32 @@ impl NexusSync {
 
         if inserted {
             tracing::info!(
-                "Found new hard-finality tip: height={}, hash={}",
-                stacks_tip_height,
-                stacks_tip_hash
+                "Found new hard-finality burn tip: height={}, hash={}",
+                burn_tip_height,
+                burn_tip_hash
             );
 
             tx.send(StacksEvent::BurnBlock(BurnBlockData {
-                hash: stacks_tip_hash.to_string(),
-                height: stacks_tip_height,
+                hash: burn_tip_hash.clone(),
+                height: burn_tip_height,
                 timestamp: Utc::now(),
             }))
             .await?;
+        }
+
+        if let Some(conn) = redis_conn.as_mut() {
+            if let Err(err) = redis::cmd("SET")
+                .arg(LAST_POLLED_BURN_TIP_KEY)
+                .arg(&burn_tip_marker)
+                .query_async::<_, ()>(conn)
+                .await
+            {
+                tracing::warn!(
+                    "Unable to persist burn-tip dedupe key to Redis ({}): {}",
+                    LAST_POLLED_BURN_TIP_KEY,
+                    err
+                );
+            }
         }
 
         Ok(())
@@ -334,5 +385,69 @@ impl NexusSync {
             .query_async(&mut conn)
             .await?;
         Ok(())
+    }
+}
+
+fn extract_burn_tip_from_info(info: &serde_json::Value) -> Option<(u64, String)> {
+    let burn_tip_height = info["burn_block_height"].as_u64().unwrap_or(0);
+
+    // `burn_block_hash` is not always present in `/v2/info` across Stacks node versions.
+    // Fall back to `pox_consensus` (burnchain view identifier) to keep a stable tip identifier.
+    let burn_tip_hash = info["burn_block_hash"]
+        .as_str()
+        .filter(|hash| !hash.is_empty())
+        .or_else(|| {
+            info["pox_consensus"]
+                .as_str()
+                .filter(|hash| !hash.is_empty())
+        })
+        .unwrap_or("");
+
+    if burn_tip_height == 0 || burn_tip_hash.is_empty() {
+        return None;
+    }
+
+    Some((burn_tip_height, burn_tip_hash.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_burn_tip_from_info;
+    use serde_json::json;
+
+    #[test]
+    fn extract_burn_tip_prefers_burn_block_hash() {
+        let info = json!({
+            "burn_block_height": 101,
+            "burn_block_hash": "0xabc",
+            "pox_consensus": "0xdef"
+        });
+
+        assert_eq!(
+            extract_burn_tip_from_info(&info),
+            Some((101, "0xabc".to_string()))
+        );
+    }
+
+    #[test]
+    fn extract_burn_tip_falls_back_to_pox_consensus() {
+        let info = json!({
+            "burn_block_height": 101,
+            "pox_consensus": "0xdef"
+        });
+
+        assert_eq!(
+            extract_burn_tip_from_info(&info),
+            Some((101, "0xdef".to_string()))
+        );
+    }
+
+    #[test]
+    fn extract_burn_tip_returns_none_when_required_fields_missing() {
+        let missing_hash = json!({ "burn_block_height": 101 });
+        let missing_height = json!({ "pox_consensus": "0xdef" });
+
+        assert_eq!(extract_burn_tip_from_info(&missing_hash), None);
+        assert_eq!(extract_burn_tip_from_info(&missing_height), None);
     }
 }
