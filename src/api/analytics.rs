@@ -40,19 +40,19 @@ pub async fn get_analytics_metrics(
     State(state): State<AppState>,
     Query(params): Query<AnalyticsParams>,
 ) -> Result<Json<AnalyticsResponse>, StatusCode> {
-    let asset_raw = params.asset.unwrap_or_else(|| "STX".to_string());
-    if !asset_raw.eq_ignore_ascii_case("STX") {
+    let asset = params
+        .asset
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("STX")
+        .to_uppercase();
+
+    if asset != "STX" {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let asset = "STX".to_string();
-
-    let days = params.days.unwrap_or(7);
-    if days < 1 {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let days = days.min(90);
+    let days = params.days.unwrap_or(7).clamp(1, 365);
 
     let mut values = Vec::new();
 
@@ -61,7 +61,7 @@ pub async fn get_analytics_metrics(
             let rows = sqlx::query(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(*) as count
                  FROM stacks_transactions
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                 WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                  GROUP BY 1 ORDER BY 1 ASC",
             )
             .bind(days)
@@ -84,7 +84,7 @@ pub async fn get_analytics_metrics(
             let rows = sqlx::query(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(DISTINCT sender) as count
                  FROM stacks_transactions
-                 WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                 WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                  GROUP BY 1 ORDER BY 1 ASC",
             )
             .bind(days)
@@ -115,7 +115,7 @@ pub async fn get_analytics_metrics(
                  FROM (
                     SELECT sender, COUNT(*) as count
                     FROM stacks_transactions
-                    WHERE created_at >= NOW() - ($1::int * INTERVAL '1 day')
+                    WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                     GROUP BY sender
                  ) as entity_stats
                  GROUP BY tier",
