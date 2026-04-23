@@ -199,20 +199,19 @@ async fn main() -> anyhow::Result<()> {
             let mut interval = time::interval(Duration::from_secs(300)); // Every 5 mins
             loop {
                 interval.tick().await;
-                let max_height: Option<i64> = match sqlx::query_scalar(
+                let max_height = sqlx::query_scalar::<_, Option<i64>>(
                     "SELECT MAX(height) FROM stacks_blocks WHERE type = 'burn_block' AND state = 'hard'",
                 )
                 .fetch_one(&health_storage.pg_pool)
                 .await
-                {
-                    Ok(h) => h,
-                    Err(e) => {
-                        tracing::error!("Health report height query failed: {}", e);
-                        None
-                    }
-                };
-
-                let max_height = max_height.unwrap_or(0) as u64;
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Health report height query failed");
+                    e
+                })
+                .ok()
+                .flatten()
+                .unwrap_or(0)
+                .max(0) as u64;
                 let state_root = health_state.get_state_root();
 
                 if let Err(e) = n
