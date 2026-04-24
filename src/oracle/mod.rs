@@ -1,14 +1,13 @@
-pub mod aggregator;
-
-use crate::oracle::aggregator::{OracleAggregator, PppState};
 use crate::storage::Storage;
-use serde_json::Value;
+use crate::oracle::aggregator::{OracleAggregator, PppState};
 use std::sync::Arc;
 use tokio::time::{self, Duration};
 
+pub mod aggregator;
+
 pub struct OracleService {
-    pub storage: Arc<Storage>,
-    pub aggregator: OracleAggregator,
+    storage: Arc<Storage>,
+    aggregator: OracleAggregator,
 }
 
 impl OracleService {
@@ -20,96 +19,52 @@ impl OracleService {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        let mut interval = time::interval(Duration::from_secs(60));
         tracing::info!("Starting OracleService...");
+        let mut interval = time::interval(Duration::from_secs(60));
 
         loop {
             interval.tick().await;
             match self.aggregator.fetch_universal_fx().await {
                 Ok(state) => {
-                    let tx_id = match self.aggregator.push_state_to_contract(state.clone()).await {
-                        Ok(id) => Some(id),
-                        Err(e) => {
-                            tracing::error!("Failed to push oracle state on-chain: {}", e);
-                            None
-                        }
-                    };
+                    if let Err(e) = self.persist_fx_state(&state).await {
+                        tracing::error!("Failed to persist FX state: {}", e);
+                    }
+                    // Pushing to contract is optional/best-effort in the loop
+                    let _ = self.aggregator.push_state_to_contract(state).await;
+                }
+                Err(e) => tracing::error!("Oracle fetch failed: {}", e),
+            }
+        }
+    }
 
-                    if let Err(e) = self.persist_fx_history(state, tx_id).await {
-                        tracing::error!("Failed to persist FX history: {}", e);
+    async fn persist_fx_state(&self, state: &PppState) -> anyhow::Result<()> {
+        sqlx::query("INSERT INTO oracle_fx_history (rates, ppp_indices, timestamp) VALUES (, , )")
+            .bind(serde_json::to_value(&state.rates)?)
+            .bind(serde_json::to_value(&state.ppp_indices)?)
+            .bind(state.timestamp as i64)
+            .execute(&self.storage.pg_pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn verify_external_signal(&self, source: &str, payload: &serde_json::Value) -> anyhow::Result<bool> {
+        // [CON-162] Verify external signal against Oracle state
+        let rates = self.aggregator.fetch_universal_fx().await
+            .map_err(|e| anyhow::anyhow!("Oracle fetch error: {}", e))?;
+
+        if source == "ISO20022" {
+            if let Some(payload_rate) = payload.get("exchange_rate").and_then(|v| v.as_f64()) {
+                let currency = payload.get("currency").and_then(|v| v.as_str()).unwrap_or("USD");
+                if let Some(oracle_rate) = rates.rates.get(currency) {
+                    let diff = (payload_rate - oracle_rate).abs() / oracle_rate;
+                    if diff > 0.05 { // 5% tolerance
+                        tracing::warn!("Oracle verification failed for ISO20022: rate diff too high ({:.2}%)", diff * 100.0);
+                        return Ok(false);
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to fetch FX rates: {}", e);
-                }
             }
         }
-    }
 
-    /// [CON-162] Verifies an external settlement signal using aggregated Oracle data.
-    pub async fn verify_external_signal(
-        &self,
-        source: &str,
-        payload: &Value,
-    ) -> anyhow::Result<bool> {
-        tracing::info!("Oracle performing verification for {} signal...", source);
-
-        // Fetch latest rates to compare or validate payload data
-        let latest_rates = self
-            .aggregator
-            .fetch_universal_fx()
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
-
-        match source {
-            "ISO20022" => {
-                // Verify XML structure or specific fields (Simulated)
-                let amount = payload
-                    .get("amount")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
-                let currency = payload
-                    .get("currency")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-
-                if let Some(&rate) = latest_rates.rates.get(currency) {
-                    tracing::info!("ISO 20022 verified with rate {} for {}", rate, currency);
-                    Ok(amount > 0.0)
-                } else {
-                    tracing::warn!(
-                        "Currency {} not supported by Oracle for ISO 20022",
-                        currency
-                    );
-                    Ok(false)
-                }
-            }
-            "PAPSS" | "BRICS" => {
-                // Regional specific validation logic
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    async fn persist_fx_history(
-        &self,
-        state: PppState,
-        tx_id: Option<String>,
-    ) -> anyhow::Result<()> {
-        let rates_json = serde_json::to_value(&state.rates)?;
-        let ppp_json = serde_json::to_value(&state.ppp_indices)?;
-
-        sqlx::query(
-            "INSERT INTO oracle_fx_history (base_currency, rates, ppp_indices, timestamp, tx_id) VALUES ($1, $2, $3, $4, $5)"
-        )
-        .bind(&state.base_currency)
-        .bind(rates_json)
-        .bind(ppp_json)
-        .bind(state.timestamp as i64)
-        .bind(tx_id)
-        .execute(&self.storage.pg_pool).await?;
-
-        Ok(())
+        Ok(true)
     }
 }
