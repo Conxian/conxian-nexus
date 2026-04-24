@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node)...");
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.4)...");
 
     // Initialize Global Start Time
     api::init_start_time();

@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Conxian Nexus (Glass Node) API
   description: High-performance middleware for Stacks L1 state synchronization and multi-protocol support.
-  version: 0.4.1
+  version: 0.4.4
 servers:
   - url: http://localhost:3000
     description: Local development server
@@ -19,6 +19,8 @@ paths:
                 type: object
                 properties:
                   state_root:
+                    type: string
+                  mmr_root:
                     type: string
                   processed_height:
                     type: integer
@@ -78,6 +80,44 @@ paths:
                     type: string
                   proof:
                     type: string
+  /v1/mmr-proof:
+    get:
+      summary: Get MMR inclusion proof for a transaction
+      parameters:
+        - name: index
+          in: query
+          schema:
+            type: integer
+        - name: tx_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leaf:
+                    type: string
+                  pos:
+                    type: integer
+                  siblings:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        oneOf:
+                          - type: integer
+                          - type: string
+                  peaks:
+                    type: array
+                    items:
+                      type: string
+                  root:
+                    type: string
   /v1/verify-state:
     post:
       summary: Verify a state root
@@ -100,6 +140,8 @@ paths:
                 properties:
                   valid:
                     type: boolean
+                  mmr_root:
+                    type: string
   /v1/bitvm2/verify-state-root:
     post:
       summary: Verify a BitVM2 state root SNARK proof
@@ -202,6 +244,8 @@ paths:
             schema:
               type: object
               properties:
+                organization_id:
+                  type: string
                 developer_email:
                   type: string
                 project_name:
@@ -209,15 +253,6 @@ paths:
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  api_key:
-                    type: string
-                  status:
-                    type: string
   /v1/billing/telemetry/track-signature:
     post:
       summary: Track signature telemetry
@@ -232,20 +267,111 @@ paths:
                   type: string
                 signature_hash:
                   type: string
+                timestamp:
+                  type: integer
+                hmac:
+                  type: string
       responses:
         '200':
           description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  current_usage:
-                    type: integer
-                  limit:
-                    type: integer
-                  status:
-                    type: string
+  /v1/identity/resolve:
+    post:
+      summary: Resolve decentralized identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                protocol:
+                  type: string
+      responses:
+        '200':
+          description: OK
+  /v1/dlc/bond:
+    post:
+      summary: Create DLC bond
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bond_id:
+                  type: string
+                principal_sbtc:
+                  type: integer
+                expiry_height:
+                  type: integer
+                coupon_rate:
+                  type: number
+      responses:
+        '201':
+          description: Created
+  /v1/settlement/trigger:
+    post:
+      summary: Trigger external settlement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source:
+                  type: string
+                external_id:
+                  type: string
+                payload:
+                  type: object
+                attestation:
+                  type: string
+      responses:
+        '200':
+          description: OK
+  /v1/analytics/metrics:
+    get:
+      summary: Get analytics metrics
+      parameters:
+        - name: metric
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: asset
+          in: query
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/zkml/verify:
+    post:
+      summary: Verify ZKML proof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                proof:
+                  type: string
+                input_commitment:
+                  type: string
+                model_id:
+                  type: string
+      responses:
+        '200':
+          description: OK
 
 components:
   schemas:
