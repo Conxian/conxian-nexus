@@ -62,3 +62,12 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 - FSOC Sequencer now increments transaction metrics upon successful validation.
+
+## [0.4.4] - 2024-05-28
+
+### Added
+- **Enhanced Oracle Aggregation**: Implemented confidence interval weights and outlier rejection (10% threshold) for multi-source FX rate aggregation in `OracleAggregator`.
+- **Institutional Signal Verification**: Integrated cross-verification of external settlement signals (ISO 20022) against aggregated oracle rates with a 5% tolerance in `OracleService`.
+
+### Changed
+- **Updated PRD**: Synchronized `docs/PRD.md` with the latest functional enhancements and versioned to v0.4.4.

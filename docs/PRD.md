@@ -67,18 +67,18 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Integrate with a real BitVM prover/verifier library.
 
 ### 4.5 Oracle & Rebalancing
-- **Status**: **Historical FX Persistence**, **Dynamic LTV Rebalancing**, and **Multi-source Aggregated Oracle** Complete (v0.4.0).
+- **Status**: **Historical FX Persistence**, **Dynamic LTV Rebalancing**, and **Multi-source Aggregated Oracle** Complete (v0.4.0). **Enhanced (v0.4.4)**: Integrated confidence interval weights and outlier rejection for multi-source aggregation.
 - **Next Step**: Implement confidence interval weights for oracle sources.
 
 ### 4.6 Sovereign Infrastructure Migration (In Progress)
 - **Status**: **Kwil and Tableland Pilot Implementations Aligned (v0.4.2)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
-## 5. Mainnet Readiness Evidence Pack (v0.4.2)
+## 5. Mainnet Readiness Evidence Pack (v0.4.4)
 
 ### 5.1 Security & TEE (CON-162)
 - **External Triggers**: ISO 20022, PAPSS, and BRICS triggers are now wired into the execution flow.
-- **Verification Logic**: All external signals require valid TEE attestation and Oracle cross-verification before emitting a state proposal.
+- **Verification Logic**: All external signals require valid TEE attestation and Oracle cross-verification before emitting a state proposal. **Enhanced (v0.4.4)**: Cross-verification checks payload exchange rates against aggregated oracle rates with a 5% tolerance.
 - **Time-locks**: Verified triggers initiate a mandatory 144-block time-lock in the `settlement_proposals` table, preventing direct contract execution from TradFi payloads.
 
 ### 5.2 Hygiene & Contamination (CON-394/183)

@@ -18,7 +18,7 @@ struct ExchangeRateResponse {
 
 pub struct OracleAggregator {
     client: Client,
-    endpoint_urls: Vec<String>,
+    endpoints: Vec<(String, f64)>, // (url, weight)
     contract_principal: String,
 }
 
@@ -26,10 +26,10 @@ impl OracleAggregator {
     pub fn new(endpoint_url: String, contract_principal: String) -> Self {
         Self {
             client: Client::new(),
-            endpoint_urls: vec![
-                endpoint_url,
-                "https://open.er-api.com/v6/latest/USD".to_string(),
-                "https://api.exchangerate.host/latest?base=USD".to_string(),
+            endpoints: vec![
+                (endpoint_url, 0.5),
+                ("https://open.er-api.com/v6/latest/USD".to_string(), 0.25),
+                ("https://api.exchangerate.host/latest?base=USD".to_string(), 0.25),
             ],
             contract_principal,
         }
@@ -38,14 +38,14 @@ impl OracleAggregator {
     pub async fn fetch_universal_fx(
         &self,
     ) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
-        let mut all_rates: Vec<HashMap<String, f64>> = Vec::new();
+        let mut weighted_rates: Vec<(HashMap<String, f64>, f64)> = Vec::new();
 
-        for url in &self.endpoint_urls {
+        for (url, weight) in &self.endpoints {
             match self.client.get(url).send().await {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         if let Ok(data) = resp.json::<ExchangeRateResponse>().await {
-                            all_rates.push(data.rates);
+                            weighted_rates.push((data.rates, *weight));
                         }
                     }
                 }
@@ -53,27 +53,38 @@ impl OracleAggregator {
             }
         }
 
-        if all_rates.is_empty() {
+        if weighted_rates.is_empty() {
             tracing::error!("All Oracle endpoints failed. No rates available.");
             return Err("Oracle failure".into());
         }
 
         let mut aggregated_rates = HashMap::new();
-        let mut keys: std::collections::HashSet<String> = all_rates[0].keys().cloned().collect();
-        for r in &all_rates[1..] {
+        let mut keys: std::collections::HashSet<String> = weighted_rates[0].0.keys().cloned().collect();
+        for (r, _) in &weighted_rates[1..] {
             keys.extend(r.keys().cloned());
         }
 
         for key in keys {
-            let mut values: Vec<f64> = all_rates
+            let mut weighted_values: Vec<(f64, f64)> = weighted_rates
                 .iter()
-                .filter_map(|r| r.get(&key).copied())
+                .filter_map(|(r, w)| r.get(&key).map(|v| (*v, *w)))
                 .collect();
 
-            if !values.is_empty() {
-                values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                let median = values[values.len() / 2];
-                aggregated_rates.insert(key, median);
+            if !weighted_values.is_empty() {
+                // Reject outliers (values more than 10% from the weighted mean)
+                let total_weight: f64 = weighted_values.iter().map(|(_, w)| w).sum();
+                let weighted_mean: f64 = weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / total_weight;
+
+                weighted_values.retain(|(v, _)| {
+                    let diff = (v - weighted_mean).abs() / weighted_mean;
+                    diff < 0.1 // 10% threshold
+                });
+
+                if !weighted_values.is_empty() {
+                    let final_weight: f64 = weighted_values.iter().map(|(_, w)| w).sum();
+                    let final_weighted_mean: f64 = weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / final_weight;
+                    aggregated_rates.insert(key, final_weighted_mean);
+                }
             }
         }
 
