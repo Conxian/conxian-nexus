@@ -331,3 +331,112 @@ mod tests {
         assert!(payload.contains("state_root=root%7Cv1"));
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KwilSettlementProposalCommitment {
+    pub proposal_id: String,
+    pub external_id: String,
+    pub source: String,
+    pub payload: serde_json::Value,
+    pub status: String,
+    pub init_height: i64,
+    pub unlock_height: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct KwilSettlementLogCommitment {
+    pub external_tx_reference: String,
+    pub settlement_network_origin: String,
+    pub fiat_value_pegged: Option<f64>,
+    pub raw_payload: serde_json::Value,
+}
+
+impl KwilAdapter {
+    /// [CON-162] Pilot: Persist settlement proposal to Kwil.
+    pub async fn persist_settlement_proposal(
+        &self,
+        proposal: KwilSettlementProposalCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
+        let created_at = Utc::now().to_rfc3339();
+        let payload = format!(
+            "nexus:kwil:settlement_proposal:v1|proposal_id={}|external_id={}|source={}|status={}|init_height={}|unlock_height={}|created_at={}",
+            encode_payload_value(&proposal.proposal_id),
+            encode_payload_value(&proposal.external_id),
+            encode_payload_value(&proposal.source),
+            encode_payload_value(&proposal.status),
+            proposal.init_height,
+            proposal.unlock_height,
+            encode_payload_value(&created_at)
+        );
+        let signature = self.wallet.sign(&payload);
+
+        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
+
+        let params = serde_json::json!({
+            "proposal_id": proposal.proposal_id,
+            "external_id": proposal.external_id,
+            "source": proposal.source,
+            "payload": proposal.payload,
+            "status": proposal.status,
+            "init_height": proposal.init_height,
+            "unlock_height": proposal.unlock_height,
+            "created_at": created_at,
+        });
+
+        let response = self.client
+            .post(&url)
+            .json(&KwilExecuteRequest {
+                db_id: self.db_id.clone(),
+                action: "insert_settlement_proposal".to_string(),
+                params,
+                payload: payload.clone(),
+                signature: signature.clone(),
+            })
+            .send()
+            .await
+            .context("Failed to send settlement proposal request to Kwil")?;
+
+        self.handle_response(response, signature).await
+    }
+
+    /// [CON-164] Pilot: Persist settlement log to Kwil.
+    pub async fn persist_settlement_log(
+        &self,
+        log: KwilSettlementLogCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
+        let created_at = Utc::now().to_rfc3339();
+        let payload = format!(
+            "nexus:kwil:settlement_log:v1|external_tx_reference={}|source={}|fiat_value={:?}|created_at={}",
+            encode_payload_value(&log.external_tx_reference),
+            encode_payload_value(&log.settlement_network_origin),
+            log.fiat_value_pegged,
+            encode_payload_value(&created_at)
+        );
+        let signature = self.wallet.sign(&payload);
+
+        let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
+
+        let params = serde_json::json!({
+            "external_tx_reference": log.external_tx_reference,
+            "settlement_network_origin": log.settlement_network_origin,
+            "fiat_value_pegged": log.fiat_value_pegged,
+            "raw_payload": log.raw_payload,
+            "created_at": created_at,
+        });
+
+        let response = self.client
+            .post(&url)
+            .json(&KwilExecuteRequest {
+                db_id: self.db_id.clone(),
+                action: "insert_settlement_log".to_string(),
+                params,
+                payload: payload.clone(),
+                signature: signature.clone(),
+            })
+            .send()
+            .await
+            .context("Failed to send settlement log request to Kwil")?;
+
+        self.handle_response(response, signature).await
+    }
+}

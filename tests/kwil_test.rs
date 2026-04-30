@@ -1,6 +1,6 @@
 use conxian_nexus::storage::kwil::{
     canonical_block_payload, canonical_state_root_payload, canonical_mmr_node_payload, KwilAdapter, KwilBlockCommitment,
-    KwilConfig, KwilStateRootCommitment, KwilMmrNodeCommitment,
+    KwilConfig, KwilStateRootCommitment, KwilMmrNodeCommitment, KwilSettlementProposalCommitment, KwilSettlementLogCommitment,
 };
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
@@ -110,6 +110,59 @@ async fn test_kwil_mmr_node_persistence_pilot_signed() -> anyhow::Result<()> {
 
     let err_msg = err.to_string().to_ascii_lowercase();
     assert!(err_msg.contains("failed to send mmr node request") || err_msg.contains("connect"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_kwil_settlement_proposal_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage()?;
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
+
+    let proposal = KwilSettlementProposalCommitment {
+        proposal_id: "prop_123".to_string(),
+        external_id: "ext_123".to_string(),
+        source: "ISO20022".to_string(),
+        payload: serde_json::json!({"amount": 100}),
+        status: "active".to_string(),
+        init_height: 100,
+        unlock_height: 244,
+    };
+
+    // Since we don't have a live Kwil node, we expect a connection error
+    let err = adapter
+        .persist_settlement_proposal(proposal)
+        .await
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send settlement proposal request") || err_msg.contains("connect"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_kwil_settlement_log_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage()?;
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
+
+    let log = KwilSettlementLogCommitment {
+        external_tx_reference: "ref_123".to_string(),
+        settlement_network_origin: "PAPSS".to_string(),
+        fiat_value_pegged: Some(123.45),
+        raw_payload: serde_json::json!({"test": "data"}),
+    };
+
+    // Since we don't have a live Kwil node, we expect a connection error
+    let err = adapter
+        .persist_settlement_log(log)
+        .await
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send settlement log request") || err_msg.contains("connect"));
 
     Ok(())
 }

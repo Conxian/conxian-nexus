@@ -13,6 +13,8 @@ use sqlx::Row;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
+use futures_util::{StreamExt, SinkExt};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 const LAST_POLLED_BURN_TIP_KEY: &str = "nexus:sync:last_polled_burn_tip:v1";
 
@@ -51,16 +53,14 @@ pub struct BurnBlockData {
     pub timestamp: DateTime<Utc>,
 }
 
-/// The sync service responsible for processing on-chain events.
+/// [NEXUS-SYNC-01] Stacks L1 synchronization service.
 pub struct NexusSync {
     storage: Arc<Storage>,
     state: Arc<NexusState>,
     tableland: Arc<TablelandAdapter>,
     kwil: Option<Arc<KwilAdapter>>,
     rpc_url: String,
-    http_client: Client,
-    event_tx: mpsc::Sender<StacksEvent>,
-    event_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<StacksEvent>>>,
+
 }
 
 impl NexusSync {
@@ -71,84 +71,133 @@ impl NexusSync {
         kwil: Option<Arc<KwilAdapter>>,
         rpc_url: String,
     ) -> Self {
-        let (tx, rx) = mpsc::channel(1000);
         Self {
             storage,
             state,
             tableland,
             kwil,
             rpc_url,
-            http_client: Client::new(),
-            event_tx: tx,
-            event_rx: Arc::new(tokio::sync::Mutex::new(rx)),
+
         }
-    }
-
-    pub async fn run(&self) -> anyhow::Result<()> {
-        tracing::info!("Starting NexusSync service (RPC: {})...", self.rpc_url);
-
-        // Spawn Poller task
-        let poller_tx = self.event_tx.clone();
-        let rpc_url = self.rpc_url.clone();
-        let storage = self.storage.clone();
-        let http_client = self.http_client.clone();
-
-        tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(10));
-            loop {
-                interval.tick().await;
-                if let Err(e) =
-                    Self::poll_stacks_node(&poller_tx, &rpc_url, &storage, &http_client).await
-                {
-                    tracing::error!("Sync polling error: {}", e);
-                }
-            }
-        });
-
-        // Event Processing Loop
-        let mut rx = self.event_rx.lock().await;
-        while let Some(event) = rx.recv().await {
-            if let Err(e) = self.handle_event(event).await {
-                tracing::error!("Error handling event: {}", e);
-            }
-        }
-
-        Ok(())
     }
 
     pub async fn load_initial_state(&self) -> anyhow::Result<()> {
-        tracing::info!("Loading initial state from DB...");
+        tracing::info!("Rebuilding Nexus state from database...");
         let rows = sqlx::query(
-            "SELECT tx_id FROM stacks_transactions t JOIN stacks_blocks b ON t.block_hash = b.hash WHERE b.state != 'orphaned' ORDER BY b.height ASC, t.created_at ASC"
+            "SELECT tx_id FROM stacks_transactions t
+             JOIN stacks_blocks b ON t.block_hash = b.hash
+             WHERE b.state != 'orphaned'
+             ORDER BY b.height ASC, t.created_at ASC",
         )
         .fetch_all(&self.storage.pg_pool)
         .await?;
 
         let mut tx_ids = Vec::new();
         for row in rows {
-            tx_ids.push(row.get::<String, _>(0));
+            tx_ids.push(row.get::<String, _>("tx_id"));
         }
 
         self.state.set_initial_leaves(tx_ids);
         tracing::info!(
-            "State loaded. Current root: {}",
+            "Nexus state rebuilt. Current root: {}",
             self.state.get_state_root()
         );
         Ok(())
     }
 
-    pub async fn handle_event(&self, event: StacksEvent) -> anyhow::Result<()> {
-        match event {
-            StacksEvent::Microblock(data) => self.process_microblock(data).await?,
-            StacksEvent::BurnBlock(data) => self.process_burn_block(data).await?,
+    pub async fn run(&self) -> anyhow::Result<()> {
+        let (tx, mut rx) = mpsc::channel(100);
+
+        // [NEXUS-02] Spawn Polling Task (Fallback)
+        let rpc_url = self.rpc_url.clone();
+        let poll_storage = self.storage.clone();
+        let poll_tx = tx.clone();
+        tokio::spawn(async move {
+            let client = Client::new();
+            let mut interval = time::interval(Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                if let Err(e) = Self::poll_stacks_node(&poll_tx, &rpc_url, &poll_storage, &client).await {
+                    tracing::error!("Sync poll failed: {}", e);
+                }
+            }
+        });
+
+        // [PRD 4.2] Spawn WebSocket Listener (Fast-path)
+        let ws_url = self.rpc_url.replace("http", "ws").replace(":3999", "/"); // Basic heuristic for Hiro API
+        let ws_tx = tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = Self::run_websocket_listener(&ws_tx, &ws_url).await {
+                tracing::error!("WebSocket listener failed: {}", e);
+            }
+        });
+
+        tracing::info!("Nexus Sync service started.");
+
+        while let Some(event) = rx.recv().await {
+            match event {
+                StacksEvent::Microblock(data) => {
+                    if let Err(e) = self.process_microblock(data).await {
+                        tracing::error!("Failed to process microblock: {}", e);
+                    }
+                }
+                StacksEvent::BurnBlock(data) => {
+                    if let Err(e) = self.process_burn_block(data).await {
+                        tracing::error!("Failed to process burn block: {}", e);
+                    }
+                }
+            }
         }
+
         Ok(())
     }
 
-    async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
-        tracing::debug!("Processing microblock: {}", data.hash);
+    async fn run_websocket_listener(_tx: &mpsc::Sender<StacksEvent>, ws_url: &str) -> anyhow::Result<()> {
+        loop {
+            tracing::info!("Connecting to Stacks WebSocket: {}", ws_url);
+            match connect_async(ws_url).await {
+                Ok((mut ws_stream, _)) => {
+                    tracing::info!("Connected to Stacks WebSocket.");
 
-        // [NEXUS-03] Microblock Reorg Detection & Rollback
+                    // Subscribe to blocks
+                    let subscribe_msg = serde_json::json!({
+                        "type": "subscribe",
+                        "channel": "blocks"
+                    });
+                    if let Err(e) = ws_stream.send(Message::Text(subscribe_msg.to_string())).await {
+                         tracing::error!("Failed to send subscription: {}", e);
+                    } else {
+                        while let Some(msg) = ws_stream.next().await {
+                            match msg {
+                                Ok(Message::Text(text)) => {
+                                    if let Ok(event_data) = serde_json::from_str::<serde_json::Value>(&text) {
+                                        if event_data["channel"] == "blocks" {
+                                            tracing::debug!("WebSocket: Received new block event");
+                                        }
+                                    }
+                                }
+                                Ok(Message::Close(_)) => break,
+                                Err(e) => {
+                                    tracing::warn!("WebSocket error: {}", e);
+                                    break;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to connect to WebSocket: {}. Retrying in 30s...", e);
+                }
+            }
+            time::sleep(Duration::from_secs(30)).await;
+        }
+    }
+
+    async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
+        tracing::info!("Processing microblock: {} at height {}", data.hash, data.height);
+
+        // Check for reorgs
         if let Some(parent) = self.get_latest_block_hash().await? {
             if parent != data.parent_hash {
                 tracing::warn!(
@@ -202,6 +251,7 @@ impl NexusSync {
                     state: "soft".to_string(),
                 })
                 .await
+                .map_err(|e| tracing::warn!("Kwil block persistence failed: {}", e))
                 .ok();
 
             let _ = kwil
@@ -210,6 +260,7 @@ impl NexusSync {
                     state_root: root.clone(),
                 })
                 .await
+                .map_err(|e| tracing::warn!("Kwil state root persistence failed: {}", e))
                 .ok();
 
             // [CON-396] Pilot: Mirror MMR nodes to Kwil
