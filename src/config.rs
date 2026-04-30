@@ -35,6 +35,7 @@ pub struct Config {
     pub rest_port: u16,
     pub grpc_port: u16,
     pub stacks_node_rpc_url: String,
+    pub stacks_node_ws_url: String,
     pub gateway_url: Option<String>,
     pub experimental_apis_enabled: bool,
     pub oracle_enabled: bool,
@@ -63,6 +64,7 @@ impl std::fmt::Debug for Config {
             .field("rest_port", &self.rest_port)
             .field("grpc_port", &self.grpc_port)
             .field("stacks_node_rpc_url", &self.stacks_node_rpc_url)
+            .field("stacks_node_ws_url", &self.stacks_node_ws_url)
             .field("gateway_url", &self.gateway_url)
             .field("experimental_apis_enabled", &self.experimental_apis_enabled)
             .field("oracle_enabled", &self.oracle_enabled)
@@ -81,6 +83,7 @@ impl Config {
             rest_port: 3000,
             grpc_port: 50051,
             stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            stacks_node_ws_url: "wss://api.mainnet.hiro.so/".to_string(),
             gateway_url: None,
             experimental_apis_enabled: true,
             nostr_secret_key: None,
@@ -194,6 +197,8 @@ impl Config {
         };
 
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
+        let stacks_node_ws_url = env::var("STACKS_NODE_WS_URL")
+            .unwrap_or_else(|_| "wss://api.mainnet.hiro.so/".to_string());
         let oracle_enabled = env_flag(ENV_ORACLE_ENABLED);
         let oracle_stub_ok = env_flag(ENV_ORACLE_STUB_OK);
         let oracle_endpoint_url = env::var(ENV_ORACLE_ENDPOINT_URL)
@@ -278,6 +283,7 @@ impl Config {
                 .parse()
                 .context("Invalid GRPC_PORT (expected u16)")?,
             stacks_node_rpc_url,
+            stacks_node_ws_url,
             gateway_url: env::var("GATEWAY_URL")
                 .ok()
                 .map(|s| s.trim().to_string())

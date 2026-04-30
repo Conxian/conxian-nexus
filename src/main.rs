@@ -118,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
         tableland.clone(),
         kwil.clone(),
         config.stacks_node_rpc_url.clone(),
+        config.stacks_node_ws_url.clone(),
     ));
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),

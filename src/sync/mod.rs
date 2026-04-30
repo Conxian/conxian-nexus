@@ -60,6 +60,7 @@ pub struct NexusSync {
     tableland: Arc<TablelandAdapter>,
     kwil: Option<Arc<KwilAdapter>>,
     rpc_url: String,
+    ws_url: String,
 
 }
 
@@ -70,6 +71,7 @@ impl NexusSync {
         tableland: Arc<TablelandAdapter>,
         kwil: Option<Arc<KwilAdapter>>,
         rpc_url: String,
+    ws_url: String,
     ) -> Self {
         Self {
             storage,
@@ -77,7 +79,7 @@ impl NexusSync {
             tableland,
             kwil,
             rpc_url,
-
+            ws_url,
         }
     }
 
@@ -124,7 +126,7 @@ impl NexusSync {
         });
 
         // [PRD 4.2] Spawn WebSocket Listener (Fast-path)
-        let ws_url = self.rpc_url.replace("http", "ws").replace(":3999", "/"); // Basic heuristic for Hiro API
+        let ws_url = self.ws_url.clone();
         let ws_tx = tx.clone();
         tokio::spawn(async move {
             if let Err(e) = Self::run_websocket_listener(&ws_tx, &ws_url).await {
