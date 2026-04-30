@@ -2,7 +2,7 @@
 //! maintaining a local representation of the Stacks L1 state.
 
 use crate::state::NexusState;
-use crate::storage::kwil::{KwilAdapter, KwilBlockCommitment, KwilStateRootCommitment};
+use crate::storage::kwil::{KwilAdapter, KwilBlockCommitment, KwilStateRootCommitment, KwilMmrNodeCommitment};
 use crate::storage::tableland::{TablelandAdapter, TablelandStateCommitment};
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
@@ -211,6 +211,17 @@ impl NexusSync {
                 })
                 .await
                 .ok();
+
+            // [CON-396] Pilot: Mirror MMR nodes to Kwil
+            let mmr_commitments: Vec<KwilMmrNodeCommitment> = added_nodes
+                .iter()
+                .map(|(pos, hash)| KwilMmrNodeCommitment {
+                    pos: *pos,
+                    hash: hex::encode(hash),
+                    block_height: data.height,
+                })
+                .collect();
+            let _ = kwil.persist_mmr_nodes(mmr_commitments).await.map_err(|e| tracing::warn!("Kwil MMR node persistence failed: {}", e)).ok();
         }
 
         Ok(())

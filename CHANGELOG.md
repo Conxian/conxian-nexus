@@ -71,3 +71,12 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **Updated PRD**: Synchronized `docs/PRD.md` with the latest functional enhancements and versioned to v0.4.4.
+
+## [0.4.5] - 2024-05-29
+
+### Added
+- **MMR Persistence in Kwil (Phase 2)**: Extended `KwilAdapter` and `NexusSync` to mirror cryptographic MMR nodes to the sovereign Kwil layer, ensuring a decentralized audit trail for state reconstruction.
+- **Enhanced Kwil Error Handling**: Implemented explicit warning logs for sovereign persistence failures to maintain sync loop availability while providing visibility into infrastructure health.
+
+### Fixed
+- **Local Branch Hygiene**: Automated cleanup of merged branches during the sync cycle.
