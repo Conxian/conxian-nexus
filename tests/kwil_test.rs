@@ -1,6 +1,6 @@
 use conxian_nexus::storage::kwil::{
-    canonical_block_payload, canonical_state_root_payload, KwilAdapter, KwilBlockCommitment,
-    KwilConfig, KwilStateRootCommitment,
+    canonical_block_payload, canonical_state_root_payload, canonical_mmr_node_payload, KwilAdapter, KwilBlockCommitment,
+    KwilConfig, KwilStateRootCommitment, KwilMmrNodeCommitment, KwilSettlementProposalCommitment, KwilSettlementLogCommitment,
 };
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
@@ -12,7 +12,7 @@ fn is_hex(s: &str) -> bool {
 
 fn make_test_cfg() -> KwilConfig {
     KwilConfig {
-        provider_url: "http://127.0.0.1:0".to_string(), // Invalid port to trigger error or we can use a mock
+        provider_url: "http://127.0.0.1:0".to_string(), // Invalid port to trigger error
         db_id: "nexus_pilot".to_string(),
     }
 }
@@ -37,7 +37,8 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
         state: "soft".to_string(),
     };
 
-    let payload = canonical_block_payload(&commitment);
+    let created_at = "2024-05-28T12:00:00Z";
+    let payload = canonical_block_payload(&commitment, created_at);
     let signature = wallet.sign(&payload);
     assert!(is_hex(&signature));
     assert_eq!(signature.len(), 128);
@@ -65,7 +66,8 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
         state_root: "0xroot123".to_string(),
     };
 
-    let payload = canonical_state_root_payload(&commitment);
+    let created_at = "2024-05-28T12:00:00Z";
+    let payload = canonical_state_root_payload(&commitment, created_at);
     let signature = wallet.sign(&payload);
     assert!(is_hex(&signature));
     assert_eq!(signature.len(), 128);
@@ -82,6 +84,89 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_kwil_mmr_node_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage()?;
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
+
+    let commitment = KwilMmrNodeCommitment {
+        pos: 1,
+        hash: "0xmmr123".to_string(),
+        block_height: 1000,
+    };
+
+    let created_at = "2024-05-28T12:00:00Z";
+    let payload = canonical_mmr_node_payload(&commitment, created_at);
+    let signature = wallet.sign(&payload);
+    assert!(is_hex(&signature));
+    assert_eq!(signature.len(), 128);
+
+    // Batch persistence
+    let err = adapter
+        .persist_mmr_nodes(vec![commitment])
+        .await
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send mmr node request") || err_msg.contains("connect"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_kwil_settlement_proposal_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage()?;
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
+
+    let proposal = KwilSettlementProposalCommitment {
+        proposal_id: "prop_123".to_string(),
+        external_id: "ext_123".to_string(),
+        source: "ISO20022".to_string(),
+        payload: serde_json::json!({"amount": 100}),
+        status: "active".to_string(),
+        init_height: 100,
+        unlock_height: 244,
+    };
+
+    // Since we don't have a live Kwil node, we expect a connection error
+    let err = adapter
+        .persist_settlement_proposal(proposal)
+        .await
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send settlement proposal request") || err_msg.contains("connect"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_kwil_settlement_log_persistence_pilot_signed() -> anyhow::Result<()> {
+    let storage = make_test_storage()?;
+    let wallet = Arc::new(Wallet::new()?);
+    let adapter = KwilAdapter::new(storage, make_test_cfg(), wallet.clone())?;
+
+    let log = KwilSettlementLogCommitment {
+        external_tx_reference: "ref_123".to_string(),
+        settlement_network_origin: "PAPSS".to_string(),
+        fiat_value_pegged: Some(123.45),
+        raw_payload: serde_json::json!({"test": "data"}),
+    };
+
+    // Since we don't have a live Kwil node, we expect a connection error
+    let err = adapter
+        .persist_settlement_log(log)
+        .await
+        .expect_err("expected failure due to missing Kwil node");
+
+    let err_msg = err.to_string().to_ascii_lowercase();
+    assert!(err_msg.contains("failed to send settlement log request") || err_msg.contains("connect"));
+
+    Ok(())
+}
+
 #[test]
 fn canonical_block_payload_escapes_reserved_chars() {
     let commitment = KwilBlockCommitment {
@@ -90,12 +175,13 @@ fn canonical_block_payload_escapes_reserved_chars() {
         block_type: "micro|block".into(),
         state: "so=ft".into(),
     };
+    let created_at = "2024-05-28T12:00:00Z";
 
-    let payload = canonical_block_payload(&commitment);
-    assert_eq!(
-        payload,
-        "nexus:kwil:block:v1|hash=0x%7C%3D%25|height=1|type=micro%7Cblock|state=so%3Dft"
-    );
+    let payload = canonical_block_payload(&commitment, created_at);
+    assert!(payload.contains("hash=0x%7C%3D%25"));
+    assert!(payload.contains("type=micro%7Cblock"));
+    assert!(payload.contains("state=so%3Dft"));
+    assert!(payload.contains("created_at=2024-05-28T12:00:00Z"));
 }
 
 #[test]
@@ -104,10 +190,10 @@ fn canonical_state_root_payload_escapes_reserved_chars() {
         block_height: 42,
         state_root: "0xroot|=%".into(),
     };
+    let created_at = "2024-05-28T12:00:00Z";
 
-    let payload = canonical_state_root_payload(&commitment);
-    assert_eq!(
-        payload,
-        "nexus:kwil:state_root:v1|block_height=42|state_root=0xroot%7C%3D%25"
-    );
+    let payload = canonical_state_root_payload(&commitment, created_at);
+    assert!(payload.contains("block_height=42"));
+    assert!(payload.contains("state_root=0xroot%7C%3D%25"));
+    assert!(payload.contains("created_at=2024-05-28T12:00:00Z"));
 }

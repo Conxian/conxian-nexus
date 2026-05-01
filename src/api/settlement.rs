@@ -7,6 +7,7 @@ use crate::api::rest::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
+use crate::storage::kwil::{KwilSettlementProposalCommitment, KwilSettlementLogCommitment};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -98,16 +99,27 @@ pub async fn settlement_trigger_handler(
     let uetr = payload.payload.get("uetr").and_then(|v| v.as_str());
     let e2e_id = payload.payload.get("end_to_end_id").and_then(|v| v.as_str());
 
+    let external_tx_ref = uetr.or(e2e_id).unwrap_or(&payload.external_id).to_string();
     let _ = sqlx::query(
         "INSERT INTO cxn_external_settlement_logs (external_tx_reference, settlement_network_origin, fiat_value_pegged, raw_payload)
          VALUES ($1, $2, $3, $4)"
     )
-    .bind(uetr.or(e2e_id).unwrap_or(&payload.external_id))
+    .bind(&external_tx_ref)
     .bind(&payload.source)
     .bind(fiat_value)
     .bind(&payload.payload)
     .execute(&state.storage.pg_pool)
     .await;
+
+    // [CON-330] Pilot: Mirror settlement log to Kwil
+    if let Some(kwil) = &state.kwil {
+        let _ = kwil.persist_settlement_log(KwilSettlementLogCommitment {
+            external_tx_reference: external_tx_ref,
+            settlement_network_origin: payload.source.clone(),
+            fiat_value_pegged: fiat_value,
+            raw_payload: payload.payload.clone(),
+        }).await.map_err(|e| tracing::warn!("Kwil settlement log persistence failed: {}", e)).ok();
+    }
 
     // 4. Get current block height to calculate time-lock
     let row_res = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
@@ -135,6 +147,19 @@ pub async fn settlement_trigger_handler(
     .bind(unlock_height as i64)
     .execute(&state.storage.pg_pool)
     .await;
+
+    // [CON-330] Pilot: Mirror settlement proposal to Kwil
+    if let Some(kwil) = &state.kwil {
+        let _ = kwil.persist_settlement_proposal(KwilSettlementProposalCommitment {
+            proposal_id: proposal_id.clone(),
+            external_id: payload.external_id.clone(),
+            source: payload.source.clone(),
+            payload: payload.payload.clone(),
+            status: "active".to_string(),
+            init_height: current_height,
+            unlock_height: unlock_height as i64,
+        }).await.map_err(|e| tracing::warn!("Kwil settlement proposal persistence failed: {}", e)).ok();
+    }
 
     match res {
         Ok(_) => {

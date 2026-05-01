@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env()?;
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.4)...");
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.5)...");
 
     // Initialize Global Start Time
     api::init_start_time();
@@ -118,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
         tableland.clone(),
         kwil.clone(),
         config.stacks_node_rpc_url.clone(),
+        config.stacks_node_ws_url.clone(),
     ));
     let safety_service = Arc::new(NexusSafety::new(
         storage.clone(),

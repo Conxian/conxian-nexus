@@ -24,11 +24,15 @@ This document serves as the canonical evidence pack for the Nexus repository rea
 - **Status**: ✅ **VERIFIED**
 
 ## 5. Persistence & Finality [NEXUS-03]
+- **Finding**: Real-time sync ingestion via WebSocket enabled.
+- **Evidence**: `NexusSync` connects to Hiro API WebSocket for fast-path block updates.
 - **Finding**: Microblock reorg detection and MMR persistence are fully implemented.
 - **Evidence**: `NexusSync` handles automated rollback to burn-block tip; MMR peaks and nodes are persisted in PostgreSQL.
 - **Status**: ✅ **VERIFIED**
 
 ## 6. Sovereign Sharding Persistence [CON-69]
+- **Finding**: Phase 2/3 of Sovereign SQL Migration complete.
+- **Evidence**: `mmr_nodes`, `settlement_proposals`, and `settlement_logs` are mirrored to Kwil with cryptographic signatures.
 - **Finding**: Implemented decentralized RELATIONAL state persistence via Tableland.
 - **Evidence**: `src/storage/tableland.rs` implements `TablelandAdapter` with REST-based state commitment to decentralized tables.
 - **Status**: ✅ **VERIFIED**
