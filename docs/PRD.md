@@ -74,7 +74,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Status**: **Kwil and Tableland Pilot Implementations Aligned (v0.4.2)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
-## 5. Mainnet Readiness Evidence Pack (v0.4.6)
+## 5. Mainnet Readiness Evidence Pack (v0.4.7)
 
 ### 5.1 Security & TEE (CON-162)
 - **External Triggers**: ISO 20022, PAPSS, and BRICS triggers are now wired into the execution flow.

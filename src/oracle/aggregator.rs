@@ -8,6 +8,7 @@ pub struct PppState {
     pub base_currency: String,
     pub rates: HashMap<String, f64>,
     pub ppp_indices: HashMap<String, f64>,
+    pub confidence_intervals: HashMap<String, f64>,
     pub timestamp: u64,
 }
 
@@ -103,6 +104,7 @@ impl OracleAggregator {
             base_currency: "USD".to_string(),
             rates: aggregated_rates,
             ppp_indices,
+            confidence_intervals: HashMap::new(),
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| anyhow::anyhow!("Time failure: {}", e))?

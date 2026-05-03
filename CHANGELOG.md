@@ -88,3 +88,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **Repository Hygiene**: Removed legacy automation scripts (`update_main_v3.py`) from the repository root.
+
+## [0.4.7] - 2024-06-01
+
+### Added
+- **MMR Cryptographic Hardening**: Added comprehensive unit tests for large MMR tree positions and peak calculation formulas, verifying (\log N)$ performance and correctness.
+- **Enhanced Sovereign Stack Alignment**: Verified consistent application of ISO-8601 timestamps and delimiter-safe encoding for all Kwil and Tableland state commitments.
+
+### Changed
+- **Dependency Audit**: Updated project dependencies to latest compatible versions via `cargo update`, resolving version drift in core crates.
+- **Mainnet Boundary Validation**: Confirmed zero contamination of testnet addresses or placeholders in production paths using `check_production_boundary.sh`.
+- **Version Alignment**: Bumped project version to v0.4.7 across all governance and configuration files.
+
+### Fixed
+- **Repository Hygiene**: Refined `.gitignore` and `.dockerignore` to ensure all non-source artifacts and local configuration are strictly excluded.
