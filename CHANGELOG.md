@@ -80,3 +80,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **Local Branch Hygiene**: Automated cleanup of merged branches during the sync cycle.
+
+## [0.4.6] - 2024-05-30
+
+### Fixed
+- **Oracle Persistence Logic**: Corrected a critical SQL syntax error in `OracleService` where placeholders and columns were misaligned during FX rate persistence.
+
+### Changed
+- **Repository Hygiene**: Removed legacy automation scripts (`update_main_v3.py`) from the repository root.
