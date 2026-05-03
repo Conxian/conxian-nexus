@@ -603,3 +603,40 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod mmr_extra_tests {
+    use super::*;
+
+    #[test]
+    fn test_large_mmr_tree_positions() {
+        // Test positions for leaf index 0 to 15
+        let expected_positions = vec![0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26];
+        for i in 0..16 {
+            assert_eq!(get_mmr_node_pos(i as u64), expected_positions[i]);
+        }
+    }
+
+    #[test]
+    fn test_mmr_peaks_calculation() {
+        // 7 leaves -> peaks at positions 2, 5, 6
+        // Actually, let's trace:
+        // L0, L1 -> P2
+        // L3, L4 -> P5
+        // P2, P5 -> P6
+        // L7 -> P7
+        // Wait, 7 leaves:
+        // leaf_count = 7 (111 in binary)
+        // peaks at height 2 (4 leaves), 1 (2 leaves), 0 (1 leaf)
+        // h=2: size=7. Peak at 6.
+        // h=1: size=3. Peak at 6 + 3 = 10.
+        // h=0: size=1. Peak at 10 + 1 = 11.
+        // So peaks are [6, 10, 11] for 7 leaves?
+        // Let's check get_mmr_peaks(7):
+        // 1. leaf_count=7, h=2, full_size=7, peak=6, offset=7, leaf_count=3
+        // 2. leaf_count=3, h=1, full_size=3, peak=7+2=9, offset=10, leaf_count=1
+        // 3. leaf_count=1, h=0, full_size=1, peak=10+0=10, offset=11, leaf_count=0
+        // Result: [6, 9, 10]
+        assert_eq!(get_mmr_peaks(7), vec![6, 9, 10]);
+    }
+}

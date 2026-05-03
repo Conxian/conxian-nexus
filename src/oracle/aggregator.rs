@@ -8,6 +8,7 @@ pub struct PppState {
     pub base_currency: String,
     pub rates: HashMap<String, f64>,
     pub ppp_indices: HashMap<String, f64>,
+    pub confidence_intervals: HashMap<String, f64>,
     pub timestamp: u64,
 }
 
@@ -59,6 +60,7 @@ impl OracleAggregator {
         }
 
         let mut aggregated_rates = HashMap::new();
+        let mut confidence_intervals = HashMap::new();
         let mut keys: std::collections::HashSet<String> = weighted_rates[0].0.keys().cloned().collect();
         for (r, _) in &weighted_rates[1..] {
             keys.extend(r.keys().cloned());
@@ -83,7 +85,19 @@ impl OracleAggregator {
                 if !weighted_values.is_empty() {
                     let final_weight: f64 = weighted_values.iter().map(|(_, w)| w).sum();
                     let final_weighted_mean: f64 = weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / final_weight;
-                    aggregated_rates.insert(key, final_weighted_mean);
+                    aggregated_rates.insert(key.clone(), final_weighted_mean);
+
+                    // Calculate a simple confidence interval (relative standard deviation)
+                    if weighted_values.len() > 1 {
+                        let variance: f64 = weighted_values.iter()
+                            .map(|(v, w)| w * (v - final_weighted_mean).powi(2))
+                            .sum::<f64>() / final_weight;
+                        let std_dev = variance.sqrt();
+                        let confidence = 1.0 - (std_dev / final_weighted_mean).min(1.0);
+                        confidence_intervals.insert(key, confidence);
+                    } else {
+                        confidence_intervals.insert(key, 0.5); // Low confidence for single source
+                    }
                 }
             }
         }
@@ -103,6 +117,7 @@ impl OracleAggregator {
             base_currency: "USD".to_string(),
             rates: aggregated_rates,
             ppp_indices,
+            confidence_intervals,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| anyhow::anyhow!("Time failure: {}", e))?

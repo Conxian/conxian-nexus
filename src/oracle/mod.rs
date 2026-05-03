@@ -38,10 +38,11 @@ impl OracleService {
     }
 
     async fn persist_fx_state(&self, state: &PppState) -> anyhow::Result<()> {
-        sqlx::query("INSERT INTO oracle_fx_history (base_currency, rates, ppp_indices, timestamp) VALUES ($1, $2, $3, $4)")
+        sqlx::query("INSERT INTO oracle_fx_history (base_currency, rates, ppp_indices, confidence_intervals, timestamp) VALUES ($1, $2, $3, $4, $5)")
             .bind(&state.base_currency)
             .bind(serde_json::to_value(&state.rates)?)
             .bind(serde_json::to_value(&state.ppp_indices)?)
+            .bind(serde_json::to_value(&state.confidence_intervals)?)
             .bind(state.timestamp as i64)
             .execute(&self.storage.pg_pool)
             .await?;
