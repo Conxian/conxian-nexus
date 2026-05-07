@@ -251,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_kwil = kwil.clone();
     let rest_nostr = nostr.clone();
     let rest_port = config.rest_port;
-    let experimental_apis_enabled = config.experimental_apis_enabled;
+    let rest_config = Arc::new(config.clone());
     let rest_handle = tokio::spawn(async move {
         if let Err(e) = api::rest::start_rest_server(
             rest_storage,
@@ -262,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
             rest_kwil,
             rest_nostr,
             rest_port,
-            experimental_apis_enabled,
+            rest_config,
         )
         .await
         {

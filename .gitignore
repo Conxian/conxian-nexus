@@ -35,5 +35,14 @@ full_audit_dump.txt
 *dump.txt
 *audit*.txt
 
+# Security and Credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.csr
+*.p7b
+
 # Submodules
 lib-conxian-core/target/

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 
 pub const ENV_EXPERIMENTAL_APIS: &str = "NEXUS_EXPERIMENTAL_APIS";
@@ -7,6 +8,7 @@ pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
 pub const ENV_ALLOW_DEFAULT_DB: &str = "NEXUS_ALLOW_DEFAULT_DB";
 pub const ENV_ALLOW_DEFAULT_REDIS: &str = "NEXUS_ALLOW_DEFAULT_REDIS";
+pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 
 const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
 const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
@@ -22,7 +24,7 @@ pub(crate) fn parse_flag(value: &str) -> bool {
     )
 }
 
-#[derive(Clone)]
+#[derive(Clone, serde::Deserialize)]
 pub struct Config {
     pub nostr_secret_key: Option<String>,
     pub nostr_relays: Vec<String>,
@@ -42,6 +44,7 @@ pub struct Config {
     pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
+    pub erp_attestation_trusted_keys: Option<HashMap<String, String>>,
 }
 
 impl std::fmt::Debug for Config {
@@ -71,6 +74,10 @@ impl std::fmt::Debug for Config {
             .field("oracle_stub_ok", &self.oracle_stub_ok)
             .field("oracle_endpoint_url", &self.oracle_endpoint_url)
             .field("oracle_contract_principal", &self.oracle_contract_principal)
+            .field(
+                "erp_attestation_trusted_keys",
+                &self.erp_attestation_trusted_keys.as_ref().map(|_| "<redacted>"),
+            )
             .finish()
     }
 }
@@ -96,6 +103,7 @@ impl Config {
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
             oracle_contract_principal: None,
+            erp_attestation_trusted_keys: None,
         }
     }
 
@@ -245,6 +253,18 @@ impl Config {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
+        let erp_attestation_trusted_keys = env::var(ENV_ERP_ATTESTATION_TRUSTED_KEYS)
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .and_then(|raw| {
+                serde_json::from_str::<HashMap<String, String>>(&raw)
+                    .map_err(|e| {
+                        tracing::error!("Failed to parse {}: {}", ENV_ERP_ATTESTATION_TRUSTED_KEYS, e);
+                        e
+                    })
+                    .ok()
+            });
+
         if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
             let mut missing = Vec::new();
             if kwil_provider_url.is_none() {
@@ -293,6 +313,7 @@ impl Config {
             oracle_stub_ok,
             oracle_endpoint_url,
             oracle_contract_principal,
+            erp_attestation_trusted_keys,
         })
     }
 }

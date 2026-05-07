@@ -15,7 +15,6 @@ type HmacSha256 = Hmac<Sha256>;
 
 const MAX_ERP_TX_IDS: usize = 1000;
 const MAX_ERP_ERRORS: usize = 100;
-const ERP_ATTESTATION_TRUSTED_KEYS_JSON_ENV: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 const ERP_ATTESTATION_REPLAY_PREFIX: &str = "nexus:erp:attestation:nonce:v1";
 const ERP_ATTESTATION_MAX_CLOCK_SKEW_SECONDS: i64 = 60;
 const ERP_ATTESTATION_MAX_LIFETIME_SECONDS: i64 = 600;
@@ -122,13 +121,20 @@ pub async fn erp_sync_handler(
     // OData v4 to x402 Mandate Translation
     let action = map_erp_action(&payload.odata_payload);
 
-    let trusted_keys =
-        load_trusted_attestation_keys().map_err(map_erp_attestation_error_to_status)?;
+    let trusted_keys = state
+        .config
+        .erp_attestation_trusted_keys
+        .as_ref()
+        .ok_or_else(|| {
+            tracing::error!("ERP attestation trusted keys not configured");
+            StatusCode::SERVICE_UNAVAILABLE
+        })?;
+
     let verified_attestation = verify_erp_attestation(
         &payload,
         action,
         &tx_ids,
-        &trusted_keys,
+        trusted_keys,
         Utc::now().timestamp(),
     )
     .map_err(map_erp_attestation_error_to_status)?;
@@ -207,30 +213,6 @@ fn map_erp_action(odata_payload: &serde_json::Value) -> &'static str {
 fn map_erp_attestation_error_to_status(error: ErpAttestationError) -> StatusCode {
     tracing::warn!(?error, "ERP attestation verification rejected request");
     error.status_code()
-}
-
-fn load_trusted_attestation_keys() -> Result<HashMap<String, String>, ErpAttestationError> {
-    let raw = std::env::var(ERP_ATTESTATION_TRUSTED_KEYS_JSON_ENV)
-        .map_err(|_| ErpAttestationError::Misconfigured)?;
-
-    let parsed: HashMap<String, String> =
-        serde_json::from_str(&raw).map_err(|_| ErpAttestationError::Misconfigured)?;
-
-    let mut trusted_keys = HashMap::new();
-    for (key_id, secret) in parsed {
-        let key_id = key_id.trim();
-        let secret = secret.trim();
-        if key_id.is_empty() || secret.is_empty() {
-            return Err(ErpAttestationError::Misconfigured);
-        }
-        trusted_keys.insert(key_id.to_string(), secret.to_string());
-    }
-
-    if trusted_keys.is_empty() {
-        return Err(ErpAttestationError::Misconfigured);
-    }
-
-    Ok(trusted_keys)
 }
 
 fn verify_erp_attestation(
