@@ -24,7 +24,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
     let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
-    let experimental_apis_enabled = false;
+    let arc_config = Arc::new(config);
 
     (
         app_router(
@@ -35,7 +35,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
             tableland,
             None, // Kwil
             None, // Nostr
-            experimental_apis_enabled,
+            arc_config,
         ),
         storage,
     )
@@ -44,7 +44,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 #[tokio::test]
 #[ignore]
 async fn test_billing_flow() {
-    let (app, storage) = setup_test_app().await;
+    let (app, _storage) = setup_test_app().await;
 
     // 1. Generate Key
     let response = app

@@ -103,6 +103,7 @@ pub struct AppState {
     pub nostr: Option<Arc<NostrTelemetry>>,
     pub gateway_url: Option<reqwest::Url>,
     pub http_client: reqwest::Client,
+    pub config: Arc<crate::config::Config>,
 }
 
 #[derive(Deserialize)]
@@ -174,7 +175,7 @@ pub fn app_router(
     tableland: Arc<TablelandAdapter>,
     kwil: Option<Arc<KwilAdapter>>,
     nostr: Option<Arc<NostrTelemetry>>,
-    experimental_apis_enabled: bool,
+    config: Arc<crate::config::Config>,
 ) -> Router {
     init_prometheus_metrics();
 
@@ -216,6 +217,7 @@ pub fn app_router(
         nostr,
         gateway_url,
         http_client,
+        config,
     };
 
     let mut router = Router::new()
@@ -236,7 +238,7 @@ pub fn app_router(
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
         .nest("/v1/settlement", crate::api::settlement::settlement_routes());
 
-    if experimental_apis_enabled {
+    if state.config.experimental_apis_enabled {
         router = router.route(
             "/v1/bitvm2/verify-state-root",
             post(verify_bitvm2_state_root)
@@ -256,7 +258,7 @@ pub async fn start_rest_server(
     kwil: Option<Arc<KwilAdapter>>,
     nostr: Option<Arc<NostrTelemetry>>,
     port: u16,
-    experimental_apis_enabled: bool,
+    config: Arc<crate::config::Config>,
 ) -> anyhow::Result<()> {
     let app = app_router(
         storage,
@@ -266,7 +268,7 @@ pub async fn start_rest_server(
         tableland,
         kwil,
         nostr,
-        experimental_apis_enabled,
+        config,
     );
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
