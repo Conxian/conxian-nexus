@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.3] - 2024-05-27
+## [0.4.3] - 2026-05-27
 
 ### Added
 - **Hardened Repository Hygiene**: Updated `.gitignore` and `.dockerignore` to exclude standard artifacts (`node_modules`, `test-results`, `playwright-report`) as per Conxian baseline.
@@ -11,7 +11,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Consolidated Governance**: Merged root `CODEOWNERS` into `.github/CODEOWNERS` and standardized on team-based ownership with explicit fallback maintainers.
 
-## [0.4.2] - 2024-05-26
+## [0.4.2] - 2026-05-26
 
 ### Added
 - **Full API Specification Sync**: Synchronized `docs/openapi.yaml` with all current modules including Analytics, ZKML, ERP Sync, Identity Resolution, and Bitcoin DLC Bonds.
@@ -21,19 +21,19 @@ All notable changes to this project will be documented in this file.
 - **Kwil Persistence Alignment**: Updated `KwilAdapter` to include mandatory `created_at` timestamps in block and state-root commitments, aligning with the `nexus_pilot` schema.
 - **State Proof Robustness**: Corrected MMR metadata calculation logic to properly handle right-child sibling resolution during inclusion proof generation.
 
-## [0.4.1] - 2024-05-25
+## [0.4.1] - 2026-05-25
 
 ### Added
 - **Kwil Sovereign SQL Pilot**: Implemented the `KwilAdapter` for decentralized relational state persistence, enabling block and state-root commitments to Kwil.
 - **Enhanced Mainnet Readiness**: Corrected test fixtures and `app_router` signatures to align with current production architecture.
 - **Competitive Research Summary**: Documented findings in `docs/enhancements_summary.md` for future autonomous BOS capabilities.
 
-## [0.4.0] - 2024-05-24
+## [0.4.0] - 2026-05-24
 
 ### Added
 - **Full MMR Inclusion Proofs**: Optimized the logic for calculating MMR sibling positions to $O(\log N)$ and ensured integration with the `/v1/mmr-proof` API endpoint.
 
-## [0.3.0] - 2024-05-23
+## [0.3.0] - 2026-05-23
 
 ### Added
 - **High-Performance Merkle Tree**: Implemented intermediate level caching in `NexusState` for O(logN) proof generation and optimized root calculation.
@@ -48,7 +48,7 @@ All notable changes to this project will be documented in this file.
 - Improved Merkle Tree logic to handle odd leaf counts and empty trees more robustly.
 - Corrected SQL parameter bindings in `NexusExecutor` MEV detection queries.
 
-## [0.2.0] - 2024-05-22
+## [0.2.0] - 2026-05-22
 
 ### Added
 - Prometheus metrics exporter at `/metrics`.
@@ -63,7 +63,7 @@ All notable changes to this project will be documented in this file.
 ### Security
 - FSOC Sequencer now increments transaction metrics upon successful validation.
 
-## [0.4.4] - 2024-05-28
+## [0.4.4] - 2026-05-28
 
 ### Added
 - **Enhanced Oracle Aggregation**: Implemented confidence interval weights and outlier rejection (10% threshold) for multi-source FX rate aggregation in `OracleAggregator`.
@@ -72,7 +72,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Updated PRD**: Synchronized `docs/PRD.md` with the latest functional enhancements and versioned to v0.4.4.
 
-## [0.4.5] - 2024-05-29
+## [0.4.5] - 2026-05-29
 
 ### Added
 - **MMR Persistence in Kwil (Phase 2)**: Extended `KwilAdapter` and `NexusSync` to mirror cryptographic MMR nodes to the sovereign Kwil layer, ensuring a decentralized audit trail for state reconstruction.
@@ -81,7 +81,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Local Branch Hygiene**: Automated cleanup of merged branches during the sync cycle.
 
-## [0.4.6] - 2024-05-30
+## [0.4.6] - 2026-05-30
 
 ### Fixed
 - **Oracle Persistence Logic**: Corrected a critical SQL syntax error in `OracleService` where placeholders and columns were misaligned during FX rate persistence.
@@ -89,7 +89,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Repository Hygiene**: Removed legacy automation scripts (`update_main_v3.py`) from the repository root.
 
-## [0.4.7] - 2024-06-01
+## [0.4.7] - 2026-06-01
 
 ### Added
 - **MMR Cryptographic Hardening**: Added comprehensive unit tests for large MMR tree positions and peak calculation formulas, verifying (\log N)$ performance and correctness.
