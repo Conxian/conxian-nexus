@@ -26,7 +26,7 @@ pub struct IdentityResolveResponse {
 
 /// [NEXUS-ID-01] Identity provider resolution.
 pub async fn resolve_identity_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<IdentityResolveRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
@@ -37,11 +37,7 @@ pub async fn resolve_identity_handler(
 
     match payload.protocol.as_str() {
         "BNS" => {
-            let stacks_api_base = std::env::var("STACKS_NODE_RPC_URL")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string());
+            let stacks_api_base = &state.config.stacks_node_rpc_url;
             let url = format!(
                 "{}/v1/names/{}",
                 stacks_api_base.trim_end_matches('/'),
@@ -182,9 +178,9 @@ pub async fn resolve_identity_handler(
         "WorldID" => {
             // For full decentralization, WorldID verification should optionally hit an on-chain validator
             // For the API gateway layer, we query the Worldcoin Dev API to verify proof of personhood
-            let app_id = std::env::var("WORLDID_APP_ID").unwrap_or_default();
+            let app_id = state.config.worldid_app_id.as_deref().unwrap_or_default();
             if app_id.is_empty() {
-                tracing::warn!("WORLDID_APP_ID missing. Dropping WorldID request for security.");
+                tracing::warn!("WORLDID_APP_ID missing in config. Dropping WorldID request for security.");
                 return (
                     StatusCode::BAD_GATEWAY,
                     Json(IdentityResolveResponse {

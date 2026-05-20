@@ -39,6 +39,8 @@ pub struct Config {
     pub stacks_node_rpc_url: String,
     pub stacks_node_ws_url: String,
     pub gateway_url: Option<String>,
+    pub worldid_app_id: Option<String>,
+    pub rust_log: String,
     pub experimental_apis_enabled: bool,
     pub oracle_enabled: bool,
     pub oracle_stub_ok: bool,
@@ -69,6 +71,8 @@ impl std::fmt::Debug for Config {
             .field("stacks_node_rpc_url", &self.stacks_node_rpc_url)
             .field("stacks_node_ws_url", &self.stacks_node_ws_url)
             .field("gateway_url", &self.gateway_url)
+            .field("worldid_app_id", &self.worldid_app_id)
+            .field("rust_log", &self.rust_log)
             .field("experimental_apis_enabled", &self.experimental_apis_enabled)
             .field("oracle_enabled", &self.oracle_enabled)
             .field("oracle_stub_ok", &self.oracle_stub_ok)
@@ -92,6 +96,8 @@ impl Config {
             stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
             stacks_node_ws_url: "wss://api.mainnet.hiro.so/".to_string(),
             gateway_url: None,
+            worldid_app_id: None,
+            rust_log: "info".to_string(),
             experimental_apis_enabled: true,
             nostr_secret_key: None,
             nostr_relays: vec![],
@@ -207,6 +213,8 @@ impl Config {
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
         let stacks_node_ws_url = env::var("STACKS_NODE_WS_URL")
             .unwrap_or_else(|_| "wss://api.mainnet.hiro.so/".to_string());
+        let worldid_app_id = env::var("WORLDID_APP_ID").ok().filter(|s| !s.is_empty());
+        let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
         let oracle_enabled = env_flag(ENV_ORACLE_ENABLED);
         let oracle_stub_ok = env_flag(ENV_ORACLE_STUB_OK);
         let oracle_endpoint_url = env::var(ENV_ORACLE_ENDPOINT_URL)
@@ -308,6 +316,8 @@ impl Config {
                 .ok()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
+            worldid_app_id,
+            rust_log,
             experimental_apis_enabled,
             oracle_enabled,
             oracle_stub_ok,
@@ -315,5 +325,24 @@ impl Config {
             oracle_contract_principal,
             erp_attestation_trusted_keys,
         })
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn test_config_from_env_consolidation() {
+        env::set_var("DATABASE_URL", "postgres://localhost/nexus_test");
+        env::set_var("REDIS_URL", "redis://127.0.0.1/");
+        env::set_var("STACKS_NODE_RPC_URL", "https://api.mainnet.hiro.so");
+        env::set_var("WORLDID_APP_ID", "app_12345");
+        env::set_var("GATEWAY_URL", "https://gateway.conxian.com");
+
+        let config = Config::from_env().expect("Config::from_env should succeed");
+        assert_eq!(config.worldid_app_id, Some("app_12345".to_string()));
+        assert_eq!(config.gateway_url, Some("https://gateway.conxian.com".to_string()));
+        assert_eq!(config.stacks_node_rpc_url, "https://api.mainnet.hiro.so");
     }
 }

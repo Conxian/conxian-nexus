@@ -37,20 +37,6 @@ pub struct KwilConfig {
     pub db_id: String,
 }
 
-impl KwilConfig {
-    pub fn from_env() -> anyhow::Result<Self> {
-        use anyhow::Context;
-
-        let provider_url =
-            std::env::var("KWIL_PROVIDER_URL").context("Missing env var: KWIL_PROVIDER_URL")?;
-        let db_id = std::env::var("KWIL_DB_ID").context("Missing env var: KWIL_DB_ID")?;
-
-        Ok(Self {
-            provider_url,
-            db_id,
-        })
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KwilReceipt {

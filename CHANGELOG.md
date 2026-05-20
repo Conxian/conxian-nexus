@@ -102,3 +102,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **Repository Hygiene**: Refined `.gitignore` and `.dockerignore` to ensure all non-source artifacts and local configuration are strictly excluded.
+
+## [0.4.8] - 2026-06-02
+
+### Added
+- **Centralized Configuration Governance**: Consolidated direct `std::env::var` calls (`GATEWAY_URL`, `STACKS_NODE_RPC_URL`, `WORLDID_APP_ID`, `RUST_LOG`) into the `Config` struct in `src/config.rs`.
+- **Config Validation Tests**: Added unit tests to verify centralized environment variable parsing and defaulting.
+
+### Changed
+- **Architectural Hardening**: Removed redundant configuration loading logic (e.g., `KwilConfig::from_env`) to enforce a single source of truth for repository settings.
+- **Logging Initialization**: Reordered service startup in `main.rs` to ensure logging is initialized from centralized configuration settings.
