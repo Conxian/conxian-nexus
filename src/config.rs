@@ -47,6 +47,7 @@ pub struct Config {
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
     pub erp_attestation_trusted_keys: Option<HashMap<String, String>>,
+    pub zkml_vks: HashMap<String, String>,
 }
 
 impl std::fmt::Debug for Config {
@@ -82,6 +83,7 @@ impl std::fmt::Debug for Config {
                 "erp_attestation_trusted_keys",
                 &self.erp_attestation_trusted_keys.as_ref().map(|_| "<redacted>"),
             )
+            .field("zkml_vks", &self.zkml_vks.keys().collect::<Vec<_>>())
             .finish()
     }
 }
@@ -110,6 +112,7 @@ impl Config {
             oracle_endpoint_url: None,
             oracle_contract_principal: None,
             erp_attestation_trusted_keys: None,
+            zkml_vks: HashMap::new(),
         }
     }
 
@@ -273,6 +276,13 @@ impl Config {
                     .ok()
             });
 
+        let mut zkml_vks = HashMap::new();
+        for (key, value) in env::vars() {
+            if key.starts_with("ZKML_VK_B64_") {
+                zkml_vks.insert(key, value);
+            }
+        }
+
         if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
             let mut missing = Vec::new();
             if kwil_provider_url.is_none() {
@@ -324,6 +334,7 @@ impl Config {
             oracle_endpoint_url,
             oracle_contract_principal,
             erp_attestation_trusted_keys,
+            zkml_vks,
         })
     }
 }
