@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.10] - 2026-06-04
+
+### Added
+- **Dependabot Configuration**: Added `.github/dependabot.yml` to automate security and version updates for Cargo and GitHub Actions dependencies.
+
+### Changed
+- **Security Hardening**: Upgraded `reqwest` from v0.11 to v0.12, migrating to `hyper` v1.0 and resolving critical vulnerabilities in transitive dependencies (e.g., `h2` v0.3.x).
+- **Version Alignment**: Bumped project version to v0.4.10 across all governance and configuration files.
+
+
 ## [0.4.3] - 2026-05-27
 
 ### Added
