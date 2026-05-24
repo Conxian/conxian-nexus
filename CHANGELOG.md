@@ -2,10 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.10] - 2026-06-04
+## [0.4.11] - 2026-05-24
 
-### Added
-- **Dependabot Configuration**: Added `.github/dependabot.yml` to automate security and version updates for Cargo and GitHub Actions dependencies.
+### Changed
+- **Dependency Modernization**: Performed a major upgrade of core dependencies to resolve version drift and improve performance.
+  - Upgraded `axum` to v0.8 (migrating to `tower` v0.5 and refined extractor logic).
+  - Upgraded `sqlx` to v0.8 (enhancing connection pooling and query performance).
+  - Upgraded `redis` to v0.27 (migrating to the latest async connection traits).
+  - Upgraded `tower-http` to v0.6 and `opentelemetry` ecosystem to v0.24.
+- **Breaking Change Remediation**: Refactored `RedisAdapter` and safety mode handlers in `src/safety/mod.rs` and `src/sync/mod.rs` to align with `redis` v0.27's updated `query_async` API.
+- **Version Alignment**: Bumped project version to v0.4.11 across all governance and configuration files.
+
 
 ### Changed
 - **Security Hardening**: Upgraded `reqwest` from v0.11 to v0.12, migrating to `hyper` v1.0 and resolving critical vulnerabilities in transitive dependencies (e.g., `h2` v0.3.x).
@@ -31,7 +38,7 @@ All notable changes to this project will be documented in this file.
 - **Kwil Persistence Alignment**: Updated `KwilAdapter` to include mandatory `created_at` timestamps in block and state-root commitments, aligning with the `nexus_pilot` schema.
 - **State Proof Robustness**: Corrected MMR metadata calculation logic to properly handle right-child sibling resolution during inclusion proof generation.
 
-## [0.4.1] - 2026-05-25
+## [0.4.1] - 2026-05-24
 
 ### Added
 - **Kwil Sovereign SQL Pilot**: Implemented the `KwilAdapter` for decentralized relational state persistence, enabling block and state-root commitments to Kwil.
