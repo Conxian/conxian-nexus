@@ -112,3 +112,11 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Architectural Hardening**: Removed redundant configuration loading logic (e.g., `KwilConfig::from_env`) to enforce a single source of truth for repository settings.
 - **Logging Initialization**: Reordered service startup in `main.rs` to ensure logging is initialized from centralized configuration settings.
+
+## [0.4.9] - 2026-06-03
+
+### Changed
+- **Security Dependency Audit**: Performed a comprehensive security audit and remediation of project dependencies.
+- **SDK Alignment**: Updated `nostr-sdk` from v0.34 to v0.43.0, aligning with the latest stable release and resolving breaking changes in event building and subscription logic.
+- **Vulnerability Remediation**: Updated `openssl` to v0.10.80 and performed a general `cargo update` to pull in security patches for transitive dependencies including `h2`, `shlex`, and `idna`.
+- **Version Alignment**: Bumped project version to v0.4.9 across all governance and configuration files.
