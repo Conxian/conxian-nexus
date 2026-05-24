@@ -166,7 +166,7 @@ impl NexusSync {
                         "type": "subscribe",
                         "channel": "blocks"
                     });
-                    if let Err(e) = ws_stream.send(Message::Text(subscribe_msg.to_string())).await {
+                    if let Err(e) = ws_stream.send(Message::Text(subscribe_msg.to_string().into())).await {
                          tracing::error!("Failed to send subscription: {}", e);
                     } else {
                         while let Some(msg) = ws_stream.next().await {

@@ -1,6 +1,6 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.8"
+version = "0.4.10"
 edition = "2021"
 
 [dependencies]
@@ -26,15 +26,15 @@ futures-util = "0.3"
 lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "3b091d2700d840514427e4190c40d631b6d8132c" }
 prometheus = "0.13"
 lazy_static = "1.4"
-reqwest = { version = "0.11", features = ["json"] }
-tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots"] }
+reqwest = { version = "0.12", features = ["json"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 url = "2.5"
 http-body-util = "0.1"
 tower = "0.5"
 opentelemetry = "0.21"
 tracing-opentelemetry = "0.22"
-uuid = { version = "1.23.0", features = ["v4"] }
-nostr-sdk = "0.34"
+uuid = { version = "1.15", features = ["v4"] }
+nostr-sdk = "0.43"
 
 [build-dependencies]
 tonic-build = "0.12"
