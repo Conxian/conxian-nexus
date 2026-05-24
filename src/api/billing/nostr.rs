@@ -43,7 +43,7 @@ impl NostrTelemetry {
         }).to_string();
 
         // Using a custom event kind for telemetry (Kind 26001)
-        let builder = EventBuilder::new(Kind::Custom(26001), content, []);
+        let builder = EventBuilder::new(Kind::from(26001), content);
         let output = self.client.send_event_builder(builder).await?;
         let event_id = output.id();
 
@@ -69,7 +69,7 @@ impl NostrTelemetry {
         .to_string();
 
         // Using Kind 26002 for health reporting
-        let builder = EventBuilder::new(Kind::Custom(26002), content, []);
+        let builder = EventBuilder::new(Kind::from(26002), content);
         let output = self.client.send_event_builder(builder).await?;
         let event_id = output.id();
 
@@ -78,7 +78,7 @@ impl NostrTelemetry {
     }
 
     pub async fn shutdown(&self) -> anyhow::Result<()> {
-        self.client.disconnect().await?;
+        self.client.disconnect().await;
         Ok(())
     }
 }
@@ -102,15 +102,15 @@ impl NostrCollector {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        let filter = Filter::new().kind(Kind::Custom(26001));
-        self.client.subscribe(vec![filter], None).await?;
+        let filter = Filter::new().kind(Kind::from(26001));
+        self.client.subscribe(filter, None).await?;
 
         tracing::info!("Nostr Collector started, listening for telemetry events (Kind 26001)...");
 
         let mut notifications = self.client.notifications();
         while let Ok(notification) = notifications.recv().await {
             if let RelayPoolNotification::Event { event, .. } = notification {
-                if event.kind() == Kind::Custom(26001) {
+                if event.kind == Kind::from(26001) {
                     if let Err(e) = self.handle_telemetry_event(event).await {
                         tracing::error!("Failed to handle Nostr telemetry event: {}", e);
                     }
@@ -122,16 +122,16 @@ impl NostrCollector {
     }
 
     async fn handle_telemetry_event(&self, event: Box<Event>) -> anyhow::Result<()> {
-        let event_id = event.id().to_hex();
+        let event_id = event.id.to_hex();
 
         // 1. Verify freshness (e.g., not older than 1 hour)
         let now = Timestamp::now().as_u64();
-        if event.created_at().as_u64() < now - 3600 {
+        if event.created_at.as_u64() < now - 3600 {
             tracing::warn!("Nostr Collector: ignoring stale event: {}", event_id);
             return Ok(());
         }
 
-        let payload: serde_json::Value = serde_json::from_str(event.content())?;
+        let payload: serde_json::Value = serde_json::from_str(&event.content)?;
 
         let api_key = payload.get("api_key").and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing api_key in Nostr event"))?;

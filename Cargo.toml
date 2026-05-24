@@ -1,6 +1,6 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.8"
+version = "0.4.9"
 edition = "2021"
 
 [dependencies]
@@ -34,7 +34,7 @@ tower = "0.5"
 opentelemetry = "0.21"
 tracing-opentelemetry = "0.22"
 uuid = { version = "1.23.0", features = ["v4"] }
-nostr-sdk = "0.34"
+nostr-sdk = "0.43"
 
 [build-dependencies]
 tonic-build = "0.12"
