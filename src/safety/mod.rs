@@ -174,7 +174,7 @@ impl NexusSafety {
             .cmd("PUBLISH")
             .arg("nexus:events")
             .arg("safety_mode_triggered")
-            .query_async::<_, ()>(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
 
         Ok(())
@@ -203,7 +203,7 @@ impl NexusSafety {
                 .cmd("PUBLISH")
                 .arg("nexus:events")
                 .arg("safety_mode_cleared")
-                .query_async::<_, ()>(&mut conn)
+                .query_async::<()>(&mut conn)
                 .await?;
         }
         Ok(())

@@ -379,7 +379,7 @@ impl NexusSync {
             if let Err(err) = redis::cmd("SET")
                 .arg(LAST_POLLED_BURN_TIP_KEY)
                 .arg(&burn_tip_marker)
-                .query_async::<_, ()>(conn)
+                .query_async::<()>(conn)
                 .await
             {
                 tracing::warn!(
