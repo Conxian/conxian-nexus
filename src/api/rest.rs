@@ -179,12 +179,7 @@ pub fn app_router(
 ) -> Router {
     init_prometheus_metrics();
 
-    let gateway_url = std::env::var("GATEWAY_URL").ok().and_then(|s| {
-        let s = s.trim();
-        if s.is_empty() {
-            return None;
-        }
-
+    let gateway_url = config.gateway_url.as_ref().and_then(|s| {
         let base = match reqwest::Url::parse(s) {
             Ok(base) => base,
             Err(err) => {

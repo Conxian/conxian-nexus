@@ -1,6 +1,6 @@
 # Conxian Nexus
 
-[![Version](https://img.shields.io/badge/version-0.4.7-blue.svg)](Cargo.toml)
+[![Version](https://img.shields.io/badge/version-0.4.8-blue.svg)](Cargo.toml)
 [![License](https://img.shields.io/badge/license-BSL--1.1-green.svg)](LICENSE)
 
 Conxian Nexus is a mission-critical supporting interoperability and API facade surface in the Conxian builder platform. It packages lower-level platform capabilities into higher-level external-facing API surfaces, serving as the bridge between raw protocol adapters and developer-facing services.
