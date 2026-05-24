@@ -57,7 +57,6 @@ struct VerifiedErpAttestation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ErpAttestationError {
-    Misconfigured,
     InvalidAttestationFormat,
     InvalidSignature,
     ExpiredAttestation,
@@ -69,7 +68,7 @@ enum ErpAttestationError {
 impl ErpAttestationError {
     fn status_code(self) -> StatusCode {
         match self {
-            Self::Misconfigured | Self::ReplayStoreUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ReplayStoreUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplayDetected => StatusCode::CONFLICT,
             Self::InvalidAttestationFormat => StatusCode::BAD_REQUEST,
             Self::InvalidSignature | Self::ExpiredAttestation | Self::ContextMismatch => {
