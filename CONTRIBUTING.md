@@ -25,6 +25,23 @@ To set up your local environment for development:
 - Maintain high test coverage for new logic.
 - **Do not commit source code dumps, audit logs, or temporary artifacts**. Check `.gitignore` for current patterns.
 
+## Governance Support Routing
+
+- For support and issue-routing guidance, use [SUPPORT.md](SUPPORT.md).
+- For vulnerability handling, follow [SECURITY.md](SECURITY.md) and avoid public disclosure.
+
+## Sensitive File Changes
+
+Changes to governance-sensitive files require CODEOWNERS review:
+
+- `CODEOWNERS`
+- `SECURITY.md`
+- `SUPPORT.md`
+- `.github/ISSUE_TEMPLATE/**`
+- `.github/PULL_REQUEST_TEMPLATE*`
+- `.github/workflows/**`
+- `.github/release.yml`
+
 ## Contact
 
 For operational questions (non-security), you can reach:
@@ -35,5 +52,6 @@ For operational questions (non-security), you can reach:
 For security reports, follow [`SECURITY.md`](./SECURITY.md).
 
 ## Core Modules Update
+
 - **NexusState**: Now uses a native Merkle Tree for verifiable state root tracking.
 - **lib-conxian-core**: Enhanced with a full Wallet implementation (k256/ECDSA).
