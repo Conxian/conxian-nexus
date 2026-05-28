@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1.43", features = ["full"] }
 axum = { version = "0.7", features = ["macros"] }
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
 redis = { version = "0.25", features = ["tokio-comp"] }
 tonic = "0.12"
 prost = "0.13"
