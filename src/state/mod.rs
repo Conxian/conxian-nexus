@@ -611,9 +611,9 @@ mod mmr_extra_tests {
     #[test]
     fn test_large_mmr_tree_positions() {
         // Test positions for leaf index 0 to 15
-        let expected_positions = vec![0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26];
-        for i in 0..16 {
-            assert_eq!(get_mmr_node_pos(i as u64), expected_positions[i]);
+        let expected_positions = [0, 1, 3, 4, 7, 8, 10, 11, 15, 16, 18, 19, 22, 23, 25, 26];
+        for (i, expected_pos) in expected_positions.iter().enumerate() {
+            assert_eq!(get_mmr_node_pos(i as u64), *expected_pos);
         }
     }
 

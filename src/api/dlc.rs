@@ -45,7 +45,10 @@ pub async fn create_dlc_bond_handler(
     }
 
     // 2. Generate DLC Announcement (using lib-conxian-core signature logic)
-    let announcement_data = format!("dlc_bond_init:{}:{}:{}", payload.bond_id, payload.principal_sbtc, payload.expiry_height);
+    let announcement_data = format!(
+        "dlc_bond_init:{}:{}:{}",
+        payload.bond_id, payload.principal_sbtc, payload.expiry_height
+    );
     let oracle_announcement = match lib_conxian_core::sign_transaction(&announcement_data) {
         Ok(sig) => sig,
         Err(e) => {
@@ -57,18 +60,29 @@ pub async fn create_dlc_bond_handler(
     let dlc_contract_id = format!("dlc_{}", Uuid::new_v4());
 
     // 3. Persist Bond State
-    let mut conn = match state.storage.redis_client.get_multiplexed_async_connection().await {
+    let mut conn = match state
+        .storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
+    {
         Ok(c) => c,
         Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Redis Error").into_response(),
     };
 
     let _: () = redis::cmd("HSET")
         .arg(format!("dlc_bond:{}", dlc_contract_id))
-        .arg("bond_id").arg(&payload.bond_id)
-        .arg("principal").arg(payload.principal_sbtc)
-        .arg("status").arg("Initialized")
-        .arg("announcement").arg(&oracle_announcement)
-        .query_async(&mut conn).await.unwrap_or(());
+        .arg("bond_id")
+        .arg(&payload.bond_id)
+        .arg("principal")
+        .arg(payload.principal_sbtc)
+        .arg("status")
+        .arg("Initialized")
+        .arg("announcement")
+        .arg(&oracle_announcement)
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(());
 
     // 4. Return initialized bond details
     (

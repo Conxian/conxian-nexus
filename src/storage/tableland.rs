@@ -3,9 +3,9 @@
 
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use reqwest::Client;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TablelandStateCommitment {
@@ -52,7 +52,8 @@ impl TablelandAdapter {
 
         let url = format!("{}/api/v1/query", self.base_url.trim_end_matches('/'));
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&TablelandWriteRequest {
                 statement: commitment.query.clone(),
@@ -67,14 +68,18 @@ impl TablelandAdapter {
             return Err(anyhow!("Tableland error: {}", error_text));
         }
 
-        let result: TablelandWriteResponse = response.json().await
+        let result: TablelandWriteResponse = response
+            .json()
+            .await
             .context("Failed to parse Tableland response")?;
 
         if let Some(err) = result.error {
             return Err(anyhow!("Tableland execution error: {}", err));
         }
 
-        let tx_hash = result.hash.ok_or_else(|| anyhow!("No transaction hash returned from Tableland"))?;
+        let tx_hash = result
+            .hash
+            .ok_or_else(|| anyhow!("No transaction hash returned from Tableland"))?;
 
         tracing::info!("State committed to Tableland. Tx: {}", tx_hash);
         Ok(tx_hash)

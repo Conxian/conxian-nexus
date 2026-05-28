@@ -2,18 +2,20 @@
 //! maintaining a local representation of the Stacks L1 state.
 
 use crate::state::NexusState;
-use crate::storage::kwil::{KwilAdapter, KwilBlockCommitment, KwilStateRootCommitment, KwilMmrNodeCommitment};
+use crate::storage::kwil::{
+    KwilAdapter, KwilBlockCommitment, KwilMmrNodeCommitment, KwilStateRootCommitment,
+};
 use crate::storage::tableland::{TablelandAdapter, TablelandStateCommitment};
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
 use sqlx::Row;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{self, Duration};
-use futures_util::{StreamExt, SinkExt};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
 const LAST_POLLED_BURN_TIP_KEY: &str = "nexus:sync:last_polled_burn_tip:v1";
@@ -61,7 +63,6 @@ pub struct NexusSync {
     kwil: Option<Arc<KwilAdapter>>,
     rpc_url: String,
     ws_url: String,
-
 }
 
 impl NexusSync {
@@ -71,7 +72,7 @@ impl NexusSync {
         tableland: Arc<TablelandAdapter>,
         kwil: Option<Arc<KwilAdapter>>,
         rpc_url: String,
-    ws_url: String,
+        ws_url: String,
     ) -> Self {
         Self {
             storage,
@@ -119,7 +120,9 @@ impl NexusSync {
             let mut interval = time::interval(Duration::from_secs(10));
             loop {
                 interval.tick().await;
-                if let Err(e) = Self::poll_stacks_node(&poll_tx, &rpc_url, &poll_storage, &client).await {
+                if let Err(e) =
+                    Self::poll_stacks_node(&poll_tx, &rpc_url, &poll_storage, &client).await
+                {
                     tracing::error!("Sync poll failed: {}", e);
                 }
             }
@@ -154,7 +157,10 @@ impl NexusSync {
         Ok(())
     }
 
-    async fn run_websocket_listener(_tx: &mpsc::Sender<StacksEvent>, ws_url: &str) -> anyhow::Result<()> {
+    async fn run_websocket_listener(
+        _tx: &mpsc::Sender<StacksEvent>,
+        ws_url: &str,
+    ) -> anyhow::Result<()> {
         loop {
             tracing::info!("Connecting to Stacks WebSocket: {}", ws_url);
             match connect_async(ws_url).await {
@@ -166,13 +172,18 @@ impl NexusSync {
                         "type": "subscribe",
                         "channel": "blocks"
                     });
-                    if let Err(e) = ws_stream.send(Message::Text(subscribe_msg.to_string())).await {
-                         tracing::error!("Failed to send subscription: {}", e);
+                    if let Err(e) = ws_stream
+                        .send(Message::Text(subscribe_msg.to_string()))
+                        .await
+                    {
+                        tracing::error!("Failed to send subscription: {}", e);
                     } else {
                         while let Some(msg) = ws_stream.next().await {
                             match msg {
                                 Ok(Message::Text(text)) => {
-                                    if let Ok(event_data) = serde_json::from_str::<serde_json::Value>(&text) {
+                                    if let Ok(event_data) =
+                                        serde_json::from_str::<serde_json::Value>(&text)
+                                    {
                                         if event_data["channel"] == "blocks" {
                                             tracing::debug!("WebSocket: Received new block event");
                                         }
@@ -197,7 +208,11 @@ impl NexusSync {
     }
 
     async fn process_microblock(&self, data: MicroblockData) -> anyhow::Result<()> {
-        tracing::info!("Processing microblock: {} at height {}", data.hash, data.height);
+        tracing::info!(
+            "Processing microblock: {} at height {}",
+            data.hash,
+            data.height
+        );
 
         // Check for reorgs
         if let Some(parent) = self.get_latest_block_hash().await? {
@@ -274,7 +289,11 @@ impl NexusSync {
                     block_height: data.height,
                 })
                 .collect();
-            let _ = kwil.persist_mmr_nodes(mmr_commitments).await.map_err(|e| tracing::warn!("Kwil MMR node persistence failed: {}", e)).ok();
+            let _ = kwil
+                .persist_mmr_nodes(mmr_commitments)
+                .await
+                .map_err(|e| tracing::warn!("Kwil MMR node persistence failed: {}", e))
+                .ok();
         }
 
         Ok(())

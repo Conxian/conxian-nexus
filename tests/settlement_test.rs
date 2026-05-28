@@ -6,8 +6,8 @@ use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
-use conxian_nexus::storage::Storage;
 use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::storage::Storage;
 use serde_json::json;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -24,16 +24,28 @@ async fn test_external_settlement_trigger_unauthorized() {
         }
     };
 
-    if let Err(_) = storage.run_migrations().await {
+    if storage.run_migrations().await.is_err() {
         eprintln!("Skipping test: Migrations failed");
         return;
     }
 
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
-    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        "http://localhost:8080".to_string(),
+    ));
 
-    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        None,
+        tableland,
+        None,
+        None,
+        true,
+    );
 
     let response = app
         .oneshot(
@@ -70,7 +82,7 @@ async fn test_external_settlement_trigger_success() {
         }
     };
 
-    if let Err(_) = storage.run_migrations().await {
+    if storage.run_migrations().await.is_err() {
         eprintln!("Skipping test: Migrations failed");
         return;
     }
@@ -83,9 +95,21 @@ async fn test_external_settlement_trigger_success() {
 
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
-    let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "http://localhost:8080".to_string()));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        "http://localhost:8080".to_string(),
+    ));
 
-    let app = app_router(storage, nexus_state, executor, None, tableland, None, None, true);
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        None,
+        tableland,
+        None,
+        None,
+        true,
+    );
 
     let response = app
         .oneshot(
