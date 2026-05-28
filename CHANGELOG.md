@@ -2,21 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.11] - 2026-06-01
-
-### Changed
-- **Dependency Modernization**: Updated core ecosystem dependencies: `axum` v0.8, `sqlx` v0.9, `redis` v0.27, and `nostr-sdk` v0.43.0.
-- **Centralized Configuration**: Refactored `Config` struct to centralize all environment variable access, including ERP trusted keys and system-wide logging levels.
-- **Enhanced Security**: Hardened all API endpoints with parameterized SQL binds and redacted sensitive configuration fields from debug logs.
-- **Protocol-First Alignment**: Refactored `NostrTelemetry` and `KwilAdapter` to align with the decentralized Glass Node roadmap.
-
-### Fixed
-- **Redis Async Compatibility**: Corrected `query_async` call sites to use explicit type parameters required by `redis` v0.27.
-- **Nostr SDK Alignment**: Refactored event building and subscription logic to match `nostr-sdk` v0.43.0 API changes.
-- **Kwil Delimiter Safety**: Hardened `KwilAdapter` payload encoding to ensure signature integrity for decentralized commitments.
-
-All notable changes to this project will be documented in this file.
-
 ## [0.4.3] - 2024-05-27
 
 ### Added

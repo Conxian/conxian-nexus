@@ -135,7 +135,7 @@ pub fn app_router(
         config: config.clone(),
     };
 
-    let mut router: Router<AppState> = Router::new()
+    let mut router = Router::new()
         .route("/v1/proof", get(get_proof))
         .route("/v1/mmr-proof", get(get_mmr_proof))
         .route("/v1/verify-state", post(verify_state))
