@@ -1,13 +1,13 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.7"
+version = "0.4.11"
 edition = "2021"
 
 [dependencies]
 tokio = { version = "1.43", features = ["full"] }
-axum = { version = "0.7", features = ["macros"] }
-sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "chrono"] }
-redis = { version = "0.25", features = ["tokio-comp"] }
+axum = { version = "0.8", features = ["macros"] }
+sqlx = { version = "0.9", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono"] }
+redis = { version = "0.27", features = ["tokio-comp"] }
 tonic = "0.12"
 prost = "0.13"
 serde = { version = "1.0", features = ["derive"] }
@@ -21,20 +21,20 @@ hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 futures-util = "0.3"
 lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "3b091d2700d840514427e4190c40d631b6d8132c" }
 prometheus = "0.13"
 lazy_static = "1.4"
-reqwest = { version = "0.11", features = ["json"] }
-tokio-tungstenite = { version = "0.23", features = ["rustls-tls-native-roots"] }
+reqwest = { version = "0.12", features = ["json"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
 url = "2.5"
 http-body-util = "0.1"
 tower = "0.5"
 opentelemetry = "0.21"
 tracing-opentelemetry = "0.22"
 uuid = { version = "1.23.0", features = ["v4"] }
-nostr-sdk = "0.34"
+nostr-sdk = "0.43"
 
 [build-dependencies]
 tonic-build = "0.12"

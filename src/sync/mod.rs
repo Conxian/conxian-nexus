@@ -173,7 +173,7 @@ impl NexusSync {
                         "channel": "blocks"
                     });
                     if let Err(e) = ws_stream
-                        .send(Message::Text(subscribe_msg.to_string()))
+                        .send(Message::Text(subscribe_msg.to_string().into()))
                         .await
                     {
                         tracing::error!("Failed to send subscription: {}", e);
@@ -289,11 +289,13 @@ impl NexusSync {
                     block_height: data.height,
                 })
                 .collect();
-            let _ = kwil
-                .persist_mmr_nodes(mmr_commitments)
-                .await
-                .map_err(|e| tracing::warn!("Kwil MMR node persistence failed: {}", e))
-                .ok();
+            for node in mmr_commitments {
+                let _ = kwil
+                    .persist_mmr_node(node)
+                    .await
+                    .map_err(|e| tracing::warn!("Kwil MMR node persistence failed: {}" , e))
+                    .ok();
+            }
         }
 
         Ok(())
@@ -347,7 +349,7 @@ impl NexusSync {
         if let Some(conn) = redis_conn.as_mut() {
             let last_polled_tip: Option<String> = match redis::cmd("GET")
                 .arg(LAST_POLLED_BURN_TIP_KEY)
-                .query_async(conn)
+                .query_async::<Option<String>>(conn)
                 .await
             {
                 Ok(value) => value,
@@ -398,7 +400,7 @@ impl NexusSync {
             if let Err(err) = redis::cmd("SET")
                 .arg(LAST_POLLED_BURN_TIP_KEY)
                 .arg(&burn_tip_marker)
-                .query_async::<_, ()>(conn)
+                .query_async::<()>(conn)
                 .await
             {
                 tracing::warn!(
@@ -465,7 +467,7 @@ impl NexusSync {
         let _: () = redis::cmd("SET")
             .arg("nexus:state_root")
             .arg(root)
-            .query_async(&mut conn)
+            .query_async::<()>(&mut conn)
             .await?;
         Ok(())
     }

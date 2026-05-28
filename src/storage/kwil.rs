@@ -37,29 +37,8 @@ pub struct KwilConfig {
     pub db_id: String,
 }
 
-impl KwilConfig {
-    pub fn from_env() -> anyhow::Result<Self> {
-        use anyhow::Context;
-
-        let provider_url =
-            std::env::var("KWIL_PROVIDER_URL").context("Missing env var: KWIL_PROVIDER_URL")?;
-        let db_id = std::env::var("KWIL_DB_ID").context("Missing env var: KWIL_DB_ID")?;
-
-        Ok(Self {
-            provider_url,
-            db_id,
-        })
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct KwilReceipt {
-    pub tx_hash: String,
-    pub payload_signature: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct KwilExecuteRequest {
+#[derive(Debug, Serialize)]
+pub struct KwilExecuteRequest {
     pub db_id: String,
     pub action: String,
     pub params: serde_json::Value,
@@ -67,23 +46,19 @@ struct KwilExecuteRequest {
     pub signature: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct KwilExecuteResponse {
-    pub tx_hash: Option<String>,
-    pub error: Option<String>,
+#[derive(Debug, Deserialize)]
+pub struct KwilReceipt {
+    pub tx_hash: String,
 }
 
-/// [NEXUS-SQL-01] Kwil persistence layer.
 pub struct KwilAdapter {
-    _storage: Arc<Storage>,
+    #[allow(dead_code)]
+    storage: Arc<Storage>,
+    client: Client,
     provider_url: String,
     db_id: String,
     wallet: Arc<Wallet>,
-    client: Client,
 }
-
-const KWIL_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const KWIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl KwilAdapter {
     pub fn new(
@@ -92,42 +67,37 @@ impl KwilAdapter {
         wallet: Arc<Wallet>,
     ) -> anyhow::Result<Self> {
         let client = Client::builder()
-            .connect_timeout(KWIL_CONNECT_TIMEOUT)
-            .timeout(KWIL_REQUEST_TIMEOUT)
-            .build()
-            .context("Failed to build Kwil HTTP client")?;
+            .timeout(Duration::from_secs(10))
+            .build()?;
 
         Ok(Self {
-            _storage: storage,
+            storage,
+            client,
             provider_url: cfg.provider_url,
             db_id: cfg.db_id,
             wallet,
-            client,
         })
     }
 
-    /// Pilot: Persist block to Kwil with cryptographic signature.
-    pub async fn persist_block(
-        &self,
-        commitment: KwilBlockCommitment,
-    ) -> anyhow::Result<KwilReceipt> {
-        tracing::info!(
-            "Pilot: Committing block to Kwil: {} at height {}",
-            commitment.hash,
-            commitment.height
-        );
-
+    pub async fn persist_block(&self, block: KwilBlockCommitment) -> anyhow::Result<KwilReceipt> {
         let created_at = Utc::now().to_rfc3339();
-        let payload = canonical_block_payload(&commitment, &created_at);
+        let payload = format!(
+            "nexus:kwil:block:v1|hash={}|height={}|type={}|state={}|created_at={}",
+            encode_payload_value(&block.hash),
+            block.height,
+            encode_payload_value(&block.block_type),
+            encode_payload_value(&block.state),
+            encode_payload_value(&created_at)
+        );
         let signature = self.wallet.sign(&payload);
 
         let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
 
         let params = serde_json::json!({
-            "hash": commitment.hash,
-            "height": commitment.height,
-            "type": commitment.block_type,
-            "state": commitment.state,
+            "hash": block.hash,
+            "height": block.height,
+            "type": block.block_type,
+            "state": block.state,
             "created_at": created_at,
         });
 
@@ -143,30 +113,29 @@ impl KwilAdapter {
             })
             .send()
             .await
-            .context("Failed to send request to Kwil")?;
+            .context("Failed to send block request to Kwil")?;
 
         self.handle_response(response, signature).await
     }
 
-    /// Pilot: Persist state root to Kwil with cryptographic signature.
     pub async fn persist_state_root(
         &self,
-        commitment: KwilStateRootCommitment,
+        root: KwilStateRootCommitment,
     ) -> anyhow::Result<KwilReceipt> {
-        tracing::info!(
-            "Pilot: Committing state root to Kwil for height {}",
-            commitment.block_height
-        );
-
         let created_at = Utc::now().to_rfc3339();
-        let payload = canonical_state_root_payload(&commitment, &created_at);
+        let payload = format!(
+            "nexus:kwil:state_root:v1|height={}|root={}|created_at={}",
+            root.block_height,
+            encode_payload_value(&root.state_root),
+            encode_payload_value(&created_at)
+        );
         let signature = self.wallet.sign(&payload);
 
         let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
 
         let params = serde_json::json!({
-            "block_height": commitment.block_height,
-            "state_root": commitment.state_root,
+            "block_height": root.block_height,
+            "state_root": root.state_root,
             "created_at": created_at,
         });
 
@@ -175,56 +144,53 @@ impl KwilAdapter {
             .post(&url)
             .json(&KwilExecuteRequest {
                 db_id: self.db_id.clone(),
-                action: "upsert_state_root".to_string(),
+                action: "insert_state_root".to_string(),
                 params,
                 payload: payload.clone(),
                 signature: signature.clone(),
             })
             .send()
             .await
-            .context("Failed to send request to Kwil")?;
+            .context("Failed to send state root request to Kwil")?;
 
         self.handle_response(response, signature).await
     }
 
-    /// [CON-396] Pilot: Persist MMR nodes to Kwil.
-    pub async fn persist_mmr_nodes(
-        &self,
-        nodes: Vec<KwilMmrNodeCommitment>,
-    ) -> anyhow::Result<Vec<KwilReceipt>> {
-        let mut receipts = Vec::with_capacity(nodes.len());
+    pub async fn persist_mmr_node(&self, node: KwilMmrNodeCommitment) -> anyhow::Result<KwilReceipt> {
+        let created_at = Utc::now().to_rfc3339();
+        let payload = format!(
+            "nexus:kwil:mmr_node:v1|pos={}|hash={}|height={}|created_at={}",
+            node.pos,
+            encode_payload_value(&node.hash),
+            node.block_height,
+            encode_payload_value(&created_at)
+        );
+        let signature = self.wallet.sign(&payload);
+
         let url = format!("{}/api/v1/execute", self.provider_url.trim_end_matches('/'));
 
-        for node in nodes {
-            let created_at = Utc::now().to_rfc3339();
-            let payload = canonical_mmr_node_payload(&node, &created_at);
-            let signature = self.wallet.sign(&payload);
+        let params = serde_json::json!({
+            "pos": node.pos,
+            "hash": node.hash,
+            "block_height": node.block_height,
+            "created_at": created_at,
+        });
 
-            let params = serde_json::json!({
-                "pos": node.pos,
-                "hash": node.hash,
-                "block_height": node.block_height,
-                "created_at": created_at,
-            });
+        let response = self
+            .client
+            .post(&url)
+            .json(&KwilExecuteRequest {
+                db_id: self.db_id.clone(),
+                action: "insert_mmr_node".to_string(),
+                params,
+                payload: payload.clone(),
+                signature: signature.clone(),
+            })
+            .send()
+            .await
+            .context("Failed to send MMR node request to Kwil")?;
 
-            let response = self
-                .client
-                .post(&url)
-                .json(&KwilExecuteRequest {
-                    db_id: self.db_id.clone(),
-                    action: "insert_mmr_node".to_string(),
-                    params,
-                    payload: payload.clone(),
-                    signature: signature.clone(),
-                })
-                .send()
-                .await
-                .context("Failed to send MMR node request to Kwil")?;
-
-            receipts.push(self.handle_response(response, signature).await?);
-        }
-
-        Ok(receipts)
+        self.handle_response(response, signature).await
     }
 
     async fn handle_response(
@@ -233,119 +199,26 @@ impl KwilAdapter {
         signature: String,
     ) -> anyhow::Result<KwilReceipt> {
         let status = response.status();
-        let text = response
-            .text()
-            .await
-            .context("Failed to read Kwil response")?;
-
-        if !status.is_success() {
-            return Err(anyhow!("Kwil HTTP {}: {}", status, text));
-        }
-
-        let result: KwilExecuteResponse =
-            serde_json::from_str(&text).context("Failed to parse Kwil response")?;
-
-        if let Some(err) = result.error {
-            return Err(anyhow!("Kwil execution error: {}", err));
-        }
-
-        let tx_hash = result
-            .tx_hash
-            .ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
-
-        Ok(KwilReceipt {
-            tx_hash,
-            payload_signature: signature,
-        })
-    }
-}
-
-/// Percent-encodes payload values so canonical payloads are delimiter-safe.
-fn encode_payload_value(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    for ch in value.chars() {
-        match ch {
-            '%' => out.push_str("%25"),
-            '|' => out.push_str("%7C"),
-            '=' => out.push_str("%3D"),
-            _ => out.push(ch),
+        if status.is_success() {
+            let receipt = response
+                .json::<KwilReceipt>()
+                .await
+                .context("Failed to parse Kwil receipt")?;
+            Ok(receipt)
+        } else {
+            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            Err(anyhow!(
+                "Kwil execution failed (status {}): {} | Signature: {}",
+                status,
+                error_text,
+                signature
+            ))
         }
     }
-    out
 }
 
-pub fn canonical_block_payload(commitment: &KwilBlockCommitment, created_at: &str) -> String {
-    format!(
-        "{}|hash={}|height={}|type={}|state={}|created_at={}",
-        "nexus:kwil:block:v1",
-        encode_payload_value(&commitment.hash),
-        commitment.height,
-        encode_payload_value(&commitment.block_type),
-        encode_payload_value(&commitment.state),
-        encode_payload_value(created_at)
-    )
-}
-
-pub fn canonical_state_root_payload(
-    commitment: &KwilStateRootCommitment,
-    created_at: &str,
-) -> String {
-    format!(
-        "{}|block_height={}|state_root={}|created_at={}",
-        "nexus:kwil:state_root:v1",
-        commitment.block_height,
-        encode_payload_value(&commitment.state_root),
-        encode_payload_value(created_at)
-    )
-}
-
-pub fn canonical_mmr_node_payload(node: &KwilMmrNodeCommitment, created_at: &str) -> String {
-    format!(
-        "{}|pos={}|hash={}|block_height={}|created_at={}",
-        "nexus:kwil:mmr_node:v1",
-        node.pos,
-        encode_payload_value(&node.hash),
-        node.block_height,
-        encode_payload_value(created_at)
-    )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn encode_payload_value_escapes_reserved_chars() {
-        let encoded = encode_payload_value("a%b|c=d");
-        assert_eq!(encoded, "a%25b%7Cc%3Dd");
-    }
-
-    #[test]
-    fn canonical_payloads_include_domain_and_are_delimiter_safe() {
-        let created_at = "2024-05-28T12:00:00Z";
-        let block = KwilBlockCommitment {
-            hash: "a%b|c=d".to_string(),
-            height: 1,
-            block_type: "micro|block".to_string(),
-            state: "soft=maybe".to_string(),
-        };
-
-        let payload = canonical_block_payload(&block, created_at);
-        assert!(payload.starts_with("nexus:kwil:block:v1|"));
-        assert!(payload.contains("hash=a%25b%7Cc%3Dd"));
-        assert!(payload.contains("type=micro%7Cblock"));
-        assert!(payload.contains("state=soft%3Dmaybe"));
-        assert!(payload.contains("created_at=2024-05-28T12:00:00Z"));
-
-        let state_root = KwilStateRootCommitment {
-            block_height: 2,
-            state_root: "root|v1".to_string(),
-        };
-
-        let payload = canonical_state_root_payload(&state_root, created_at);
-        assert!(payload.starts_with("nexus:kwil:state_root:v1|"));
-        assert!(payload.contains("state_root=root%7Cv1"));
-    }
+pub fn encode_payload_value(v: &str) -> String {
+    v.replace('|', r"\|").replace('=', r"\=")
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -355,8 +228,8 @@ pub struct KwilSettlementProposalCommitment {
     pub source: String,
     pub payload: serde_json::Value,
     pub status: String,
-    pub init_height: i64,
-    pub unlock_height: i64,
+    pub init_height: u64,
+    pub unlock_height: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -368,7 +241,6 @@ pub struct KwilSettlementLogCommitment {
 }
 
 impl KwilAdapter {
-    /// [CON-162] Pilot: Persist settlement proposal to Kwil.
     pub async fn persist_settlement_proposal(
         &self,
         proposal: KwilSettlementProposalCommitment,
@@ -416,7 +288,6 @@ impl KwilAdapter {
         self.handle_response(response, signature).await
     }
 
-    /// [CON-164] Pilot: Persist settlement log to Kwil.
     pub async fn persist_settlement_log(
         &self,
         log: KwilSettlementLogCommitment,
@@ -456,5 +327,36 @@ impl KwilAdapter {
             .context("Failed to send settlement log request to Kwil")?;
 
         self.handle_response(response, signature).await
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_payload_value_escapes_reserved_chars() {
+        assert_eq!(encode_payload_value("a|b=c"), r"a\|b\=c");
+    }
+
+    #[test]
+    fn canonical_payloads_include_domain_and_are_delimiter_safe() {
+        let block = KwilBlockCommitment {
+            hash: "0x123".to_string(),
+            height: 100,
+            block_type: "burn".to_string(),
+            state: "hard".to_string(),
+        };
+        let created_at = "2026-05-28T12:00:00Z";
+        let payload = format!(
+            "nexus:kwil:block:v1|hash={}|height={}|type={}|state={}|created_at={}",
+            encode_payload_value(&block.hash),
+            block.height,
+            encode_payload_value(&block.block_type),
+            encode_payload_value(&block.state),
+            encode_payload_value(created_at)
+        );
+        assert!(payload.starts_with("nexus:kwil:block:v1|"));
+        assert!(payload.contains("|hash=0x123|"));
     }
 }

@@ -1,3 +1,4 @@
+use anyhow::Context;
 use conxian_nexus::api;
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
 use conxian_nexus::config::{
@@ -22,13 +23,15 @@ use tokio::time::{self, Duration};
 async fn main() -> anyhow::Result<()> {
     // Load environment variables
     dotenvy::dotenv().ok();
-    // Initialize logging
-    let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
-    tracing_subscriber::fmt().with_env_filter(&log_level).init();
 
-    let config = Config::from_env()?;
+    let config = Config::from_env().context("Failed to load configuration")?;
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.7)...");
+    // Initialize logging using the centralized config
+    tracing_subscriber::fmt()
+        .with_env_filter(&config.rust_log)
+        .init();
+
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.11)...");
 
     // Initialize Global Start Time
     api::init_start_time();
@@ -58,8 +61,6 @@ async fn main() -> anyhow::Result<()> {
         &config.kwil_db_id,
         &config.kwil_private_key_hex,
     ) {
-        use anyhow::Context;
-
         let wallet = Arc::new(
             Wallet::from_private_key_hex(private_key_hex)
                 .context("Invalid KWIL_PRIVATE_KEY_HEX")?,
@@ -94,8 +95,6 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize Oracle Service
     let oracle_service = if config.oracle_enabled {
-        use anyhow::Context;
-
         let endpoint_url = config.oracle_endpoint_url.clone().with_context(|| {
             format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_ENDPOINT_URL}")
         })?;
@@ -252,7 +251,7 @@ async fn main() -> anyhow::Result<()> {
     let rest_kwil = kwil.clone();
     let rest_nostr = nostr.clone();
     let rest_port = config.rest_port;
-    let experimental_apis_enabled = config.experimental_apis_enabled;
+    let rest_config = Arc::new(config.clone());
     let rest_handle = tokio::spawn(async move {
         if let Err(e) = api::rest::start_rest_server(
             rest_storage,
@@ -263,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
             rest_kwil,
             rest_nostr,
             rest_port,
-            experimental_apis_enabled,
+            rest_config,
         )
         .await
         {

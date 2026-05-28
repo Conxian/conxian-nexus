@@ -164,8 +164,8 @@ pub async fn settlement_trigger_handler(
                 source: payload.source.clone(),
                 payload: payload.payload.clone(),
                 status: "active".to_string(),
-                init_height: current_height,
-                unlock_height: unlock_height as i64,
+                init_height: current_height as u64,
+                unlock_height: unlock_height as u64,
             })
             .await
             .map_err(|e| tracing::warn!("Kwil settlement proposal persistence failed: {}", e))
