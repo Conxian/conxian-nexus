@@ -1,9 +1,9 @@
+pub mod analytics;
 pub mod billing;
 pub mod grpc;
 pub mod rest;
 pub mod services;
 pub mod settlement;
-pub mod analytics;
 
 use std::sync::OnceLock;
 use std::time::Instant;

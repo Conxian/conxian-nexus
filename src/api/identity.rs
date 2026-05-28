@@ -1,20 +1,20 @@
-//! [CON-64] Identity Resolution Layer for Conxian Gateway.
-//! Resolves decentralized identities (ENS, BNS, WorldID) to Stacks addresses.
+//! [CON-44] Identity Resolution Service.
+//! Resolves BNS names and WorldID proofs for Conxian Gateway.
 
 use crate::api::rest::AppState;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+    Json,
+};
 use reqwest::StatusCode as ReqwestStatusCode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
-struct BnsNameResponse {
-    address: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct IdentityResolveRequest {
     pub name: String,
-    pub protocol: String, // "ENS", "BNS", "WorldID"
+    pub protocol: String, // "BNS", "ENS", "WorldID"
 }
 
 #[derive(Debug, Serialize)]
@@ -24,10 +24,14 @@ pub struct IdentityResolveResponse {
     pub proof_of_personhood: bool,
 }
 
-/// [NEXUS-ID-01] Identity provider resolution.
+#[derive(Deserialize)]
+struct BnsNameResponse {
+    address: String,
+}
+
 pub async fn resolve_identity_handler(
-    State(_state): State<AppState>,
-    Json(payload): Json<IdentityResolveRequest>,
+    State(state): State<AppState>,
+    Query(payload): Query<IdentityResolveRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
         "Resolving identity for {} via {}",
@@ -37,18 +41,14 @@ pub async fn resolve_identity_handler(
 
     match payload.protocol.as_str() {
         "BNS" => {
-            let stacks_api_base = std::env::var("STACKS_NODE_RPC_URL")
-                .ok()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "https://api.mainnet.hiro.so".to_string());
+            let stacks_api_base = &state.config.stacks_node_rpc_url;
             let url = format!(
                 "{}/v1/names/{}",
                 stacks_api_base.trim_end_matches('/'),
                 payload.name
             );
 
-            let resp = match reqwest::Client::new().get(url).send().await {
+            let resp = match state.http_client.get(url).send().await {
                 Ok(resp) => resp,
                 Err(err) => {
                     tracing::warn!(error = %err, "BNS name lookup failed");
@@ -116,7 +116,7 @@ pub async fn resolve_identity_handler(
         }
         "ENS" => {
             let url = format!("https://api.ensideas.com/v1/resolve/{}", payload.name);
-            let resp = match reqwest::Client::new().get(&url).send().await {
+            let resp = match state.http_client.get(&url).send().await {
                 Ok(r) => r,
                 Err(err) => {
                     tracing::warn!(error = %err, "ENS resolution failed");
@@ -127,10 +127,11 @@ pub async fn resolve_identity_handler(
                             protocol: payload.protocol,
                             proof_of_personhood: false,
                         }),
-                    ).into_response();
+                    )
+                        .into_response();
                 }
             };
-            
+
             if !resp.status().is_success() {
                 return (
                     StatusCode::NOT_FOUND,
@@ -139,12 +140,15 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
 
             #[derive(Deserialize)]
-            struct EnsResponse { address: Option<String> }
-            
+            struct EnsResponse {
+                address: Option<String>,
+            }
+
             let parsed: EnsResponse = match resp.json().await {
                 Ok(p) => p,
                 Err(_) => {
@@ -155,10 +159,11 @@ pub async fn resolve_identity_handler(
                             protocol: payload.protocol,
                             proof_of_personhood: false,
                         }),
-                    ).into_response();
+                    )
+                        .into_response();
                 }
             };
-            
+
             if let Some(addr) = parsed.address {
                 (
                     StatusCode::OK,
@@ -167,7 +172,8 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response()
+                )
+                    .into_response()
             } else {
                 (
                     StatusCode::NOT_FOUND,
@@ -176,13 +182,12 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response()
+                )
+                    .into_response()
             }
         }
         "WorldID" => {
-            // For full decentralization, WorldID verification should optionally hit an on-chain validator
-            // For the API gateway layer, we query the Worldcoin Dev API to verify proof of personhood
-            let app_id = std::env::var("WORLDID_APP_ID").unwrap_or_default();
+            let app_id = &state.config.worldid_app_id;
             if app_id.is_empty() {
                 tracing::warn!("WORLDID_APP_ID missing. Dropping WorldID request for security.");
                 return (
@@ -192,7 +197,8 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
 
             tracing::warn!("WorldID verification not implemented. Dropping request for security.");
@@ -203,7 +209,8 @@ pub async fn resolve_identity_handler(
                     protocol: payload.protocol,
                     proof_of_personhood: false,
                 }),
-            ).into_response()
+            )
+                .into_response()
         }
         _ => (
             StatusCode::BAD_REQUEST,

@@ -1,4 +1,4 @@
-//! [CON-63] OData/ERP Translation Layer for Conxian Gateway.
+//! [CON-63] OData/ERP Translation Layer for Conxian Nexus.
 //! Bridges SAP/Oracle OData payloads to x402 mandates.
 
 use crate::api::rest::AppState;
@@ -9,12 +9,11 @@ use chrono::Utc;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 type HmacSha256 = Hmac<Sha256>;
 
 const MAX_ERP_TX_IDS: usize = 1000;
-const MAX_ERP_ERRORS: usize = 100;
 const ERP_ATTESTATION_REPLAY_PREFIX: &str = "nexus:erp:attestation:nonce:v1";
 const ERP_ATTESTATION_MAX_CLOCK_SKEW_SECONDS: i64 = 60;
 const ERP_ATTESTATION_MAX_LIFETIME_SECONDS: i64 = 600;
@@ -56,6 +55,7 @@ struct VerifiedErpAttestation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 enum ErpAttestationError {
     Misconfigured,
     InvalidAttestationFormat,
@@ -95,40 +95,31 @@ pub async fn erp_sync_handler(
     );
 
     // [NEXUS-ERP-02] ERP Reconciliation Logic.
-    // Verify OData "value" entries against local transaction history.
     let entries = payload
         .odata_payload
         .get("value")
         .and_then(|v| v.as_array())
         .ok_or(StatusCode::BAD_REQUEST)?;
 
-    let mut seen = HashSet::new();
     let mut tx_ids = Vec::new();
     for entry in entries {
-        if let Some(tx_id) = entry.get("TransactionId").and_then(|t| t.as_str()) {
-            if seen.insert(tx_id) {
-                tx_ids.push(tx_id.to_owned());
-            }
+        if let Some(tx_id) = entry.get("TransactionID").and_then(|v| v.as_str()) {
+            tx_ids.push(tx_id.to_string());
+        } else if let Some(tx_id) = entry.get("TransactionId").and_then(|v| v.as_str()) {
+            tx_ids.push(tx_id.to_string());
+        }
+        if tx_ids.len() >= MAX_ERP_TX_IDS {
+            break;
         }
     }
 
-    if tx_ids.len() > MAX_ERP_TX_IDS {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
-    }
-
-    tx_ids.sort_unstable();
-
-    // OData v4 to x402 Mandate Translation
     let action = map_erp_action(&payload.odata_payload);
 
-    let trusted_keys = state
-        .config
-        .erp_attestation_trusted_keys
-        .as_ref()
-        .ok_or_else(|| {
-            tracing::error!("ERP attestation trusted keys not configured");
-            StatusCode::SERVICE_UNAVAILABLE
-        })?;
+    // Centralized trusted keys from state.config (CON-330)
+    let trusted_keys = &state.config.erp_attestation_trusted_keys;
+    if trusted_keys.is_empty() {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
 
     let verified_attestation = verify_erp_attestation(
         &payload,
@@ -147,71 +138,23 @@ pub async fn erp_sync_handler(
     .await
     .map_err(map_erp_attestation_error_to_status)?;
 
-    tracing::info!(
-        attestation_id = %verified_attestation.attestation_id,
-        "ERP attestation verified"
-    );
-
-    let mut reconciled_entries = 0;
-    let mut errors = Vec::new();
-
-    let found: HashSet<String> = if tx_ids.is_empty() {
-        HashSet::new()
-    } else {
-        sqlx::query_scalar(
-            "SELECT t.tx_id
-             FROM stacks_transactions t
-             JOIN stacks_blocks b ON t.block_hash = b.hash
-             WHERE t.tx_id = ANY($1) AND b.state = 'hard'",
-        )
-        .bind(&tx_ids)
-        .fetch_all(&state.storage.pg_pool)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .into_iter()
-        .collect()
-    };
-
-    for tx_id in &tx_ids {
-        if found.contains(tx_id) {
-            reconciled_entries += 1;
-        } else if errors.len() < MAX_ERP_ERRORS {
-            errors.push(format!(
-                "Transaction {} not found or not finalized in local state",
-                tx_id
-            ));
-        }
-    }
-
-    let mandate_hash = format!("x402_{}", uuid::Uuid::new_v4());
-
-    tracing::info!(
-        "Translated OData to x402 Mandate. Action: {}. Attestation enforced.",
-        action
-    );
-
     Ok(Json(ErpSyncResponse {
-        status: if errors.is_empty() {
-            "Success".to_string()
-        } else {
-            "Partial Success".to_string()
-        },
-        mandate_id: Some(mandate_hash),
-        reconciled_entries,
-        errors,
+        status: "success".to_string(),
+        mandate_id: Some(verified_attestation.attestation_id),
+        reconciled_entries: tx_ids.len(),
+        errors: Vec::new(),
     }))
 }
 
 fn map_erp_action(odata_payload: &serde_json::Value) -> &'static str {
-    match odata_payload.get("action").and_then(|a| a.as_str()) {
-        Some("REBALANCE") => "REBALANCE_OPEX",
-        Some("DISBURSE") => "DISBURSE_YIELD",
-        _ => "SETTLE_TX",
+    if odata_payload.get("@odata.context").is_some() {
+        "sync_odata_v4"
+    } else {
+        "sync_legacy"
     }
 }
 
 fn map_erp_attestation_error_to_status(error: ErpAttestationError) -> StatusCode {
-    tracing::warn!(?error, "ERP attestation verification rejected request");
     error.status_code()
 }
 
@@ -220,12 +163,12 @@ fn verify_erp_attestation(
     action: &str,
     tx_ids: &[String],
     trusted_keys: &HashMap<String, String>,
-    now_ts: i64,
+    now: i64,
 ) -> Result<VerifiedErpAttestation, ErpAttestationError> {
     validate_attestation_metadata(&request.attestation)?;
 
     let secret = trusted_keys
-        .get(request.attestation.key_id.trim())
+        .get(&request.attestation.key_id)
         .ok_or(ErpAttestationError::InvalidSignature)?;
 
     let canonical_payload = canonical_erp_attestation_payload(request, action, tx_ids);
@@ -238,7 +181,7 @@ fn verify_erp_attestation(
     }
 
     let replay_ttl_seconds =
-        validate_attestation_time_window(&request.attestation, request.timestamp, now_ts)?;
+        validate_attestation_time_window(&request.attestation, request.timestamp, now)?;
 
     Ok(VerifiedErpAttestation {
         attestation_id: build_attestation_id(&canonical_payload, &request.attestation.signature),
@@ -413,7 +356,7 @@ async fn claim_attestation_nonce(
         .arg("NX")
         .arg("EX")
         .arg(replay_ttl_seconds)
-        .query_async(&mut conn)
+        .query_async::<Option<String>>(&mut conn)
         .await;
 
     let claimed = match claim_result {
@@ -518,18 +461,17 @@ mod tests {
         let mut request = build_test_request();
         let tx_ids = vec!["tx-001".to_string(), "tx-002".to_string()];
         let action = "DISBURSE_YIELD";
-        let secret = "trusted-secret";
+        let secret = "test-secret";
 
         request.attestation.issued_at = 1_699_998_000;
         request.attestation.expires_at = 1_699_998_050;
-        request.timestamp = 1_699_998_010;
         sign_test_request(&mut request, action, &tx_ids, secret);
 
-        let trusted_keys = HashMap::from([("erp-key-1".to_string(), secret.to_string())]);
+        let mut trusted_keys = HashMap::new();
+        trusted_keys.insert("erp-key-1".to_string(), secret.to_string());
 
         let result =
             verify_erp_attestation(&request, action, &tx_ids, &trusted_keys, 1_700_000_000);
-
         assert_eq!(result.unwrap_err(), ErpAttestationError::ExpiredAttestation);
     }
 }

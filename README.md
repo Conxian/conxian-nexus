@@ -1,89 +1,99 @@
-# Conxian Nexus
+# Conxian Nexus (Glass Node)
 
-[![Version](https://img.shields.io/badge/version-0.4.7-blue.svg)](Cargo.toml)
-[![License](https://img.shields.io/badge/license-BSL--1.1-green.svg)](LICENSE)
+Conxian Nexus is a high-performance middleware designed to synchronize off-chain state with Stacks L1, providing cryptographic proofs and enforcing transaction ordering.
 
-Conxian Nexus is a mission-critical supporting interoperability and API facade surface in the Conxian builder platform. It packages lower-level platform capabilities into higher-level external-facing API surfaces, serving as the bridge between raw protocol adapters and developer-facing services.
+## Purpose
 
-## Role
+Provide a verifiable synchronization and proof layer between off-chain state and Stacks L1, with ordering guarantees and safety-mode controls. It serves as the primary sovereign truth layer for the Conxian ecosystem.
 
-This repository exists to package lower-level platform capabilities into higher-level external-facing API or interoperability surfaces where that is useful for builders or partners.
+## Status
 
-### Ownership & Boundaries
+**Production-Ready (v0.4.7)**. Core state sync, MMR persistence, and FSOC sequencing are stable. Multi-protocol support (BitVM, RGB, Bisq) is in active rollout.
 
-- **Owns**: Higher-level API facade behavior, interoperability service boundaries above direct adapters, and packaged access to lower-level capability surfaces.
-- **Does Not Own**: Canonical network adapters, provider-specific integration logic (belongs in `conxian-gateway`), shared-core ownership, or protocol identity.
-- **Strategic Role**: Supporting repo.
+## Repository Categorization
 
-## Core Features
+- **Classification**: P1 - Required for stable production support.
+- **Business Unit**: Conxian Sovereign Finance (CSF).
+- **Owner**: @botshelomokoka
 
-- **Verifiable State Roots**: Implements a high-performance Merkle Mountain Range (MMR) for O(log N) state proof generation and cryptographic validation.
-- **Sovereign Persistence**: Multi-layered persistence logic using Kwil and Tableland for decentralized relational state commitments.
-- **FSOC Sequencer**: Specialized sequencer logic for FSOC (Financial Services Operations Center) to mitigate MEV and front-running risks.
-- **API Facade**: Provides a clean, standardized REST API for state proofs, metrics, system health, and institutional settlement triggers.
-- **Security Hardening**: Includes "Safety Mode" (Sovereign Handoff) triggered by sync drift and mandatory zero-secret logging.
+## Modules
 
-## Technology Stack
+- **nexus-sync**: Ingests Stacks L1 events via RPC polling, updates local state, and handles microblock reorgs with automated rollback.
+- **nexus-state**: Manages the cryptographic state root using a Merkle tree of transaction IDs and a persistent Merkle Mountain Range (MMR).
+- **nexus-executor**: specialized execution environment with FSOC (First-Seen-On-Chain) sequencer logic.
+- **nexus-safety**: Monitors sync drift and triggers Safety Mode (Sovereign Handoff).
+- **API (REST & gRPC)**: Interfaces for state verification and transaction execution.
+- **lib-conxian-core**: Shared library for multi-protocol support (Bisq, RGB, BitVM).
+- **oracle**: Multi-source aggregated FX rate provider with on-chain state pushing.
 
-- **Language**: [Rust](https://www.rust-lang.org/) (Edition 2021)
-- **Web Framework**: [Axum](https://github.com/tokio-rs/axum)
-- **Database**: [PostgreSQL](https://www.postgresql.org/) (via [SQLx](https://github.com/launchbadge/sqlx))
-- **Caching**: [Redis](https://redis.io/)
-- **Infrastructure**: Docker & Docker Compose
+## Features
+
+- **Nakamoto Ready**: Handles microblocks and burn blocks.
+- **FSOC Sequencer**: Mitigates MEV by validating transaction timestamps and payloads against on-chain events.
+- **Sovereign Handoff**: Automatic safety mode if sync drift exceeds threshold.
+- **Verifiable Proofs**: Generate and verify Merkle proofs for any transaction.
+- **Persistent MMR**: Full persistence of MMR peaks and nodes in PostgreSQL, with support for cryptographic inclusion proofs.
+- **Multi-Protocol**: Unified support for Bisq, RGB, and BitVM.
+- **Global Settlement Ingress**: Additive support for ISO 20022, PAPSS, and BRICS triggers with TEE verification.
+
+## API Highlights
+
+- `GET /v1/status`: System status and state root.
+- `GET /v1/metrics`: System performance metrics (JSON).
+- `GET /metrics`: Prometheus metrics exporter (Text).
+- `POST /v1/execute`: Submit transactions for FSOC validation.
+- `GET /v1/proof?key=<tx_id>`: Retrieve Merkle proof.
+- `GET /v1/mmr-proof?tx_id=<tx_id>`: Retrieve MMR inclusion proof.
+- `POST /v1/settlement/trigger`: External institutional settlement triggers.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust (latest stable)
-- Docker & Docker Compose
-- PostgreSQL & Redis (local or via Docker)
+- Docker and Docker Compose
+- *Or* Rust 1.82+, PostgreSQL 15, and Redis 7
 
-### Quick Start
+### Running
 
-1. **Clone & Setup**:
-   ```bash
-   git clone https://github.com/Conxian/conxian-nexus.git
-   cd conxian-nexus
-   cp .env.example .env
-   ```
-2. **Database Migrations**:
-   ```bash
-   # Ensure DATABASE_URL is set in .env
-   cargo install sqlx-cli
-   sqlx migrate run
-   ```
-3. **Run the Application**:
-   ```bash
-   cargo run
-   ```
-4. **Verify Installation**:
-   ```bash
-   curl http://localhost:3000/v1/status
-   ```
+```bash
+docker-compose up --build
+```
 
-### Running Tests
+Or manually:
+
+```bash
+cargo run
+```
+
+### Testing
+
+Run the full test suite:
 
 ```bash
 cargo test
+```
+
+For mainnet boundary validation:
+
+```bash
 ./scripts/check_production_boundary.sh
 ```
 
-## Documentation Hub
+## Governance & Security
 
-- [Contributing Guidelines](CONTRIBUTING.md)
-- [Security Policy](SECURITY.md)
-- [License](LICENSE)
-- [Changelog](CHANGELOG.md)
-- [Architecture & PRD](docs/PRD.md)
-- [API Specification (OpenAPI)](docs/openapi.yaml)
+- **Ownership**: Defined in [`.github/CODEOWNERS`](./.github/CODEOWNERS).
+- **Control Model**: See [docs/CONTROL_MODEL.md](./docs/CONTROL_MODEL.md).
+- **Contributing**: See [CONTRIBUTING.md](./CONTRIBUTING.md).
+- **Security**: See [SECURITY.md](./SECURITY.md).
+- **Security Reporting**: Please report vulnerabilities to [security@conxian.com](mailto:security@conxian.com). See [SECURITY.md](./SECURITY.md) for details.
+- **BOS Boundary**: This repository enforces a strict mainnet-only production boundary.
 
-## Relationship to the Portfolio
+## Documentation
 
-- [`lib-conxian-core`](https://github.com/Conxian/lib-conxian-core): Shared capability interfaces and safety primitives.
-- `conxian-gateway`: Canonical network and provider adapters.
-- `conxius-enclave-sdk`: Secure signer and device trust abstractions.
-- `conxius-platform`: Strategic runtime and validation environments.
+- **PRD**: [docs/PRD.md](docs/PRD.md)
+- **API Spec**: [docs/openapi.yaml](docs/openapi.yaml)
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
 
----
-© 2026 Conxian Foundation. All rights reserved.
+## License
+
+BSL 1.1

@@ -44,7 +44,10 @@ pub struct Config {
     pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
-    pub erp_attestation_trusted_keys: Option<HashMap<String, String>>,
+    pub erp_attestation_trusted_keys: HashMap<String, String>,
+    pub rust_log: String,
+    pub worldid_app_id: String,
+    pub zkml_vks: HashMap<String, String>,
 }
 
 impl std::fmt::Debug for Config {
@@ -74,10 +77,10 @@ impl std::fmt::Debug for Config {
             .field("oracle_stub_ok", &self.oracle_stub_ok)
             .field("oracle_endpoint_url", &self.oracle_endpoint_url)
             .field("oracle_contract_principal", &self.oracle_contract_principal)
-            .field(
-                "erp_attestation_trusted_keys",
-                &self.erp_attestation_trusted_keys.as_ref().map(|_| "<redacted>"),
-            )
+            .field("erp_attestation_trusted_keys", &"<redacted>")
+            .field("rust_log", &self.rust_log)
+            .field("worldid_app_id", &self.worldid_app_id)
+            .field("zkml_vks", &"<redacted>")
             .finish()
     }
 }
@@ -103,7 +106,10 @@ impl Config {
             oracle_stub_ok: true,
             oracle_endpoint_url: None,
             oracle_contract_principal: None,
-            erp_attestation_trusted_keys: None,
+            erp_attestation_trusted_keys: HashMap::new(),
+            rust_log: "info".to_string(),
+            worldid_app_id: "".to_string(),
+            zkml_vks: HashMap::new(),
         }
     }
 
@@ -114,16 +120,14 @@ impl Config {
             env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
         }
 
+        let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
+
         let allow_default_db = cfg!(debug_assertions) || env_flag(ENV_ALLOW_DEFAULT_DB);
         let database_url = match env::var("DATABASE_URL") {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
                     if allow_default_db {
-                        tracing::warn!(
-                            default = DEFAULT_DATABASE_URL,
-                            "DATABASE_URL set but empty; defaulting"
-                        );
                         DEFAULT_DATABASE_URL.to_string()
                     } else {
                         bail!("Missing env var: DATABASE_URL");
@@ -134,10 +138,6 @@ impl Config {
             }
             Err(env::VarError::NotPresent) => {
                 if allow_default_db {
-                    tracing::warn!(
-                        default = DEFAULT_DATABASE_URL,
-                        "DATABASE_URL not set; defaulting"
-                    );
                     DEFAULT_DATABASE_URL.to_string()
                 } else {
                     bail!("Missing env var: DATABASE_URL");
@@ -152,10 +152,6 @@ impl Config {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
                     if allow_default_redis {
-                        tracing::warn!(
-                            default = DEFAULT_REDIS_URL,
-                            "REDIS_URL set but empty; defaulting"
-                        );
                         DEFAULT_REDIS_URL.to_string()
                     } else {
                         bail!("Missing env var: REDIS_URL");
@@ -166,7 +162,6 @@ impl Config {
             }
             Err(env::VarError::NotPresent) => {
                 if allow_default_redis {
-                    tracing::warn!(default = DEFAULT_REDIS_URL, "REDIS_URL not set; defaulting");
                     DEFAULT_REDIS_URL.to_string()
                 } else {
                     bail!("Missing env var: REDIS_URL");
@@ -179,29 +174,13 @@ impl Config {
             Ok(raw) => {
                 let trimmed = raw.trim();
                 if trimmed.is_empty() {
-                    tracing::warn!(
-                        default = DEFAULT_STACKS_NODE_RPC_URL,
-                        "STACKS_NODE_RPC_URL set but empty; defaulting"
-                    );
                     DEFAULT_STACKS_NODE_RPC_URL.to_string()
                 } else {
                     trimmed.to_string()
                 }
             }
-            Err(env::VarError::NotPresent) => {
-                tracing::warn!(
-                    default = DEFAULT_STACKS_NODE_RPC_URL,
-                    "STACKS_NODE_RPC_URL not set; defaulting"
-                );
-                DEFAULT_STACKS_NODE_RPC_URL.to_string()
-            }
-            Err(env::VarError::NotUnicode(_)) => {
-                tracing::warn!(
-                    default = DEFAULT_STACKS_NODE_RPC_URL,
-                    "STACKS_NODE_RPC_URL contains non-unicode bytes; defaulting"
-                );
-                DEFAULT_STACKS_NODE_RPC_URL.to_string()
-            }
+            Err(env::VarError::NotPresent) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
+            Err(env::VarError::NotUnicode(_)) => DEFAULT_STACKS_NODE_RPC_URL.to_string(),
         };
 
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
@@ -226,20 +205,15 @@ impl Config {
             );
         }
 
-        if oracle_enabled {
-            if oracle_endpoint_url.is_none() {
-                anyhow::bail!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_ENDPOINT_URL}");
-            }
-
-            if oracle_contract_principal.is_none() {
-                anyhow::bail!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}");
-            }
-        }
-
         let nostr_secret_key = env::var("NOSTR_SECRET_KEY").ok().filter(|s| !s.is_empty());
-        let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
+        let nostr_relays = env::var("NOSTR_RELAYS")
+            .unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string())
+            .split(",")
+            .map(|s| s.trim().to_string())
+            .collect();
 
-        let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
+        let tableland_base_url = env::var("TABLELAND_BASE_URL")
+            .unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
         let kwil_provider_url = env::var("KWIL_PROVIDER_URL")
             .ok()
             .map(|s| s.trim().to_string())
@@ -253,35 +227,18 @@ impl Config {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
-        let erp_attestation_trusted_keys = env::var(ENV_ERP_ATTESTATION_TRUSTED_KEYS)
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .and_then(|raw| {
-                serde_json::from_str::<HashMap<String, String>>(&raw)
-                    .map_err(|e| {
-                        tracing::error!("Failed to parse {}: {}", ENV_ERP_ATTESTATION_TRUSTED_KEYS, e);
-                        e
-                    })
-                    .ok()
-            });
+        let erp_attestation_trusted_keys = match env::var(ENV_ERP_ATTESTATION_TRUSTED_KEYS) {
+            Ok(raw) => serde_json::from_str(&raw)
+                .context("Failed to parse ERP_ATTESTATION_TRUSTED_KEYS_JSON")?,
+            Err(_) => HashMap::new(),
+        };
 
-        if kwil_provider_url.is_some() || kwil_db_id.is_some() || kwil_private_key_hex.is_some() {
-            let mut missing = Vec::new();
-            if kwil_provider_url.is_none() {
-                missing.push("KWIL_PROVIDER_URL");
-            }
-            if kwil_db_id.is_none() {
-                missing.push("KWIL_DB_ID");
-            }
-            if kwil_private_key_hex.is_none() {
-                missing.push("KWIL_PRIVATE_KEY_HEX");
-            }
+        let worldid_app_id = env::var("WORLDID_APP_ID").unwrap_or_default();
 
-            if !missing.is_empty() {
-                bail!(
-                    "Kwil persistence requires KWIL_PROVIDER_URL, KWIL_DB_ID, and KWIL_PRIVATE_KEY_HEX (missing: {})",
-                    missing.join(", ")
-                );
+        let mut zkml_vks = HashMap::new();
+        for (key, value) in env::vars() {
+            if key.starts_with("ZKML_VK_B64_") {
+                zkml_vks.insert(key, value);
             }
         }
 
@@ -297,11 +254,11 @@ impl Config {
             rest_port: env::var("REST_PORT")
                 .unwrap_or_else(|_| "3000".to_string())
                 .parse()
-                .context("Invalid REST_PORT (expected u16)")?,
+                .context("Invalid REST_PORT")?,
             grpc_port: env::var("GRPC_PORT")
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
-                .context("Invalid GRPC_PORT (expected u16)")?,
+                .context("Invalid GRPC_PORT")?,
             stacks_node_rpc_url,
             stacks_node_ws_url,
             gateway_url: env::var("GATEWAY_URL")
@@ -314,6 +271,38 @@ impl Config {
             oracle_endpoint_url,
             oracle_contract_principal,
             erp_attestation_trusted_keys,
+            rust_log,
+            worldid_app_id,
+            zkml_vks,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_from_env_consolidation() {
+        env::set_var("DATABASE_URL", "postgres://localhost/test_consolidation");
+        env::set_var("REDIS_URL", "redis://localhost/test_consolidation");
+        env::set_var("RUST_LOG", "debug");
+        env::set_var(ENV_ERP_ATTESTATION_TRUSTED_KEYS, r#"{"key1": "secret1"}"#);
+        env::set_var("WORLDID_APP_ID", "app123");
+        env::set_var("ZKML_VK_B64_MODEL1", "vk123");
+
+        let config = Config::from_env().unwrap();
+        assert_eq!(
+            config.database_url,
+            "postgres://localhost/test_consolidation"
+        );
+        assert_eq!(config.redis_url, "redis://localhost/test_consolidation");
+        assert_eq!(config.rust_log, "debug");
+        assert_eq!(
+            config.erp_attestation_trusted_keys.get("key1").unwrap(),
+            "secret1"
+        );
+        assert_eq!(config.worldid_app_id, "app123");
+        assert_eq!(config.zkml_vks.get("ZKML_VK_B64_MODEL1").unwrap(), "vk123");
     }
 }

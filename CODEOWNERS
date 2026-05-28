@@ -1,0 +1,23 @@
+# Conxian Labs Administrative Registry - Governance
+
+# Verified maintainers with admin access
+* @botshelomokoka @admin-conxian-labs
+
+# Security and governance-sensitive files
+/CODEOWNERS @botshelomokoka @admin-conxian-labs
+/SECURITY.md @botshelomokoka @admin-conxian-labs
+/SUPPORT.md @botshelomokoka @admin-conxian-labs
+/.github/release.yml @botshelomokoka @admin-conxian-labs
+/.github/ISSUE_TEMPLATE/** @botshelomokoka @admin-conxian-labs
+/.github/PULL_REQUEST_TEMPLATE* @botshelomokoka @admin-conxian-labs
+/.github/workflows/** @botshelomokoka @admin-conxian-labs
+
+# Governance process docs
+/CONTRIBUTING.md @botshelomokoka @admin-conxian-labs
+
+# Repository-specific ownership
+/src/api/ @Conxian/api-team
+/proto/ @Conxian/api-team
+/src/api/billing/ @Conxian/security-team
+/src/safety/ @Conxian/security-team
+/docs/ @Conxian/docs-team

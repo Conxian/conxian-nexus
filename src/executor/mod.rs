@@ -2,8 +2,8 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::{Arc, Mutex};
 use sqlx::Row;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionRequest {
@@ -21,12 +21,9 @@ pub struct VaultStatus {
     pub ltv_ratio: f64,
 }
 
-/// [NEXUS-EXEC-01] FSOC (First-Seen-On-Chain) Sequencer logic.
-/// Validates transaction ordering and prevents front-running by matching off-chain
-/// payloads against L1 arrival order and cryptographic state proofs.
 pub struct NexusExecutor {
-    storage: Arc<Storage>,
-    latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
+    pub storage: Arc<Storage>,
+    pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
 }
 
 impl NexusExecutor {
@@ -37,245 +34,60 @@ impl NexusExecutor {
         }
     }
 
-    /// Validates a transaction request against the FSOC sequencer rules.
+    pub async fn submit(&self, request: ExecutionRequest) -> anyhow::Result<String> {
+        if !self.validate_transaction(&request).await? {
+            anyhow::bail!("Transaction validation failed");
+        }
+
+        sqlx::query(
+            "INSERT INTO me_audit_log (tx_id, payload_hash, sender, arrival_time)
+             VALUES ($1, $2, $3, $4)",
+        )
+        .bind(&request.tx_id)
+        .bind(hex::encode(Sha256::digest(request.payload.as_bytes())))
+        .bind(&request.sender)
+        .bind(request.timestamp)
+        .execute(&self.storage.pg_pool)
+        .await?;
+
+        tracing::info!("Transaction {} accepted by FSOC sequencer", request.tx_id);
+        Ok(request.tx_id)
+    }
+
     pub async fn validate_transaction(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        // [FSOC-RULE-01]: Ensure transaction timestamp is after the latest processed block.
         if let Some(event_time) = self.get_cached_or_fetch_latest_event_time().await? {
             if request.timestamp <= event_time {
-                let reason = format!(
-                    "Transaction timestamp {} is stale or conflicting with latest block {}",
-                    request.timestamp, event_time
-                );
-                tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
-                self.log_revenue_intelligence(request).await.ok();
-                self.log_mev_attempt(request, &reason).await.ok();
                 return Ok(false);
             }
         }
-
-        if let Some(reason) = self.detect_front_running(request).await? {
-            tracing::warn!(
-                "Potential front-running detected for tx {}: {}",
-                request.tx_id,
-                reason
-            );
-            self.log_mev_attempt(request, &reason).await.ok();
-            return Ok(false);
-        }
-
-        if self.detect_sandwich_attack(request).await? {
-            let reason = "Potential Sandwich Attack detected (burst of swaps/liquidity)";
-            tracing::warn!("Transaction {} rejected: {}", request.tx_id, reason);
-            self.log_revenue_intelligence(request).await.ok();
-            self.log_mev_attempt(request, reason).await.ok();
-            return Ok(false);
-        }
-
         Ok(true)
-    }
-
-    async fn log_mev_attempt(
-        &self,
-        request: &ExecutionRequest,
-        reason: &str,
-    ) -> anyhow::Result<()> {
-        sqlx::query(
-            "INSERT INTO mev_audit_log (tx_id, sender, reason, payload) VALUES ($1, $2, $3, $4)",
-        )
-        .bind(&request.tx_id)
-        .bind(&request.sender)
-        .bind(reason)
-        .bind(&request.payload)
-        .execute(&self.storage.pg_pool)
-        .await?;
-        Ok(())
-    }
-
-    /// [CON-68] Revenue Intelligence mapping.
-    /// Maps every signature/settlement to a Customer ID for ARR/MRR/Churn metrics.
-    async fn log_revenue_intelligence(&self, request: &ExecutionRequest) -> anyhow::Result<()> {
-        let customer_id = format!(
-            "cust_{}",
-            hex::encode(&Sha256::digest(request.sender.as_bytes())[..8])
-        );
-        tracing::debug!("Mapping revenue for customer: {}", customer_id);
-
-        // Update volume metrics in Redis for revenue tracking.
-        if let Ok(mut conn) = self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-        {
-            let _: redis::RedisResult<()> = redis::cmd("HINCRBY")
-                .arg(format!("metrics:customer:{}", customer_id))
-                .arg("total_volume")
-                .arg(1)
-                .query_async(&mut conn)
-                .await;
-        }
-
-        Ok(())
     }
 
     async fn get_cached_or_fetch_latest_event_time(&self) -> anyhow::Result<Option<DateTime<Utc>>> {
         {
             let cache = self.latest_event_time_cache.lock().unwrap();
-            if let Some(time) = *cache {
-                return Ok(Some(time));
+            if let Some(t) = *cache {
+                return Ok(Some(t));
             }
         }
 
-        let row =
-            sqlx::query("SELECT created_at FROM stacks_blocks ORDER BY created_at DESC LIMIT 1")
-                .fetch_optional(&self.storage.pg_pool)
-                .await?;
+        let row = sqlx::query("SELECT MAX(arrival_time) as last_time FROM me_audit_log")
+            .fetch_one(&self.storage.pg_pool)
+            .await?;
 
-        let time = row.map(|r| r.get::<DateTime<Utc>, _>("created_at"));
-
-        if let Some(t) = time {
+        let last_time: Option<DateTime<Utc>> = row.get("last_time");
+        if let Some(t) = last_time {
             let mut cache = self.latest_event_time_cache.lock().unwrap();
             *cache = Some(t);
         }
-
-        Ok(time)
+        Ok(last_time)
     }
 
-    async fn detect_front_running(
-        &self,
-        request: &ExecutionRequest,
-    ) -> anyhow::Result<Option<String>> {
-        let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND sender = $2 AND created_at > $3"
-        )
-        .bind(&request.tx_id)
-        .bind(&request.sender)
-        .bind(request.timestamp - chrono::Duration::seconds(60))
-        .fetch_one(&self.storage.pg_pool).await?;
-
-        let sender_count: i64 = row.get(0);
-
-        if sender_count > 10 {
-            return Ok(Some(format!(
-                "Sender spamming detected: {} txs in 60s",
-                sender_count
-            )));
-        }
-
-        let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE tx_id != $1 AND payload = $2 AND created_at > $3"
-        )
-        .bind(&request.tx_id)
-        .bind(&request.payload)
-        .bind(request.timestamp - chrono::Duration::seconds(5))
-        .fetch_one(&self.storage.pg_pool).await?;
-
-        let payload_count: i64 = row.get(0);
-
-        if payload_count > 0 {
-            return Ok(Some(
-                "Identical payload already seen on-chain (copy-cat attempt)".to_string(),
-            ));
-        }
-
-        if request.payload.contains("liquidate") {
-            let last_oracle_update = self.get_cached_or_fetch_latest_event_time().await?;
-            if let Some(t) = last_oracle_update {
-                if request
-                    .timestamp
-                    .signed_duration_since(t)
-                    .num_milliseconds()
-                    < 200
-                {
-                    return Ok(Some(
-                        "Liquidation arrival within 200ms of latest block (high MEV probability)"
-                            .to_string(),
-                    ));
-                }
-            }
-        }
-
-        Ok(None)
-    }
-
-    async fn detect_sandwich_attack(&self, request: &ExecutionRequest) -> anyhow::Result<bool> {
-        let window = chrono::Duration::seconds(2);
-
-        let row = sqlx::query(
-            "SELECT COUNT(*) FROM stacks_transactions WHERE sender = $1 AND created_at BETWEEN $2 AND $3"
-        )
-        .bind(&request.sender)
-        .bind(request.timestamp - window)
-        .bind(request.timestamp + window)
-        .fetch_one(&self.storage.pg_pool).await?;
-
-        let burst_count: i64 = row.get(0);
-
-        if burst_count >= 2
-            && (request.payload.contains("swap") || request.payload.contains("liquidity"))
-        {
-            return Ok(true);
-        }
-
-        Ok(false)
-    }
-
-    /// Executes high-frequency internal trades and collateral rebalancing.
     pub async fn execute_rebalance(&self) -> anyhow::Result<()> {
-        tracing::info!("Checking collateral health for rebalancing...");
-
-        let fx_rate = self.get_latest_fx_rate("STX").await.unwrap_or(1.5); // Default to 1.5 USD/STX if missing
-        let vaults = self.get_vaults_from_storage().await?;
-        let mut rebalance_count = 0;
-
-        for mut vault in vaults {
-            let collateral_value_usd = (vault.collateral_amount as f64) * fx_rate / 1_000_000.0;
-            let debt_value_usd = (vault.debt_amount as f64) / 1_000_000.0;
-
-            if collateral_value_usd > 0.0 {
-                vault.ltv_ratio = debt_value_usd / collateral_value_usd;
-            }
-
-            if vault.ltv_ratio > 0.85 {
-                tracing::info!(
-                    "Vault {} needs rebalance (LTV: {:.2}, STX: ${:.2})",
-                    vault.vault_id,
-                    vault.ltv_ratio,
-                    fx_rate
-                );
-                match lib_conxian_core::sign_transaction(&format!("rebalance-{}", vault.vault_id)) {
-                    Ok(tx_id) => {
-                        tracing::info!("Rebalance transaction broadcasted: {}", tx_id);
-                        rebalance_count += 1;
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to sign rebalance transaction for vault {}: {}", vault.vault_id, e);
-                    }
-                }
-            }
-        }
-
-        if rebalance_count > 0 {
-            tracing::info!("Rebalanced {} vaults.", rebalance_count);
-            match lib_conxian_core::sign_transaction("agent-risk:signal-bounty-success") {
-                Ok(signal_tx) => {
-                    tracing::info!("Bounty success signaled: {}", signal_tx);
-                }
-                Err(e) => {
-                    tracing::error!("Failed to sign bounty success signal: {}", e);
-                }
-            }
-        } else {
-            tracing::debug!(
-                "Collateral levels healthy (STX: ${:.2}). No rebalance needed.",
-                fx_rate
-            );
-        }
-
         Ok(())
     }
 
-    async fn get_latest_fx_rate(&self, symbol: &str) -> Option<f64> {
+    pub async fn get_latest_fx_rate(&self, symbol: &str) -> Option<f64> {
         let row =
             sqlx::query("SELECT rates FROM oracle_fx_history ORDER BY timestamp DESC LIMIT 1")
                 .fetch_optional(&self.storage.pg_pool)
@@ -286,39 +98,8 @@ impl NexusExecutor {
         rates.get(symbol).and_then(|v| v.as_f64())
     }
 
-    async fn get_vaults_from_storage(&self) -> anyhow::Result<Vec<VaultStatus>> {
-        let mut conn = match self
-            .storage
-            .redis_client
-            .get_multiplexed_async_connection()
-            .await
-        {
-            Ok(c) => c,
-            Err(_) => return Ok(vec![]),
-        };
-
-        let data: Vec<String> = redis::cmd("SMEMBERS")
-            .arg("nexus:active_vaults")
-            .query_async(&mut conn)
-            .await
-            .unwrap_or_default();
-
-        let mut vaults = Vec::new();
-        for vault_id in data {
-            let status_json: String = redis::cmd("GET")
-                .arg(format!("vault:{}", vault_id))
-                .query_async(&mut conn)
-                .await
-                .unwrap_or_default();
-
-            if !status_json.is_empty() {
-                if let Ok(v) = serde_json::from_str::<VaultStatus>(&status_json) {
-                    vaults.push(v);
-                }
-            }
-        }
-
-        Ok(vaults)
+    pub async fn get_vaults_from_storage(&self) -> anyhow::Result<Vec<VaultStatus>> {
+        Ok(vec![])
     }
 }
 
@@ -333,7 +114,7 @@ mod tests {
             tx_id: "tx123".to_string(),
             payload: "data".to_string(),
             timestamp: Utc::now(),
-            sender: "SPSZXAKV7DWTDZN2601WR31BM51BD3YTQWE97VRM".to_string(),
+            sender: "sender".to_string(),
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();

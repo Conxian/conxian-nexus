@@ -30,7 +30,10 @@ impl OracleAggregator {
             endpoints: vec![
                 (endpoint_url, 0.5),
                 ("https://open.er-api.com/v6/latest/USD".to_string(), 0.25),
-                ("https://api.exchangerate.host/latest?base=USD".to_string(), 0.25),
+                (
+                    "https://api.exchangerate.host/latest?base=USD".to_string(),
+                    0.25,
+                ),
             ],
             contract_principal,
         }
@@ -61,7 +64,8 @@ impl OracleAggregator {
 
         let mut aggregated_rates = HashMap::new();
         let mut confidence_intervals = HashMap::new();
-        let mut keys: std::collections::HashSet<String> = weighted_rates[0].0.keys().cloned().collect();
+        let mut keys: std::collections::HashSet<String> =
+            weighted_rates[0].0.keys().cloned().collect();
         for (r, _) in &weighted_rates[1..] {
             keys.extend(r.keys().cloned());
         }
@@ -75,7 +79,8 @@ impl OracleAggregator {
             if !weighted_values.is_empty() {
                 // Reject outliers (values more than 10% from the weighted mean)
                 let total_weight: f64 = weighted_values.iter().map(|(_, w)| w).sum();
-                let weighted_mean: f64 = weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / total_weight;
+                let weighted_mean: f64 =
+                    weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / total_weight;
 
                 weighted_values.retain(|(v, _)| {
                     let diff = (v - weighted_mean).abs() / weighted_mean;
@@ -84,14 +89,17 @@ impl OracleAggregator {
 
                 if !weighted_values.is_empty() {
                     let final_weight: f64 = weighted_values.iter().map(|(_, w)| w).sum();
-                    let final_weighted_mean: f64 = weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / final_weight;
+                    let final_weighted_mean: f64 =
+                        weighted_values.iter().map(|(v, w)| v * w).sum::<f64>() / final_weight;
                     aggregated_rates.insert(key.clone(), final_weighted_mean);
 
                     // Calculate a simple confidence interval (relative standard deviation)
                     if weighted_values.len() > 1 {
-                        let variance: f64 = weighted_values.iter()
+                        let variance: f64 = weighted_values
+                            .iter()
                             .map(|(v, w)| w * (v - final_weighted_mean).powi(2))
-                            .sum::<f64>() / final_weight;
+                            .sum::<f64>()
+                            / final_weight;
                         let std_dev = variance.sqrt();
                         let confidence = 1.0 - (std_dev / final_weighted_mean).min(1.0);
                         confidence_intervals.insert(key, confidence);
@@ -138,7 +146,8 @@ impl OracleAggregator {
             &self.contract_principal,
             "update-fx-rates",
             vec![state_json],
-        ).map_err(|e| anyhow::anyhow!("Contract call signing failed: {}", e))?;
+        )
+        .map_err(|e| anyhow::anyhow!("Contract call signing failed: {}", e))?;
 
         tracing::info!("Pushing Signed Oracle Call: {:?}", signed_call.payload);
         Ok(format!("0x{}", signed_call.signature))

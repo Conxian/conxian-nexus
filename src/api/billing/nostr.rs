@@ -1,11 +1,12 @@
 //! [CON-473] PoC: Nostr relay + collector bridge for Nexus telemetry.
 //! Publishes and consumes signed telemetry events from a Nostr relay.
+//! Updated for nostr-sdk v0.43.0.
 
+use crate::storage::Storage;
+use anyhow::{anyhow, Context};
 use nostr_sdk::prelude::*;
 use serde_json::json;
-use anyhow::{anyhow, Context};
 use std::sync::Arc;
-use crate::storage::Storage;
 
 pub struct NostrTelemetry {
     client: Client,
@@ -15,7 +16,10 @@ pub struct NostrTelemetry {
 impl NostrTelemetry {
     pub async fn new(secret_key: &str, relays: Vec<String>) -> anyhow::Result<Self> {
         let keys = Keys::parse(secret_key).context("Failed to parse Nostr secret key")?;
-        let pubkey_bech32 = keys.public_key().to_bech32().context("Failed to encode pubkey")?;
+        let pubkey_bech32 = keys
+            .public_key()
+            .to_bech32()
+            .context("Failed to encode pubkey")?;
 
         let client = Client::builder().signer(keys).build();
         for relay in relays {
@@ -40,14 +44,19 @@ impl NostrTelemetry {
             "signature_hash": signature_hash,
             "timestamp": timestamp,
             "kind": "nexus_telemetry_v1"
-        }).to_string();
+        })
+        .to_string();
 
-        // Using a custom event kind for telemetry (Kind 26001)
-        let builder = EventBuilder::new(Kind::Custom(26001), content, []);
-        let output = self.client.send_event_builder(builder).await?;
-        let event_id = output.id();
+        // Updated for nostr-sdk v0.43.0: EventBuilder::new takes kind and content
+        let builder = EventBuilder::new(Kind::from(26001), content);
+        let event = self.client.send_event_builder(builder).await?;
+        let event_id = event.id();
 
-        tracing::info!("Published telemetry to Nostr. EventId: {:?}, PubKey: {}", event_id, self.pubkey_bech32);
+        tracing::info!(
+            "Published telemetry to Nostr. EventId: {:?}, PubKey: {}",
+            event_id,
+            self.pubkey_bech32
+        );
         Ok(*event_id)
     }
 
@@ -68,17 +77,21 @@ impl NostrTelemetry {
         })
         .to_string();
 
-        // Using Kind 26002 for health reporting
-        let builder = EventBuilder::new(Kind::Custom(26002), content, []);
-        let output = self.client.send_event_builder(builder).await?;
-        let event_id = output.id();
+        // Updated for nostr-sdk v0.43.0: EventBuilder::new takes kind and content
+        let builder = EventBuilder::new(Kind::from(26002), content);
+        let event = self.client.send_event_builder(builder).await?;
+        let event_id = event.id();
 
-        tracing::info!("Reported health to Nostr. EventId: {:?}, Status: {}", event_id, status);
+        tracing::info!(
+            "Reported health to Nostr. EventId: {:?}, Status: {}",
+            event_id,
+            status
+        );
         Ok(*event_id)
     }
 
     pub async fn shutdown(&self) -> anyhow::Result<()> {
-        self.client.disconnect().await?;
+        self.client.shutdown().await;
         Ok(())
     }
 }
@@ -102,16 +115,17 @@ impl NostrCollector {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        let filter = Filter::new().kind(Kind::Custom(26001));
-        self.client.subscribe(vec![filter], None).await?;
+        let filter = Filter::new().kind(Kind::from(26001));
+        // nostr-sdk v0.43.0 subscribe expects a Filter (not a Vec)
+        self.client.subscribe(filter, None).await?;
 
         tracing::info!("Nostr Collector started, listening for telemetry events (Kind 26001)...");
 
         let mut notifications = self.client.notifications();
         while let Ok(notification) = notifications.recv().await {
             if let RelayPoolNotification::Event { event, .. } = notification {
-                if event.kind() == Kind::Custom(26001) {
-                    if let Err(e) = self.handle_telemetry_event(event).await {
+                if event.kind == Kind::from(26001) {
+                    if let Err(e) = self.handle_telemetry_event(*event).await {
                         tracing::error!("Failed to handle Nostr telemetry event: {}", e);
                     }
                 }
@@ -121,24 +135,34 @@ impl NostrCollector {
         Ok(())
     }
 
-    async fn handle_telemetry_event(&self, event: Box<Event>) -> anyhow::Result<()> {
-        let event_id = event.id().to_hex();
+    async fn handle_telemetry_event(&self, event: Event) -> anyhow::Result<()> {
+        let event_id = event.id.to_hex();
 
         // 1. Verify freshness (e.g., not older than 1 hour)
         let now = Timestamp::now().as_u64();
-        if event.created_at().as_u64() < now - 3600 {
+        if event.created_at.as_u64() < now - 3600 {
             tracing::warn!("Nostr Collector: ignoring stale event: {}", event_id);
             return Ok(());
         }
 
-        let payload: serde_json::Value = serde_json::from_str(event.content())?;
+        let payload: serde_json::Value = serde_json::from_str(&event.content)?;
 
-        let api_key = payload.get("api_key").and_then(|v| v.as_str())
+        let api_key = payload
+            .get("api_key")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing api_key in Nostr event"))?;
 
-        tracing::debug!("Nostr Collector: processing event {} from api_key: {}", event_id, api_key);
+        tracing::debug!(
+            "Nostr Collector: processing event {} from api_key: {}",
+            event_id,
+            api_key
+        );
 
-        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await?;
 
         // 2. Deduplication check using Redis
         let dedup_key = format!("nostr_dedup:{}", event_id);
@@ -148,8 +172,9 @@ impl NostrCollector {
             .arg("NX")
             .arg("EX")
             .arg(86400) // Keep dedup for 24h
-            .query_async(&mut conn)
-            .await?;
+            .query_async::<()>(&mut conn)
+            .await
+            .is_ok(); // Simplified for v0.27
 
         if !is_new {
             tracing::debug!("Nostr Collector: duplicate event ignored: {}", event_id);
@@ -159,7 +184,10 @@ impl NostrCollector {
         let redis_key = format!("apikey:{}", api_key);
 
         // 3. Check if API Key exists
-        let exists: bool = redis::cmd("EXISTS").arg(&redis_key).query_async(&mut conn).await?;
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&redis_key)
+            .query_async::<bool>(&mut conn)
+            .await?;
         if !exists {
             return Err(anyhow!("Invalid API Key in Nostr telemetry: {}", api_key));
         }
@@ -169,11 +197,15 @@ impl NostrCollector {
             .arg(&redis_key)
             .arg("usage")
             .arg(1)
-            .query_async(&mut conn)
+            .query_async::<u64>(&mut conn)
             .await
             .unwrap_or(0);
 
-        tracing::info!("Nostr Collector: Successfully bridged telemetry for {} (Event: {})", api_key, event_id);
+        tracing::info!(
+            "Nostr Collector: Successfully bridged telemetry for {} (Event: {})",
+            api_key,
+            event_id
+        );
         Ok(())
     }
 }

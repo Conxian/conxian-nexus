@@ -1,13 +1,13 @@
 //! [CON-162] External Settlement Trigger Module.
 //! Handles ISO 20022, PAPSS, and BRICS triggers for TEE-verified proposals.
 
+use crate::api::rest::AppState;
+use crate::storage::kwil::{KwilSettlementLogCommitment, KwilSettlementProposalCommitment};
 use axum::routing::post;
 use axum::Router;
-use crate::api::rest::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use crate::storage::kwil::{KwilSettlementProposalCommitment, KwilSettlementLogCommitment};
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -97,7 +97,10 @@ pub async fn settlement_trigger_handler(
 
     // Reconciliation helpers (UETR for ISO20022, unique refs for PAPSS)
     let uetr = payload.payload.get("uetr").and_then(|v| v.as_str());
-    let e2e_id = payload.payload.get("end_to_end_id").and_then(|v| v.as_str());
+    let e2e_id = payload
+        .payload
+        .get("end_to_end_id")
+        .and_then(|v| v.as_str());
 
     let external_tx_ref = uetr.or(e2e_id).unwrap_or(&payload.external_id).to_string();
     let _ = sqlx::query(
@@ -113,12 +116,16 @@ pub async fn settlement_trigger_handler(
 
     // [CON-330] Pilot: Mirror settlement log to Kwil
     if let Some(kwil) = &state.kwil {
-        let _ = kwil.persist_settlement_log(KwilSettlementLogCommitment {
-            external_tx_reference: external_tx_ref,
-            settlement_network_origin: payload.source.clone(),
-            fiat_value_pegged: fiat_value,
-            raw_payload: payload.payload.clone(),
-        }).await.map_err(|e| tracing::warn!("Kwil settlement log persistence failed: {}", e)).ok();
+        let _ = kwil
+            .persist_settlement_log(KwilSettlementLogCommitment {
+                external_tx_reference: external_tx_ref,
+                settlement_network_origin: payload.source.clone(),
+                fiat_value_pegged: fiat_value,
+                raw_payload: payload.payload.clone(),
+            })
+            .await
+            .map_err(|e| tracing::warn!("Kwil settlement log persistence failed: {}", e))
+            .ok();
     }
 
     // 4. Get current block height to calculate time-lock
@@ -150,15 +157,19 @@ pub async fn settlement_trigger_handler(
 
     // [CON-330] Pilot: Mirror settlement proposal to Kwil
     if let Some(kwil) = &state.kwil {
-        let _ = kwil.persist_settlement_proposal(KwilSettlementProposalCommitment {
-            proposal_id: proposal_id.clone(),
-            external_id: payload.external_id.clone(),
-            source: payload.source.clone(),
-            payload: payload.payload.clone(),
-            status: "active".to_string(),
-            init_height: current_height,
-            unlock_height: unlock_height as i64,
-        }).await.map_err(|e| tracing::warn!("Kwil settlement proposal persistence failed: {}", e)).ok();
+        let _ = kwil
+            .persist_settlement_proposal(KwilSettlementProposalCommitment {
+                proposal_id: proposal_id.clone(),
+                external_id: payload.external_id.clone(),
+                source: payload.source.clone(),
+                payload: payload.payload.clone(),
+                status: "active".to_string(),
+                init_height: current_height as u64,
+                unlock_height: unlock_height as u64,
+            })
+            .await
+            .map_err(|e| tracing::warn!("Kwil settlement proposal persistence failed: {}", e))
+            .ok();
     }
 
     match res {
