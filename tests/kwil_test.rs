@@ -1,6 +1,7 @@
 use conxian_nexus::storage::kwil::{
-    canonical_block_payload, canonical_state_root_payload, canonical_mmr_node_payload, KwilAdapter, KwilBlockCommitment,
-    KwilConfig, KwilStateRootCommitment, KwilMmrNodeCommitment, KwilSettlementProposalCommitment, KwilSettlementLogCommitment,
+    canonical_block_payload, canonical_mmr_node_payload, canonical_state_root_payload, KwilAdapter,
+    KwilBlockCommitment, KwilConfig, KwilMmrNodeCommitment, KwilSettlementLogCommitment,
+    KwilSettlementProposalCommitment, KwilStateRootCommitment,
 };
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
@@ -50,7 +51,11 @@ async fn test_kwil_block_persistence_pilot_signed() -> anyhow::Result<()> {
         .expect_err("expected failure due to missing Kwil node");
 
     let err_msg = err.to_string().to_ascii_lowercase();
-    assert!(err_msg.contains("failed to send request") || err_msg.contains("kwil execution error") || err_msg.contains("connect"));
+    assert!(
+        err_msg.contains("failed to send request")
+            || err_msg.contains("kwil execution error")
+            || err_msg.contains("connect")
+    );
 
     Ok(())
 }
@@ -79,7 +84,11 @@ async fn test_kwil_state_root_persistence_pilot_signed() -> anyhow::Result<()> {
         .expect_err("expected failure due to missing Kwil node");
 
     let err_msg = err.to_string().to_ascii_lowercase();
-    assert!(err_msg.contains("failed to send request") || err_msg.contains("kwil execution error") || err_msg.contains("connect"));
+    assert!(
+        err_msg.contains("failed to send request")
+            || err_msg.contains("kwil execution error")
+            || err_msg.contains("connect")
+    );
 
     Ok(())
 }
@@ -137,7 +146,10 @@ async fn test_kwil_settlement_proposal_persistence_pilot_signed() -> anyhow::Res
         .expect_err("expected failure due to missing Kwil node");
 
     let err_msg = err.to_string().to_ascii_lowercase();
-    assert!(err_msg.contains("failed to send settlement proposal request") || err_msg.contains("connect"));
+    assert!(
+        err_msg.contains("failed to send settlement proposal request")
+            || err_msg.contains("connect")
+    );
 
     Ok(())
 }
@@ -162,7 +174,9 @@ async fn test_kwil_settlement_log_persistence_pilot_signed() -> anyhow::Result<(
         .expect_err("expected failure due to missing Kwil node");
 
     let err_msg = err.to_string().to_ascii_lowercase();
-    assert!(err_msg.contains("failed to send settlement log request") || err_msg.contains("connect"));
+    assert!(
+        err_msg.contains("failed to send settlement log request") || err_msg.contains("connect")
+    );
 
     Ok(())
 }

@@ -1,5 +1,5 @@
-use crate::storage::Storage;
 use crate::oracle::aggregator::{OracleAggregator, PppState};
+use crate::storage::Storage;
 use std::sync::Arc;
 use tokio::time::{self, Duration};
 
@@ -49,18 +49,32 @@ impl OracleService {
         Ok(())
     }
 
-    pub async fn verify_external_signal(&self, source: &str, payload: &serde_json::Value) -> anyhow::Result<bool> {
+    pub async fn verify_external_signal(
+        &self,
+        source: &str,
+        payload: &serde_json::Value,
+    ) -> anyhow::Result<bool> {
         // [CON-162] Verify external signal against Oracle state
-        let rates = self.aggregator.fetch_universal_fx().await
+        let rates = self
+            .aggregator
+            .fetch_universal_fx()
+            .await
             .map_err(|e| anyhow::anyhow!("Oracle fetch error: {}", e))?;
 
         if source == "ISO20022" {
             if let Some(payload_rate) = payload.get("exchange_rate").and_then(|v| v.as_f64()) {
-                let currency = payload.get("currency").and_then(|v| v.as_str()).unwrap_or("USD");
+                let currency = payload
+                    .get("currency")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("USD");
                 if let Some(oracle_rate) = rates.rates.get(currency) {
                     let diff = (payload_rate - oracle_rate).abs() / oracle_rate;
-                    if diff > 0.05 { // 5% tolerance
-                        tracing::warn!("Oracle verification failed for ISO20022: rate diff too high ({:.2}%)", diff * 100.0);
+                    if diff > 0.05 {
+                        // 5% tolerance
+                        tracing::warn!(
+                            "Oracle verification failed for ISO20022: rate diff too high ({:.2}%)",
+                            diff * 100.0
+                        );
                         return Ok(false);
                     }
                 }

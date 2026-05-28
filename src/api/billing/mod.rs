@@ -3,13 +3,7 @@
 
 use crate::api::rest::AppState;
 
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    routing::post,
-    Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use chrono::Utc;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
@@ -120,12 +114,18 @@ async fn generate_developer_key(
     let redis_key = format!("apikey:{}", api_key);
     let _: redis::RedisResult<()> = redis::cmd("HSET")
         .arg(&redis_key)
-        .arg("org_id").arg(organization_id)
-        .arg("email").arg(&payload.developer_email)
-        .arg("project").arg(&payload.project_name)
-        .arg("secret").arg(&api_secret)
-        .arg("usage").arg(0)
-        .query_async(&mut conn).await;
+        .arg("org_id")
+        .arg(organization_id)
+        .arg("email")
+        .arg(&payload.developer_email)
+        .arg("project")
+        .arg(&payload.project_name)
+        .arg("secret")
+        .arg(&api_secret)
+        .arg("usage")
+        .arg(0)
+        .query_async(&mut conn)
+        .await;
 
     Json(GenerateKeyResponse {
         api_key,
@@ -133,7 +133,8 @@ async fn generate_developer_key(
         status: "Key Generated. Free Tier: 50,000 Signatures".to_string(),
         grace_period_remaining: None,
         efficiency: None,
-    }).into_response()
+    })
+    .into_response()
 }
 
 /// [NEXUS-02] Signature Telemetry Ingestion Endpoint
@@ -154,7 +155,9 @@ async fn track_signature(
     let redis_key = format!("apikey:{}", payload.api_key);
     let data: std::collections::HashMap<String, String> = redis::cmd("HGETALL")
         .arg(&redis_key)
-        .query_async(&mut conn).await.unwrap_or_default();
+        .query_async(&mut conn)
+        .await
+        .unwrap_or_default();
 
     if data.is_empty() {
         return (StatusCode::UNAUTHORIZED, "Invalid API Key").into_response();
@@ -174,24 +177,40 @@ async fn track_signature(
 
     // [CON-473] PoC: Publish to Nostr if enabled
     if let Some(nostr) = &state.nostr {
-        let _ = nostr.track_signature_nostr(
-            &payload.api_key,
-            &payload.signature_hash,
-            payload.timestamp
-        ).await.ok();
+        let _ = nostr
+            .track_signature_nostr(&payload.api_key, &payload.signature_hash, payload.timestamp)
+            .await
+            .ok();
     }
 
     // Increment usage
-    let new_usage: u64 = redis::cmd("HINCRBY").arg(&redis_key).arg("usage").arg(1).query_async(&mut conn).await.unwrap_or(0);
+    let new_usage: u64 = redis::cmd("HINCRBY")
+        .arg(&redis_key)
+        .arg("usage")
+        .arg(1)
+        .query_async(&mut conn)
+        .await
+        .unwrap_or(0);
     let free_limit = 50_000;
 
     if new_usage > free_limit {
         let now = Utc::now().timestamp();
-        let grace_start: Option<i64> = redis::cmd("HGET").arg(&redis_key).arg("grace_period_start").query_async(&mut conn).await.unwrap_or(None);
+        let grace_start: Option<i64> = redis::cmd("HGET")
+            .arg(&redis_key)
+            .arg("grace_period_start")
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(None);
         let grace_start = match grace_start {
             Some(s) => s,
             None => {
-                let _: () = redis::cmd("HSET").arg(&redis_key).arg("grace_period_start").arg(now).query_async(&mut conn).await.unwrap_or(());
+                let _: () = redis::cmd("HSET")
+                    .arg(&redis_key)
+                    .arg("grace_period_start")
+                    .arg(now)
+                    .query_async(&mut conn)
+                    .await
+                    .unwrap_or(());
                 now
             }
         };
@@ -200,13 +219,17 @@ async fn track_signature(
         match determine_grace_status(now, grace_start, roll) {
             GraceStatus::Active { remaining, allowed } => {
                 if !allowed {
-                    return (StatusCode::PAYMENT_REQUIRED, Json(TelemetryResponse {
-                        current_usage: new_usage,
-                        limit: free_limit,
-                        status: "THROTTLED".to_string(),
-                        grace_period_remaining: Some(remaining),
-                        efficiency: Some(GRACE_PERIOD_EFFICIENCY),
-                    })).into_response();
+                    return (
+                        StatusCode::PAYMENT_REQUIRED,
+                        Json(TelemetryResponse {
+                            current_usage: new_usage,
+                            limit: free_limit,
+                            status: "THROTTLED".to_string(),
+                            grace_period_remaining: Some(remaining),
+                            efficiency: Some(GRACE_PERIOD_EFFICIENCY),
+                        }),
+                    )
+                        .into_response();
                 }
             }
             GraceStatus::Expired => {
@@ -221,7 +244,8 @@ async fn track_signature(
         status: "OK".to_string(),
         grace_period_remaining: None,
         efficiency: None,
-    }).into_response()
+    })
+    .into_response()
 }
 
 #[cfg(test)]

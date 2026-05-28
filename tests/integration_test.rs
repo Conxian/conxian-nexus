@@ -106,7 +106,7 @@ async fn test_mmr_proof_consistency() {
 
     // Check with 3 leaves
     let state3 = Arc::new(NexusState::new());
-    state3.update_state_batch(&vec!["a".into(), "b".into(), "c".into()]);
+    state3.update_state_batch(&["a".into(), "b".into(), "c".into()]);
     // 0, 1 -> 2
     // 3 (leaf 2)
     // Peaks: 2, 3

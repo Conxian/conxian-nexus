@@ -2,9 +2,9 @@
 //! Full implementation of ZKML verification for the compliance module.
 //! Requirement: Zero Secret Egress (ZSE) compliance.
 
+use crate::api::rest::AppState;
 use axum::routing::post;
 use axum::Router;
-use crate::api::rest::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
@@ -49,9 +49,15 @@ pub async fn verify_zkml_handler(
             .into_response();
     }
 
-    let vk_env_key = format!("ZKML_VK_B64_{}", payload.model_id.replace('-', "_").to_uppercase());
+    let vk_env_key = format!(
+        "ZKML_VK_B64_{}",
+        payload.model_id.replace('-', "_").to_uppercase()
+    );
     let vk_b64 = std::env::var(&vk_env_key).unwrap_or_else(|_| {
-        tracing::warn!("{} not set, falling back to public registry logic", vk_env_key);
+        tracing::warn!(
+            "{} not set, falling back to public registry logic",
+            vk_env_key
+        );
         // For decentralization, a public on-chain registry parameter would be dynamically pulled here.
         // We use a base64-encoded default struct if missing, ensuring failure is cryptographic.
         "YmFzZTY0cGxhY2Vob2xkZXI=".to_string()
@@ -65,7 +71,11 @@ pub async fn verify_zkml_handler(
     ) {
         Ok(valid) => valid,
         Err(e) => {
-            tracing::error!("ZKML verification error for model {}: {}", payload.model_id, e);
+            tracing::error!(
+                "ZKML verification error for model {}: {}",
+                payload.model_id,
+                e
+            );
             false
         }
     };
@@ -77,7 +87,11 @@ pub async fn verify_zkml_handler(
     };
 
     (
-        if is_valid { StatusCode::OK } else { StatusCode::BAD_REQUEST },
+        if is_valid {
+            StatusCode::OK
+        } else {
+            StatusCode::BAD_REQUEST
+        },
         Json(ZkmlVerifyResponse {
             valid: is_valid,
             attestation_id,
