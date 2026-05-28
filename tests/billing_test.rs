@@ -25,20 +25,19 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let executor = Arc::new(NexusExecutor::new(storage.clone()));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
-        "http://localhost:8080".to_string(),
+        config.tableland_base_url.clone(),
     ));
-    let experimental_apis_enabled = false;
 
     (
         app_router(
             storage.clone(),
             nexus_state,
             executor,
-            None, // OracleService
+            None,
             tableland,
-            None, // Kwil
-            None, // Nostr
-            experimental_apis_enabled,
+            None,
+            None,
+            Arc::new(config),
         ),
         storage,
     )
@@ -55,47 +54,31 @@ async fn test_billing_flow() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/v1/billing/generate-key")
+                .uri("/v1/billing/keys")
                 .header("Content-Type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "developer_email": "test@example.com",
-                        "project_name": "Test Project"
-                    })
-                    .to_string(),
-                ))
+                .body(Body::from(json!({"org_id": "org1"}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let res: Value = serde_json::from_slice(&body).unwrap();
+    let api_key = res["api_key"].as_str().unwrap();
+
+    // 2. Use Key
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/v1/status")
+                .header("x-api-key", api_key)
+                .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK);
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let res_json: Value = serde_json::from_slice(&body).unwrap();
-    let api_key = res_json["api_key"].as_str().unwrap().to_string();
-
-    // 2. Track Signature (Under Limit)
-    let response = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/billing/telemetry/track-signature")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "api_key": api_key,
-                        "signature_hash": "0xabc",
-                        "timestamp": 123,
-                        "hmac": "fake"
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // HMAC will fail since we used 'fake', but we check status
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
