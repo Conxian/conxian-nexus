@@ -91,8 +91,16 @@ impl NexusSync {
     }
 
     pub async fn persist_root_to_redis(&self, root: &str) -> anyhow::Result<()> {
-        let mut conn = self.storage.redis_client.get_multiplexed_async_connection().await?;
-        let _: () = redis::cmd("SET").arg("nexus:state_root").arg(root).query_async::<()>(&mut conn).await?;
+        let mut conn = self
+            .storage
+            .redis_client
+            .get_multiplexed_async_connection()
+            .await?;
+        let _: () = redis::cmd("SET")
+            .arg("nexus:state_root")
+            .arg(root)
+            .query_async::<()>(&mut conn)
+            .await?;
         Ok(())
     }
 }

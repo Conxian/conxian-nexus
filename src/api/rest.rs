@@ -112,15 +112,16 @@ pub fn app_router(
 ) -> Router {
     init_prometheus_metrics();
 
-    let gateway_url = config.gateway_url.as_ref().and_then(|s| {
-        match reqwest::Url::parse(s) {
+    let gateway_url = config
+        .gateway_url
+        .as_ref()
+        .and_then(|s| match reqwest::Url::parse(s) {
             Ok(base) => Some(base),
             Err(err) => {
                 tracing::error!(url = %s, error = %err, "Invalid GATEWAY_URL in config");
                 None
             }
-        }
-    });
+        });
 
     let state = AppState {
         storage,
@@ -143,7 +144,10 @@ pub fn app_router(
         .route("/v1/metrics", get(get_metrics))
         .route("/metrics", get(prometheus_metrics))
         .route("/v1/execute", post(execute_tx))
-        .route("/v1/settlement/trigger", post(crate::api::settlement::settlement_trigger_handler))
+        .route(
+            "/v1/settlement/trigger",
+            post(crate::api::settlement::settlement_trigger_handler),
+        )
         .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
@@ -211,7 +215,10 @@ async fn get_proof(
     }))
 }
 
-fn mmr_proof_error(code: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<serde_json::Value>) {
+fn mmr_proof_error(
+    code: StatusCode,
+    msg: impl Into<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
     (code, Json(serde_json::json!({"error": msg.into()})))
 }
 
@@ -281,7 +288,9 @@ async fn get_mmr_proof(
         } else {
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("MMR sibling at pos {pos} is missing from persistent storage")})),
+                Json(
+                    serde_json::json!({"error": format!("MMR sibling at pos {pos} is missing from persistent storage")}),
+                ),
             ));
         }
     }
@@ -346,9 +355,7 @@ async fn verify_state(
     })))
 }
 
-async fn get_status(
-    State(state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn get_status(State(state): State<AppState>) -> Json<serde_json::Value> {
     let root = state.nexus_state.get_state_root();
     let height = sqlx::query_scalar::<_, i64>("SELECT MAX(height) FROM stacks_blocks")
         .fetch_optional(&state.storage.pg_pool)
@@ -365,9 +372,7 @@ async fn get_status(
     }))
 }
 
-async fn get_metrics(
-    State(_state): State<AppState>,
-) -> Json<serde_json::Value> {
+async fn get_metrics(State(_state): State<AppState>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "total_transactions": TOTAL_TRANSACTIONS.get(),
         "active_rebalances": ACTIVE_REBALANCES.get(),

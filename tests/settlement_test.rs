@@ -62,14 +62,19 @@ async fn test_external_settlement_trigger_unauthorized() {
         .unwrap();
 
     // Default config has no TEE keys, so it should be unauthorized or service unavailable
-    assert!(response.status() == StatusCode::UNAUTHORIZED || response.status() == StatusCode::SERVICE_UNAVAILABLE);
+    assert!(
+        response.status() == StatusCode::UNAUTHORIZED
+            || response.status() == StatusCode::SERVICE_UNAVAILABLE
+    );
 }
 
 #[tokio::test]
 async fn test_external_settlement_trigger_success() {
     let mut config = Config::default_test();
     // Simulate trusted keys
-    config.erp_attestation_trusted_keys.insert("tee-key-1".to_string(), "secret".to_string());
+    config
+        .erp_attestation_trusted_keys
+        .insert("tee-key-1".to_string(), "secret".to_string());
     let config = Arc::new(config);
 
     let storage = match Storage::from_config(&config).await {
@@ -118,5 +123,7 @@ async fn test_external_settlement_trigger_success() {
         .unwrap();
 
     // Should return 202 Accepted if validated
-    assert!(response.status() == StatusCode::ACCEPTED || response.status() == StatusCode::UNAUTHORIZED);
+    assert!(
+        response.status() == StatusCode::ACCEPTED || response.status() == StatusCode::UNAUTHORIZED
+    );
 }

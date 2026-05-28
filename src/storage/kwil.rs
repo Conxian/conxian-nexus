@@ -66,9 +66,7 @@ impl KwilAdapter {
         cfg: KwilConfig,
         wallet: Arc<Wallet>,
     ) -> anyhow::Result<Self> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()?;
+        let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
 
         Ok(Self {
             storage,
@@ -156,7 +154,10 @@ impl KwilAdapter {
         self.handle_response(response, signature).await
     }
 
-    pub async fn persist_mmr_node(&self, node: KwilMmrNodeCommitment) -> anyhow::Result<KwilReceipt> {
+    pub async fn persist_mmr_node(
+        &self,
+        node: KwilMmrNodeCommitment,
+    ) -> anyhow::Result<KwilReceipt> {
         let created_at = Utc::now().to_rfc3339();
         let payload = format!(
             "nexus:kwil:mmr_node:v1|pos={}|hash={}|height={}|created_at={}",
@@ -206,7 +207,10 @@ impl KwilAdapter {
                 .context("Failed to parse Kwil receipt")?;
             Ok(receipt)
         } else {
-            let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
             Err(anyhow!(
                 "Kwil execution failed (status {}): {} | Signature: {}",
                 status,

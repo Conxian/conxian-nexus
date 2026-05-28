@@ -53,7 +53,10 @@ pub struct Config {
 impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Config")
-            .field("nostr_secret_key", &self.nostr_secret_key.as_ref().map(|_| "<redacted>"))
+            .field(
+                "nostr_secret_key",
+                &self.nostr_secret_key.as_ref().map(|_| "<redacted>"),
+            )
             .field("nostr_relays", &self.nostr_relays)
             .field("tableland_base_url", &self.tableland_base_url)
             .field("kwil_provider_url", &self.kwil_provider_url)
@@ -225,7 +228,8 @@ impl Config {
             .filter(|s| !s.is_empty());
 
         let erp_attestation_trusted_keys = match env::var(ENV_ERP_ATTESTATION_TRUSTED_KEYS) {
-            Ok(raw) => serde_json::from_str(&raw).context("Failed to parse ERP_ATTESTATION_TRUSTED_KEYS_JSON")?,
+            Ok(raw) => serde_json::from_str(&raw)
+                .context("Failed to parse ERP_ATTESTATION_TRUSTED_KEYS_JSON")?,
             Err(_) => HashMap::new(),
         };
 
@@ -288,10 +292,16 @@ mod tests {
         env::set_var("ZKML_VK_B64_MODEL1", "vk123");
 
         let config = Config::from_env().unwrap();
-        assert_eq!(config.database_url, "postgres://localhost/test_consolidation");
+        assert_eq!(
+            config.database_url,
+            "postgres://localhost/test_consolidation"
+        );
         assert_eq!(config.redis_url, "redis://localhost/test_consolidation");
         assert_eq!(config.rust_log, "debug");
-        assert_eq!(config.erp_attestation_trusted_keys.get("key1").unwrap(), "secret1");
+        assert_eq!(
+            config.erp_attestation_trusted_keys.get("key1").unwrap(),
+            "secret1"
+        );
         assert_eq!(config.worldid_app_id, "app123");
         assert_eq!(config.zkml_vks.get("ZKML_VK_B64_MODEL1").unwrap(), "vk123");
     }

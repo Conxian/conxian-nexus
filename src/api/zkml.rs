@@ -54,13 +54,18 @@ pub async fn verify_zkml_handler(
         payload.model_id.replace('-', "_").to_uppercase()
     );
 
-    let vk_b64 = state.config.zkml_vks.get(&vk_env_key).cloned().unwrap_or_else(|| {
-        tracing::warn!(
-            "{} not set in config, falling back to public registry logic",
-            vk_env_key
-        );
-        "YmFzZTY0cGxhY2Vob2xkZXI=".to_string()
-    });
+    let vk_b64 = state
+        .config
+        .zkml_vks
+        .get(&vk_env_key)
+        .cloned()
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                "{} not set in config, falling back to public registry logic",
+                vk_env_key
+            );
+            "YmFzZTY0cGxhY2Vob2xkZXI=".to_string()
+        });
 
     let is_valid = match lib_conxian_core::bitvm2::verify_state_root_bn254_groth16(
         &vk_b64,

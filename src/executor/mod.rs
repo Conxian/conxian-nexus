@@ -44,7 +44,7 @@ impl NexusExecutor {
              VALUES ($1, $2, $3, $4)",
         )
         .bind(&request.tx_id)
-        .bind(&hex::encode(Sha256::digest(request.payload.as_bytes())))
+        .bind(hex::encode(Sha256::digest(request.payload.as_bytes())))
         .bind(&request.sender)
         .bind(request.timestamp)
         .execute(&self.storage.pg_pool)

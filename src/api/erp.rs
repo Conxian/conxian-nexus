@@ -130,9 +130,13 @@ pub async fn erp_sync_handler(
     )
     .map_err(map_erp_attestation_error_to_status)?;
 
-    claim_attestation_nonce(&state, &verified_attestation.replay_key, verified_attestation.replay_ttl_seconds)
-        .await
-        .map_err(map_erp_attestation_error_to_status)?;
+    claim_attestation_nonce(
+        &state,
+        &verified_attestation.replay_key,
+        verified_attestation.replay_ttl_seconds,
+    )
+    .await
+    .map_err(map_erp_attestation_error_to_status)?;
 
     Ok(Json(ErpSyncResponse {
         status: "success".to_string(),
@@ -466,7 +470,8 @@ mod tests {
         let mut trusted_keys = HashMap::new();
         trusted_keys.insert("erp-key-1".to_string(), secret.to_string());
 
-        let result = verify_erp_attestation(&request, action, &tx_ids, &trusted_keys, 1_700_000_000);
+        let result =
+            verify_erp_attestation(&request, action, &tx_ids, &trusted_keys, 1_700_000_000);
         assert_eq!(result.unwrap_err(), ErpAttestationError::ExpiredAttestation);
     }
 }

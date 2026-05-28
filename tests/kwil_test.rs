@@ -1,8 +1,8 @@
-use conxian_nexus::storage::kwil::{
-    KwilBlockCommitment, KwilMmrNodeCommitment, KwilStateRootCommitment, KwilAdapter, KwilConfig,
-    KwilSettlementProposalCommitment, KwilSettlementLogCommitment
-};
 use conxian_nexus::config::Config;
+use conxian_nexus::storage::kwil::{
+    KwilAdapter, KwilBlockCommitment, KwilConfig, KwilMmrNodeCommitment,
+    KwilSettlementLogCommitment, KwilSettlementProposalCommitment, KwilStateRootCommitment,
+};
 use conxian_nexus::storage::Storage;
 use lib_conxian_core::Wallet;
 use std::sync::Arc;
@@ -22,7 +22,8 @@ async fn test_kwil_block_persistence_pilot_signed() {
             db_id: "nexus_test".to_string(),
         },
         wallet.clone(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let commitment = KwilBlockCommitment {
         hash: "0x123".to_string(),
@@ -50,7 +51,8 @@ async fn test_kwil_state_root_persistence_pilot_signed() {
             db_id: "nexus_test".to_string(),
         },
         wallet,
-    ).unwrap();
+    )
+    .unwrap();
 
     let commitment = KwilStateRootCommitment {
         block_height: 100,
@@ -75,7 +77,8 @@ async fn test_kwil_mmr_node_persistence_pilot_signed() {
             db_id: "nexus_test".to_string(),
         },
         wallet.clone(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let commitment = KwilMmrNodeCommitment {
         pos: 1,
@@ -101,7 +104,8 @@ async fn test_kwil_settlement_proposal_persistence_pilot_signed() {
             db_id: "nexus_test".to_string(),
         },
         wallet,
-    ).unwrap();
+    )
+    .unwrap();
 
     let commitment = KwilSettlementProposalCommitment {
         proposal_id: "prop1".to_string(),
@@ -131,7 +135,8 @@ async fn test_kwil_settlement_log_persistence_pilot_signed() {
             db_id: "nexus_test".to_string(),
         },
         wallet,
-    ).unwrap();
+    )
+    .unwrap();
 
     let commitment = KwilSettlementLogCommitment {
         external_tx_reference: "ref1".to_string(),
