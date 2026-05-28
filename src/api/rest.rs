@@ -1,14 +1,14 @@
 //! REST API handlers for Conxian Nexus.
 
+use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::dlc::create_dlc_bond_handler;
+use crate::api::identity::resolve_identity_handler;
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
-use crate::storage::Storage;
 use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
-use crate::api::billing::nostr::NostrTelemetry;
-use crate::api::identity::resolve_identity_handler;
-use crate::api::dlc::create_dlc_bond_handler;
+use crate::storage::Storage;
 
 use axum::{
     extract::{DefaultBodyLimit, Query, State},
@@ -234,13 +234,17 @@ pub fn app_router(
         .nest("/v1/erp", crate::api::erp::erp_routes())
         .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", crate::api::zkml::zkml_routes())
-        .nest("/v1/settlement", crate::api::settlement::settlement_routes());
+        .nest(
+            "/v1/settlement",
+            crate::api::settlement::settlement_routes(),
+        );
 
     if experimental_apis_enabled {
         router = router.route(
             "/v1/bitvm2/verify-state-root",
-            post(verify_bitvm2_state_root)
-                .layer(DefaultBodyLimit::max(BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES)),
+            post(verify_bitvm2_state_root).layer(DefaultBodyLimit::max(
+                BITVM2_VERIFY_STATE_ROOT_REQUEST_BODY_LIMIT_BYTES,
+            )),
         );
     }
 
@@ -293,22 +297,49 @@ async fn get_proof(
     Json(ProofResponse { hash, proof })
 }
 
+fn mmr_proof_error(
+    status: StatusCode,
+    message: impl Into<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
+    (
+        status,
+        Json(serde_json::json!({
+            "error": message.into(),
+        })),
+    )
+}
+
 async fn get_mmr_proof(
     State(state): State<AppState>,
     Query(params): Query<MMRProofParams>,
-) -> Result<Json<crate::state::MMRProof>, StatusCode> {
+) -> Result<Json<crate::state::MMRProof>, (StatusCode, Json<serde_json::Value>)> {
     let index = match (params.index, params.tx_id) {
         (Some(i), _) => Some(i),
         (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
-        _ => return Err(StatusCode::BAD_REQUEST),
+        _ => {
+            return Err(mmr_proof_error(
+                StatusCode::BAD_REQUEST,
+                "provide either `index` or `tx_id`",
+            ));
+        }
     };
 
-    let leaf_index = index.ok_or(StatusCode::NOT_FOUND)?;
+    let leaf_index = index.ok_or_else(|| {
+        mmr_proof_error(
+            StatusCode::NOT_FOUND,
+            "requested transaction was not found in MMR leaves",
+        )
+    })?;
 
     let leaf = state
         .nexus_state
         .get_leaf_by_index(leaf_index)
-        .ok_or(StatusCode::NOT_FOUND)?;
+        .ok_or_else(|| {
+            mmr_proof_error(
+                StatusCode::NOT_FOUND,
+                format!("leaf at index {leaf_index} was not found"),
+            )
+        })?;
 
     let (leaf_pos, sibling_positions) = state
         .nexus_state
@@ -318,7 +349,10 @@ async fn get_mmr_proof(
                 "MMR proof metadata could not be computed for leaf_index {}",
                 leaf_index
             );
-            StatusCode::INTERNAL_SERVER_ERROR
+            mmr_proof_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("MMR proof metadata could not be computed for leaf index {leaf_index}"),
+            )
         })?;
 
     let mut siblings = Vec::new();
@@ -329,13 +363,26 @@ async fn get_mmr_proof(
             .await
             .map_err(|e| {
                 tracing::error!("DB error fetching MMR node: {}", e);
-                StatusCode::INTERNAL_SERVER_ERROR
+                mmr_proof_error(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to fetch MMR sibling from storage",
+                )
             })?;
 
-        if let Some(r) = row {
-            let hash_str: String = r.get(0);
-            siblings.push((pos, format!("0x{}", hash_str)));
-        }
+        let r = row.ok_or_else(|| {
+            tracing::error!(
+                "Missing required MMR sibling row for leaf_index {}, sibling_pos {}",
+                leaf_index,
+                pos
+            );
+            mmr_proof_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("missing required MMR sibling at position {}", pos),
+            )
+        })?;
+
+        let hash_str: String = r.get(0);
+        siblings.push((pos, format!("0x{}", hash_str)));
     }
 
     let proof = state
@@ -428,8 +475,7 @@ async fn verify_bitvm2_state_root(
     };
 
     let upstream_status = resp.status();
-    let status =
-        StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let status = StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     if let Some(len) = resp.content_length() {
         if len > BITVM2_VERIFY_STATE_ROOT_UPSTREAM_BODY_LIMIT_BYTES as u64 {
