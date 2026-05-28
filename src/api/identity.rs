@@ -127,10 +127,11 @@ pub async fn resolve_identity_handler(
                             protocol: payload.protocol,
                             proof_of_personhood: false,
                         }),
-                    ).into_response();
+                    )
+                        .into_response();
                 }
             };
-            
+
             if !resp.status().is_success() {
                 return (
                     StatusCode::NOT_FOUND,
@@ -139,12 +140,15 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
 
             #[derive(Deserialize)]
-            struct EnsResponse { address: Option<String> }
-            
+            struct EnsResponse {
+                address: Option<String>,
+            }
+
             let parsed: EnsResponse = match resp.json().await {
                 Ok(p) => p,
                 Err(_) => {
@@ -155,10 +159,11 @@ pub async fn resolve_identity_handler(
                             protocol: payload.protocol,
                             proof_of_personhood: false,
                         }),
-                    ).into_response();
+                    )
+                        .into_response();
                 }
             };
-            
+
             if let Some(addr) = parsed.address {
                 (
                     StatusCode::OK,
@@ -167,7 +172,8 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response()
+                )
+                    .into_response()
             } else {
                 (
                     StatusCode::NOT_FOUND,
@@ -176,7 +182,8 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response()
+                )
+                    .into_response()
             }
         }
         "WorldID" => {
@@ -192,7 +199,8 @@ pub async fn resolve_identity_handler(
                         protocol: payload.protocol,
                         proof_of_personhood: false,
                     }),
-                ).into_response();
+                )
+                    .into_response();
             }
 
             tracing::warn!("WorldID verification not implemented. Dropping request for security.");
@@ -203,7 +211,8 @@ pub async fn resolve_identity_handler(
                     protocol: payload.protocol,
                     proof_of_personhood: false,
                 }),
-            ).into_response()
+            )
+                .into_response()
         }
         _ => (
             StatusCode::BAD_REQUEST,

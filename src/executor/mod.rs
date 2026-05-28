@@ -2,8 +2,8 @@ use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::sync::{Arc, Mutex};
 use sqlx::Row;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionRequest {
@@ -249,7 +249,11 @@ impl NexusExecutor {
                         rebalance_count += 1;
                     }
                     Err(e) => {
-                        tracing::error!("Failed to sign rebalance transaction for vault {}: {}", vault.vault_id, e);
+                        tracing::error!(
+                            "Failed to sign rebalance transaction for vault {}: {}",
+                            vault.vault_id,
+                            e
+                        );
                     }
                 }
             }

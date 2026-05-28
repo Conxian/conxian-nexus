@@ -229,9 +229,14 @@ impl Config {
         }
 
         let nostr_secret_key = env::var("NOSTR_SECRET_KEY").ok().filter(|s| !s.is_empty());
-        let nostr_relays = env::var("NOSTR_RELAYS").unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string()).split(",").map(|s| s.trim().to_string()).collect();
+        let nostr_relays = env::var("NOSTR_RELAYS")
+            .unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string())
+            .split(",")
+            .map(|s| s.trim().to_string())
+            .collect();
 
-        let tableland_base_url = env::var("TABLELAND_BASE_URL").unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
+        let tableland_base_url = env::var("TABLELAND_BASE_URL")
+            .unwrap_or_else(|_| "https://validator.tableland.xyz".to_string());
         let kwil_provider_url = env::var("KWIL_PROVIDER_URL")
             .ok()
             .map(|s| s.trim().to_string())

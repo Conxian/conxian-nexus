@@ -61,7 +61,8 @@ async fn main() -> anyhow::Result<()> {
         use anyhow::Context;
 
         let wallet = Arc::new(
-            Wallet::from_private_key_hex(private_key_hex).context("Invalid KWIL_PRIVATE_KEY_HEX")?,
+            Wallet::from_private_key_hex(private_key_hex)
+                .context("Invalid KWIL_PRIVATE_KEY_HEX")?,
         );
 
         Some(Arc::new(KwilAdapter::new(

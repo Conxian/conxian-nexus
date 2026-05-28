@@ -86,7 +86,11 @@ const KWIL_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const KWIL_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 impl KwilAdapter {
-    pub fn new(storage: Arc<Storage>, cfg: KwilConfig, wallet: Arc<Wallet>) -> anyhow::Result<Self> {
+    pub fn new(
+        storage: Arc<Storage>,
+        cfg: KwilConfig,
+        wallet: Arc<Wallet>,
+    ) -> anyhow::Result<Self> {
         let client = Client::builder()
             .connect_timeout(KWIL_CONNECT_TIMEOUT)
             .timeout(KWIL_REQUEST_TIMEOUT)
@@ -127,7 +131,8 @@ impl KwilAdapter {
             "created_at": created_at,
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&KwilExecuteRequest {
                 db_id: self.db_id.clone(),
@@ -165,7 +170,8 @@ impl KwilAdapter {
             "created_at": created_at,
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&KwilExecuteRequest {
                 db_id: self.db_id.clone(),
@@ -201,7 +207,8 @@ impl KwilAdapter {
                 "created_at": created_at,
             });
 
-            let response = self.client
+            let response = self
+                .client
                 .post(&url)
                 .json(&KwilExecuteRequest {
                     db_id: self.db_id.clone(),
@@ -220,7 +227,11 @@ impl KwilAdapter {
         Ok(receipts)
     }
 
-    async fn handle_response(&self, response: reqwest::Response, signature: String) -> anyhow::Result<KwilReceipt> {
+    async fn handle_response(
+        &self,
+        response: reqwest::Response,
+        signature: String,
+    ) -> anyhow::Result<KwilReceipt> {
         let status = response.status();
         let text = response
             .text()
@@ -238,7 +249,9 @@ impl KwilAdapter {
             return Err(anyhow!("Kwil execution error: {}", err));
         }
 
-        let tx_hash = result.tx_hash.ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
+        let tx_hash = result
+            .tx_hash
+            .ok_or_else(|| anyhow!("No transaction hash returned from Kwil"))?;
 
         Ok(KwilReceipt {
             tx_hash,
@@ -273,7 +286,10 @@ pub fn canonical_block_payload(commitment: &KwilBlockCommitment, created_at: &st
     )
 }
 
-pub fn canonical_state_root_payload(commitment: &KwilStateRootCommitment, created_at: &str) -> String {
+pub fn canonical_state_root_payload(
+    commitment: &KwilStateRootCommitment,
+    created_at: &str,
+) -> String {
     format!(
         "{}|block_height={}|state_root={}|created_at={}",
         "nexus:kwil:state_root:v1",
@@ -383,7 +399,8 @@ impl KwilAdapter {
             "created_at": created_at,
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&KwilExecuteRequest {
                 db_id: self.db_id.clone(),
@@ -424,7 +441,8 @@ impl KwilAdapter {
             "created_at": created_at,
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&KwilExecuteRequest {
                 db_id: self.db_id.clone(),

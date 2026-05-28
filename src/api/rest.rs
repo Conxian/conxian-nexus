@@ -166,6 +166,7 @@ pub struct ExecutionResponse {
     pub message: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn app_router(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
@@ -251,6 +252,7 @@ pub fn app_router(
     router.with_state(state)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_rest_server(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,

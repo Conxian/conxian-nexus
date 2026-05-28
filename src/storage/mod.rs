@@ -9,7 +9,7 @@ pub struct Storage {
 
 impl Storage {
     pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
-        let pg_pool = PgPool::connect(&database_url).await?;
+        let pg_pool = PgPool::connect(database_url).await?;
         let redis_client = RedisClient::open(redis_url)?;
 
         Ok(Self {
