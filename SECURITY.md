@@ -1,44 +1,39 @@
 # Security Policy
 
-Conxian Nexus is a mission-critical infrastructure for the Stacks ecosystem. We take the security of our platform and our users' assets extremely seriously.
+Conxian Nexus is security-sensitive infrastructure. Please report vulnerabilities privately.
 
 ## Supported Versions
 
-The following versions of Conxian Nexus are currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| v0.4.x  | :white_check_mark: |
-| < v0.4  | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| v0.4.x | ✅ |
+| < v0.4 | ❌ |
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability within Conxian Nexus, please send an e-mail to [security@conxian.com](mailto:security@conxian.com). All security vulnerabilities will be promptly addressed.
+Do **not** report vulnerabilities in public issues.
 
-Please include the following information in your report:
-- Type of issue (e.g., buffer overflow, SQL injection, logic error)
-- Location of the affected code (file and line number if possible)
-- A brief description of the vulnerability
-- A proof-of-concept or steps to reproduce the issue
+Use one of these private channels:
 
-### What to expect
+1. GitHub private vulnerability reporting for this repository.
+2. Email [security@conxian-labs.com](mailto:security@conxian-labs.com).
 
-- We will acknowledge receipt of your report within 24 hours.
-- We will provide an estimated timeline for a fix and keep you informed of our progress.
-- We will coordinate a public disclosure date with you.
+Please include:
 
-### Disclosure Policy
+- the type of issue
+- affected files or components if known
+- a concise description
+- reproduction steps or proof of concept
+- expected impact
 
-- We ask you not to share any details of the vulnerability with the public until we have had a chance to fix it.
-- We will credit you for your discovery in our security advisories, unless you prefer to remain anonymous.
+## What to expect
 
-## Security Features
+- acknowledgement target: 24 to 48 hours
+- coordinated remediation and disclosure
+- public credit after remediation unless anonymity is requested
 
-- **Sovereign Handoff**: Automatic safety mode triggered by sync drift.
-- **HMAC Authentication**: Secure telemetry for B2B billing.
-- **FSOC Sequencer**: Mitigates MEV and front-running risks.
-- **Verifiable Proofs**: Cryptographic state validation.
-- **Artifact Governance**: Strict ignore rules to prevent source dumps (e.g., `*dump.txt`) and cryptographic materials (e.g., `*.pem`, `*.key`) from being tracked in version control.
-- **Zero-Secret Logging**: Centralized configuration management with mandatory redaction of sensitive credentials in debug logs.
+## Security expectations
 
-Thank you for helping us keep Conxian Nexus secure!
+- keep secrets and credentials out of source control
+- redact sensitive values from logs and debug output
+- use protected channels for incident handling
