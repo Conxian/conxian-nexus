@@ -1,8 +1,6 @@
-//! REST API handlers for Conxian Nexus.
-
 use crate::api::billing::nostr::NostrTelemetry;
-use crate::api::dlc::create_dlc_bond_handler;
 use crate::api::identity::resolve_identity_handler;
+use crate::api::zkml::zkml_routes;
 use crate::config::Config;
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
@@ -10,7 +8,6 @@ use crate::state::NexusState;
 use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::storage::Storage;
-
 use axum::{
     extract::{DefaultBodyLimit, Query, State},
     http::{header, StatusCode},
@@ -18,53 +15,19 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use lazy_static::lazy_static;
-use prometheus::{Encoder, IntGauge, TextEncoder};
+use prometheus::{Encoder, IntCounter, TextEncoder};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::sync::Arc;
 
-fn register_metric_best_effort(
-    metric_name: &'static str,
-    collector: Box<dyn prometheus::core::Collector>,
-) {
-    match prometheus::register(collector) {
-        Ok(()) => {}
-        Err(prometheus::Error::AlreadyReg) => {}
-        Err(e) => {
-            tracing::error!(
-                error = %e,
-                metric = metric_name,
-                "Prometheus metrics registration failed"
-            );
-        }
-    }
-}
-
-lazy_static! {
-    pub static ref TOTAL_TRANSACTIONS: IntGauge = {
-        let gauge = IntGauge::new(
-            "nexus_total_transactions",
-            "Total number of transactions processed",
-        )
-        .expect("nexus_total_transactions metric must be valid");
-        register_metric_best_effort("nexus_total_transactions", Box::new(gauge.clone()));
-        gauge
-    };
-    pub static ref ACTIVE_REBALANCES: IntGauge = {
-        let gauge = IntGauge::new(
-            "nexus_active_rebalances",
-            "Current number of active vault rebalances",
-        )
-        .expect("nexus_active_rebalances metric must be valid");
-        register_metric_best_effort("nexus_active_rebalances", Box::new(gauge.clone()));
-        gauge
-    };
+lazy_static::lazy_static! {
+    static ref TOTAL_TRANSACTIONS: IntCounter = IntCounter::new("nexus_total_transactions", "Total transactions submitted").unwrap();
+    static ref ACTIVE_REBALANCES: IntCounter = IntCounter::new("nexus_active_rebalances", "Number of currently active rebalances").unwrap();
 }
 
 fn init_prometheus_metrics() {
-    let _ = *TOTAL_TRANSACTIONS;
-    let _ = *ACTIVE_REBALANCES;
+    prometheus::register(Box::new(TOTAL_TRANSACTIONS.clone())).ok();
+    prometheus::register(Box::new(ACTIVE_REBALANCES.clone())).ok();
 }
 
 #[derive(Clone)]
@@ -97,6 +60,11 @@ pub struct ProofResponse {
 pub struct MMRProofParams {
     pub index: Option<u64>,
     pub tx_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct RGBContractParams {
+    pub contract_id: String,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -148,11 +116,15 @@ pub fn app_router(
             "/v1/settlement/trigger",
             post(crate::api::settlement::settlement_trigger_handler),
         )
+        .route("/v1/rgb/contract", get(get_rgb_contract))
         .nest("/v1/analytics", crate::api::analytics::analytics_routes())
-        .nest("/v1/zkml", crate::api::zkml::zkml_routes())
+        .nest("/v1/zkml", zkml_routes())
         .nest("/v1/erp", crate::api::erp::erp_routes())
         .route("/v1/identity/resolve", get(resolve_identity_handler))
-        .route("/v1/dlc/bond", post(create_dlc_bond_handler))
+        .route(
+            "/v1/dlc/bond",
+            post(crate::api::dlc::create_dlc_bond_handler),
+        )
         .nest("/v1/billing", crate::api::billing::billing_routes());
 
     if config.experimental_apis_enabled {
@@ -407,6 +379,34 @@ async fn execute_tx(
         "status": "accepted",
         "tx_id": res
     })))
+}
+
+async fn get_rgb_contract(
+    State(state): State<AppState>,
+    Query(params): Query<RGBContractParams>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let contract = state
+        .executor
+        .rgb_adapter
+        .lookup_contract(&params.contract_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+        })?;
+
+    match contract {
+        Some(c) => {
+            let json: serde_json::Value = serde_json::from_str(&c).unwrap_or_default();
+            Ok(Json(json))
+        }
+        None => Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "RGB contract not found"})),
+        )),
+    }
 }
 
 async fn rebuild_state(
