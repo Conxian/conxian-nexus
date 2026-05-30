@@ -1,3 +1,5 @@
+pub mod rgb;
+
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,13 +26,17 @@ pub struct VaultStatus {
 pub struct NexusExecutor {
     pub storage: Arc<Storage>,
     pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
+    pub rgb_adapter: rgb::RGBAdapter,
 }
 
 impl NexusExecutor {
     pub fn new(storage: Arc<Storage>) -> Self {
+        // Default to shadow mode for PoC verification
+        let rgb_adapter = rgb::RGBAdapter::new(rgb::RGBRolloutMode::Shadow);
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
+            rgb_adapter,
         }
     }
 
