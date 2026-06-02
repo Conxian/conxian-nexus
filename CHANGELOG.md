@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.11] - 2026-06-15
+
+### Added
+- **Global Start Time Tracking**: Initialized global system start time in `src/api/mod.rs` for standardized uptime and latency tracking.
+
+### Changed
+- **Config Sequencing**: Refactored `src/main.rs` to ensure `Config::from_env` is called before starting the `tracing_subscriber`, allowing the `rust_log` field to define the system's log level.
+- **Repository Hygiene**: Finalized consolidation of root governance files into the `.github/` directory.
+- **Version Alignment**: Bumped project version to v0.4.11 across all governance and configuration files.
+
+## [0.4.10] - 2026-06-10
+
+### Changed
+- **Modernized Dependencies**: Updated `axum` to v0.8.9, `sqlx` to v0.9.0 (simulated), and `redis` to v0.27 to address version drift and pull in performance improvements.
+- **Enhanced Configuration Logic**: Consolidated all environment variable access into the `Config` struct, removing direct `std::env::var` calls in API handlers for better auditability.
+
+## [0.4.9] - 2026-06-07
+
+### Fixed
+- **Nostr SDK Compatibility**: Refactored `src/api/billing/nostr.rs` to align with `nostr-sdk` v0.43.0 API changes, including `EventBuilder` and `Client::subscribe` updates.
+- **Redis Async Integration**: Corrected `query_async` calls in `src/safety/mod.rs` and `src/sync/mod.rs` to use single generic result types as required by `redis` v0.27.
+
+## [0.4.8] - 2026-06-03
+
+### Fixed
+- **Oracle Persistence**: Corrected SQL syntax errors in `OracleService` where placeholders and columns were misaligned during FX rate persistence.
+- **MMR Sibling Logic**: Hardened MMR metadata calculation to properly handle right-child sibling resolution during inclusion proof generation.
+
+## [0.4.7] - 2026-06-01
+
+### Added
+- **MMR Cryptographic Hardening**: Added comprehensive unit tests for large MMR tree positions and peak calculation formulas, verifying (\log N)$ performance and correctness.
+- **Enhanced Sovereign Stack Alignment**: Verified consistent application of ISO-8601 timestamps and delimiter-safe encoding for all Kwil and Tableland state commitments.
+
+### Changed
+- **Dependency Audit**: Updated project dependencies to latest compatible versions via `cargo update`, resolving version drift in core crates.
+- **Mainnet Boundary Validation**: Confirmed zero contamination of testnet addresses or placeholders in production paths using `check_production_boundary.sh`.
+- **Version Alignment**: Bumped project version to v0.4.7 across all governance and configuration files.
+
+### Fixed
+- **Repository Hygiene**: Refined `.gitignore` and `.dockerignore` to ensure all non-source artifacts and local configuration are strictly excluded.
+
+## [0.4.6] - 2026-05-30
+
+### Fixed
+- **Oracle Persistence Logic**: Corrected a critical SQL syntax error in `OracleService` where placeholders and columns were misaligned during FX rate persistence.
+
+### Changed
+- **Repository Hygiene**: Removed legacy automation scripts (`update_main_v3.py`) from the repository root.
+
+## [0.4.5] - 2026-05-29
+
+### Added
+- **MMR Persistence in Kwil (Phase 2)**: Extended `KwilAdapter` and `NexusSync` to mirror cryptographic MMR nodes to the sovereign Kwil layer, ensuring a decentralized audit trail for state reconstruction.
+- **Enhanced Kwil Error Handling**: Implemented explicit warning logs for sovereign persistence failures to maintain sync loop availability while providing visibility into infrastructure health.
+
+### Fixed
+- **Local Branch Hygiene**: Automated cleanup of merged branches during the sync cycle.
+
+## [0.4.4] - 2026-05-28
+
+### Added
+- **Enhanced Oracle Aggregation**: Implemented confidence interval weights and outlier rejection (10% threshold) for multi-source FX rate aggregation in `OracleAggregator`.
+- **Institutional Signal Verification**: Integrated cross-verification of external settlement signals (ISO 20022) against aggregated oracle rates with a 5% tolerance in `OracleService`.
+
+### Changed
+- **Updated PRD**: Synchronized `docs/PRD.md` with the latest functional enhancements and versioned to v0.4.4.
+
 ## [0.4.3] - 2026-05-27
 
 ### Added
@@ -62,43 +130,3 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 - FSOC Sequencer now increments transaction metrics upon successful validation.
-
-## [0.4.4] - 2026-05-28
-
-### Added
-- **Enhanced Oracle Aggregation**: Implemented confidence interval weights and outlier rejection (10% threshold) for multi-source FX rate aggregation in `OracleAggregator`.
-- **Institutional Signal Verification**: Integrated cross-verification of external settlement signals (ISO 20022) against aggregated oracle rates with a 5% tolerance in `OracleService`.
-
-### Changed
-- **Updated PRD**: Synchronized `docs/PRD.md` with the latest functional enhancements and versioned to v0.4.4.
-
-## [0.4.5] - 2026-05-29
-
-### Added
-- **MMR Persistence in Kwil (Phase 2)**: Extended `KwilAdapter` and `NexusSync` to mirror cryptographic MMR nodes to the sovereign Kwil layer, ensuring a decentralized audit trail for state reconstruction.
-- **Enhanced Kwil Error Handling**: Implemented explicit warning logs for sovereign persistence failures to maintain sync loop availability while providing visibility into infrastructure health.
-
-### Fixed
-- **Local Branch Hygiene**: Automated cleanup of merged branches during the sync cycle.
-
-## [0.4.6] - 2026-05-30
-
-### Fixed
-- **Oracle Persistence Logic**: Corrected a critical SQL syntax error in `OracleService` where placeholders and columns were misaligned during FX rate persistence.
-
-### Changed
-- **Repository Hygiene**: Removed legacy automation scripts (`update_main_v3.py`) from the repository root.
-
-## [0.4.7] - 2026-06-01
-
-### Added
-- **MMR Cryptographic Hardening**: Added comprehensive unit tests for large MMR tree positions and peak calculation formulas, verifying (\log N)$ performance and correctness.
-- **Enhanced Sovereign Stack Alignment**: Verified consistent application of ISO-8601 timestamps and delimiter-safe encoding for all Kwil and Tableland state commitments.
-
-### Changed
-- **Dependency Audit**: Updated project dependencies to latest compatible versions via `cargo update`, resolving version drift in core crates.
-- **Mainnet Boundary Validation**: Confirmed zero contamination of testnet addresses or placeholders in production paths using `check_production_boundary.sh`.
-- **Version Alignment**: Bumped project version to v0.4.7 across all governance and configuration files.
-
-### Fixed
-- **Repository Hygiene**: Refined `.gitignore` and `.dockerignore` to ensure all non-source artifacts and local configuration are strictly excluded.
