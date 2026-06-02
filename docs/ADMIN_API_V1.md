@@ -16,6 +16,7 @@ The handlers currently:
 - accept typed JSON requests
 - return accepted responses with generated request/decision IDs
 - return generated audit event IDs
+- optionally require a bearer token when `NEXUS_ADMIN_API_TOKEN` is configured
 - do **not** claim settlement, promotion, signing, or downstream execution success
 
 ## Purpose
@@ -24,8 +25,8 @@ This gives the BOS control-plane work in `conxian-business` a concrete runtime-s
 
 ## Follow-up
 
-- add authenticated actor validation
+- replace the token placeholder with real authenticated actor/session validation
 - add durable audit event persistence
 - enforce authorization server-side
 - connect decisions to trusted downstream orchestration paths
-- add tests for request validation and failure modes
+- expand tests for request validation and failure modes
