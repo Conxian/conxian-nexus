@@ -4,7 +4,7 @@
 * @botshelomokoka @admin-conxian-labs
 
 # Security and governance-sensitive files
-/CODEOWNERS @botshelomokoka @admin-conxian-labs
+/.github/CODEOWNERS @botshelomokoka @admin-conxian-labs
 /SECURITY.md @botshelomokoka @admin-conxian-labs
 /SUPPORT.md @botshelomokoka @admin-conxian-labs
 /.github/release.yml @botshelomokoka @admin-conxian-labs
