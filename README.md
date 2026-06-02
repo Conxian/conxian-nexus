@@ -8,7 +8,7 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Status
 
-**Active development (v0.4.7).** Production intent exists, but operators should validate readiness and deployment assumptions before use in critical environments.
+**Active development (v0.4.11).** Production intent exists, but operators should validate readiness and deployment assumptions before use in critical environments.
 
 ## Scope
 
