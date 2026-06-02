@@ -59,6 +59,13 @@ cargo run
 cargo test
 ```
 
+## Release discipline
+
+- Follow Semantic Versioning.
+- Create annotated tags as `vX.Y.Z`.
+- Document each release in [CHANGELOG.md](./CHANGELOG.md).
+- Use [RELEASE.md](./RELEASE.md) for the release workflow.
+
 ## Security
 
 Do not disclose vulnerabilities publicly. Use [SECURITY.md](./SECURITY.md) or `security@conxian-labs.com`.
@@ -70,6 +77,7 @@ Do not disclose vulnerabilities publicly. Use [SECURITY.md](./SECURITY.md) or `s
 - [CHANGELOG.md](./CHANGELOG.md)
 - [CODEOWNERS](./CODEOWNERS)
 - [REPO_OWNERSHIP.md](./REPO_OWNERSHIP.md)
+- [RELEASE.md](./RELEASE.md)
 - [LICENSE](./LICENSE)
 
 ## Contact
