@@ -113,7 +113,10 @@ struct ClaimViewQuery {
     token: String,
 }
 
-pub fn admin_routes() -> Router {
+pub fn admin_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/status", get(get_protected_status))
         .route("/releases/request-approval", post(request_release_approval))
@@ -121,7 +124,10 @@ pub fn admin_routes() -> Router {
         .route("/governance/decision", post(submit_governance_decision))
 }
 
-pub fn public_auth_md_routes() -> Router {
+pub fn public_auth_md_routes<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
     Router::new()
         .route("/auth.md", get(get_auth_md))
         .route(
@@ -182,6 +188,10 @@ fn service_base(headers: &HeaderMap) -> String {
 }
 
 fn unauthorized_response(headers: &HeaderMap) -> Response {
+    bearer_unauthorized_response(headers, "Agent or admin credential required")
+}
+
+fn bearer_unauthorized_response(headers: &HeaderMap, error_description: &str) -> Response {
     let resource_metadata = format!(
         "{}/.well-known/oauth-protected-resource",
         service_base(headers)
@@ -191,7 +201,7 @@ fn unauthorized_response(headers: &HeaderMap) -> Response {
         StatusCode::UNAUTHORIZED,
         Json(json!({
             "error": "unauthorized",
-            "error_description": "Agent or admin credential required"
+            "error_description": error_description
         })),
     )
         .into_response();
@@ -203,6 +213,17 @@ fn unauthorized_response(headers: &HeaderMap) -> Response {
             .unwrap(),
     );
     response
+}
+
+fn admin_token_not_configured_response() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "error": "admin_api_token_not_configured",
+            "error_description": "NEXUS_ADMIN_API_TOKEN must be configured for admin write routes"
+        })),
+    )
+        .into_response()
 }
 
 fn forbidden_response() -> Response {
@@ -222,6 +243,28 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(|s| s.to_string())
+}
+
+fn authorize_admin_write(headers: &HeaderMap) -> Result<(), Response> {
+    let Some(expected_token) = configured_admin_token() else {
+        return Err(admin_token_not_configured_response());
+    };
+
+    let Some(token) = bearer_token(headers) else {
+        return Err(bearer_unauthorized_response(
+            headers,
+            "Admin API token required",
+        ));
+    };
+
+    if token != expected_token {
+        return Err(bearer_unauthorized_response(
+            headers,
+            "Invalid admin API token",
+        ));
+    }
+
+    Ok(())
 }
 
 fn authorize_for_scope(headers: &HeaderMap, required_scope: &str) -> Result<Vec<String>, Response> {
@@ -255,7 +298,9 @@ fn authorize_for_scope(headers: &HeaderMap, required_scope: &str) -> Result<Vec<
     Ok(record.scopes.clone())
 }
 
-async fn get_protected_status(headers: HeaderMap) -> Result<Json<ProtectedStatusResponse>, Response> {
+async fn get_protected_status(
+    headers: HeaderMap,
+) -> Result<Json<ProtectedStatusResponse>, Response> {
     let scopes = authorize_for_scope(&headers, "api.read")?;
     Ok(Json(ProtectedStatusResponse {
         status: "ok",
@@ -267,7 +312,7 @@ async fn request_release_approval(
     headers: HeaderMap,
     Json(payload): Json<ReleaseApprovalRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
-    let _ = authorize_for_scope(&headers, "api.write")?;
+    authorize_admin_write(&headers)?;
 
     Ok(Json(ReleaseApprovalResponse {
         accepted: true,
@@ -284,7 +329,7 @@ async fn submit_release_decision(
     headers: HeaderMap,
     Json(payload): Json<ReleaseDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    let _ = authorize_for_scope(&headers, "api.write")?;
+    authorize_admin_write(&headers)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -301,7 +346,7 @@ async fn submit_governance_decision(
     headers: HeaderMap,
     Json(payload): Json<GovernanceDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    let _ = authorize_for_scope(&headers, "api.write")?;
+    authorize_admin_write(&headers)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -394,9 +439,15 @@ async fn get_oauth_authorization_server_metadata(headers: HeaderMap) -> Json<Val
     }))
 }
 
-async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Json<Value>, Response> {
+async fn agent_auth(
+    headers: HeaderMap,
+    Json(payload): Json<Value>,
+) -> Result<Json<Value>, Response> {
     let base = service_base(&headers);
-    let request_type = payload.get("type").and_then(Value::as_str).unwrap_or_default();
+    let request_type = payload
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let requested_credential_type = payload
         .get("requested_credential_type")
         .and_then(Value::as_str)
@@ -426,10 +477,16 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 post_claim_scopes: post_claim_scopes.clone(),
                 email: None,
                 claimed: false,
-                claim_token_expires_at: format!("{}Z", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")),
+                claim_token_expires_at: format!(
+                    "{}Z",
+                    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")
+                ),
             };
 
-            REGISTRATIONS.lock().unwrap().insert(record.claim_token_hash.clone(), record.clone());
+            REGISTRATIONS
+                .lock()
+                .unwrap()
+                .insert(record.claim_token_hash.clone(), record.clone());
             CREDENTIALS.lock().unwrap().insert(
                 credential.clone(),
                 CredentialRecord {
@@ -453,11 +510,21 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
             })))
         }
         "identity_assertion" => {
-            let assertion_type = payload.get("assertion_type").and_then(Value::as_str).unwrap_or_default();
-            let assertion = payload.get("assertion").and_then(Value::as_str).unwrap_or_default();
+            let assertion_type = payload
+                .get("assertion_type")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let assertion = payload
+                .get("assertion")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
 
             if assertion_type != "verified_email" || assertion.is_empty() {
-                return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "unsupported_registration_shape"}))).into_response());
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "unsupported_registration_shape"})),
+                )
+                    .into_response());
             }
 
             let registration_id = format!("reg_{}", Uuid::new_v4().simple());
@@ -479,10 +546,16 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 post_claim_scopes: post_claim_scopes.clone(),
                 email: Some(assertion.to_string()),
                 claimed: false,
-                claim_token_expires_at: format!("{}Z", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")),
+                claim_token_expires_at: format!(
+                    "{}Z",
+                    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")
+                ),
             };
 
-            REGISTRATIONS.lock().unwrap().insert(record.claim_token_hash.clone(), record.clone());
+            REGISTRATIONS
+                .lock()
+                .unwrap()
+                .insert(record.claim_token_hash.clone(), record.clone());
 
             Ok(Json(json!({
                 "registration_id": registration_id,
@@ -493,7 +566,11 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 "post_claim_scopes": post_claim_scopes
             })))
         }
-        _ => Err((StatusCode::BAD_REQUEST, Json(json!({"error": "unsupported_registration_type"}))).into_response()),
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "unsupported_registration_type"})),
+        )
+            .into_response()),
     }
 }
 
@@ -501,15 +578,27 @@ async fn start_claim(Json(payload): Json<ClaimRequest>) -> Result<Json<Value>, R
     let claim_hash = hash_value(&payload.claim_token);
     let mut registrations = REGISTRATIONS.lock().unwrap();
     let Some(record) = registrations.get_mut(&claim_hash) else {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "invalid_claim_token"}))).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "invalid_claim_token"})),
+        )
+            .into_response());
     };
 
     if record.claimed {
-        return Err((StatusCode::CONFLICT, Json(json!({"error": "previously_claimed"}))).into_response());
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "previously_claimed"})),
+        )
+            .into_response());
     }
 
     if record.registration_type != "anonymous" {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "claim_not_applicable"}))).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "claim_not_applicable"})),
+        )
+            .into_response());
     }
 
     record.email = Some(payload.email);
@@ -522,26 +611,42 @@ async fn start_claim(Json(payload): Json<ClaimRequest>) -> Result<Json<Value>, R
     })))
 }
 
-async fn complete_claim(Json(payload): Json<ClaimCompleteRequest>) -> Result<Json<Value>, Response> {
+async fn complete_claim(
+    Json(payload): Json<ClaimCompleteRequest>,
+) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
     let mut registrations = REGISTRATIONS.lock().unwrap();
     let Some(record) = registrations.get_mut(&claim_hash) else {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "invalid_claim_token"}))).into_response());
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "invalid_claim_token"})),
+        )
+            .into_response());
     };
 
     if record.claimed {
-        return Err((StatusCode::CONFLICT, Json(json!({"error": "previously_claimed"}))).into_response());
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({"error": "previously_claimed"})),
+        )
+            .into_response());
     }
 
     if record.otp_hash != hash_value(&payload.otp) {
-        return Err((StatusCode::UNAUTHORIZED, Json(json!({"error": "otp_invalid"}))).into_response());
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": "otp_invalid"})),
+        )
+            .into_response());
     }
 
     record.claimed = true;
 
     if record.registration_type == "anonymous" {
         if let Some(existing_credential) = &record.credential {
-            if let Some(credential_record) = CREDENTIALS.lock().unwrap().get_mut(existing_credential) {
+            if let Some(credential_record) =
+                CREDENTIALS.lock().unwrap().get_mut(existing_credential)
+            {
                 credential_record.scopes = record.post_claim_scopes.clone();
             }
         }
@@ -576,9 +681,16 @@ async fn complete_claim(Json(payload): Json<ClaimCompleteRequest>) -> Result<Jso
 
 async fn view_claim_otp(Query(query): Query<ClaimViewQuery>) -> Result<Html<String>, Response> {
     let registrations = REGISTRATIONS.lock().unwrap();
-    let record = registrations.values().find(|entry| entry.claim_view_token == query.token).ok_or_else(|| {
-        (StatusCode::NOT_FOUND, Json(json!({"error": "invalid_claim_view_token"}))).into_response()
-    })?;
+    let record = registrations
+        .values()
+        .find(|entry| entry.claim_view_token == query.token)
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "invalid_claim_view_token"})),
+            )
+                .into_response()
+        })?;
 
     Ok(Html(format!(
         "<html><body><h1>Conxian Nexus Claim Code</h1><p>Registration: {}</p><p>OTP: <strong>{}</strong></p></body></html>",
