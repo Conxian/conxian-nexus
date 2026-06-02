@@ -125,7 +125,8 @@ pub fn app_router(
             "/v1/dlc/bond",
             post(crate::api::dlc::create_dlc_bond_handler),
         )
-        .nest("/v1/billing", crate::api::billing::billing_routes());
+        .nest("/v1/billing", crate::api::billing::billing_routes())
+        .nest("/admin/v1", crate::api::admin::admin_routes());
 
     if config.experimental_apis_enabled {
         router = router.route("/v1/experimental/rebuild-state", post(rebuild_state));
