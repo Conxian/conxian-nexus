@@ -5,7 +5,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -25,6 +24,7 @@ struct RegistrationRecord {
     claim_token_hash: String,
     claim_view_token: String,
     otp_hash: String,
+    otp_plaintext: String,
     requested_credential_type: String,
     credential: Option<String>,
     pre_claim_scopes: Vec<String>,
@@ -168,14 +168,6 @@ fn issue_otp() -> String {
     raw.to_string()
 }
 
-fn now_iso() -> String {
-    Utc::now().to_rfc3339()
-}
-
-fn expires_iso(minutes: i64) -> String {
-    (Utc::now() + Duration::minutes(minutes)).to_rfc3339()
-}
-
 fn service_base(headers: &HeaderMap) -> String {
     let proto = headers
         .get("x-forwarded-proto")
@@ -239,7 +231,11 @@ fn authorize_for_scope(headers: &HeaderMap, required_scope: &str) -> Result<Vec<
 
     if let Some(expected_token) = configured_admin_token() {
         if token == expected_token {
-            return Ok(vec!["admin.write".to_string(), "api.read".to_string(), "api.write".to_string()]);
+            return Ok(vec![
+                "admin.write".to_string(),
+                "api.read".to_string(),
+                "api.write".to_string(),
+            ]);
         }
     }
 
@@ -320,26 +316,21 @@ async fn submit_governance_decision(
 
 async fn get_auth_md(headers: HeaderMap) -> Html<String> {
     let base = service_base(&headers);
-    let markdown = format!(
+    Html(format!(
         r#"# auth.md
 
-Conxian Nexus supports agent registration for agent-to-product workflows.
+Conxian Nexus supports agent-to-product registration for protected API access.
 
-## 1. Discover
-
+## Discover
 - Protected Resource Metadata: `{base}/.well-known/oauth-protected-resource`
 - Authorization Server Metadata: `{base}/.well-known/oauth-authorization-server`
 - Registration endpoint: `{base}/agent/auth`
 
-## 2. Supported flows
+## Supported registration flows
+- `anonymous`
+- `identity_assertion` with `assertion_type = verified_email`
 
-- `anonymous` — immediate credential with pre-claim scopes
-- `identity_assertion + verified_email` — no credential until OTP claim completes
-
-## 3. Register
-
-### Anonymous
-
+## Anonymous registration example
 ```json
 {{
   "type": "anonymous",
@@ -347,8 +338,7 @@ Conxian Nexus supports agent registration for agent-to-product workflows.
 }}
 ```
 
-### Email required
-
+## Verified email registration example
 ```json
 {{
   "type": "identity_assertion",
@@ -358,29 +348,21 @@ Conxian Nexus supports agent registration for agent-to-product workflows.
 }}
 ```
 
-## 4. Claim ceremony
+## Claim completion
+- Start claim: `POST {base}/agent/auth/claim`
+- Complete claim: `POST {base}/agent/auth/claim/complete`
+- View OTP: `GET {base}/agent/auth/claim/view?token=...`
 
-- Anonymous registrations trigger claim with `POST {base}/agent/auth/claim`
-- Both flows complete with `POST {base}/agent/auth/claim/complete`
-- The OTP view is available at `{base}/agent/auth/claim/view?token=...`
+## Credential use
+Pass the credential as `Authorization: Bearer <credential>`.
 
-## 5. Use the credential
-
-Present the issued credential as `Authorization: Bearer <credential>`.
-
-Pre-claim credentials receive `api.read` only.
+Pre-claim credentials receive `api.read`.
 Post-claim credentials receive `api.read` and `api.write`.
 
-## 6. Protected route example
-
+## Protected route example
 - `GET {base}/admin/v1/status`
-
-## 7. Contact
-
-- security@conxian-labs.com
 "#
-    );
-    Html(markdown)
+    ))
 }
 
 async fn get_oauth_protected_resource_metadata(headers: HeaderMap) -> Json<Value> {
@@ -414,10 +396,7 @@ async fn get_oauth_authorization_server_metadata(headers: HeaderMap) -> Json<Val
 
 async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Json<Value>, Response> {
     let base = service_base(&headers);
-    let request_type = payload
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let request_type = payload.get("type").and_then(Value::as_str).unwrap_or_default();
     let requested_credential_type = payload
         .get("requested_credential_type")
         .and_then(Value::as_str)
@@ -440,19 +419,17 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 claim_token_hash: hash_value(&claim_token),
                 claim_view_token: claim_view_token.clone(),
                 otp_hash: hash_value(&otp),
+                otp_plaintext: otp,
                 requested_credential_type: requested_credential_type.clone(),
                 credential: Some(credential.clone()),
                 pre_claim_scopes: pre_claim_scopes.clone(),
                 post_claim_scopes: post_claim_scopes.clone(),
                 email: None,
                 claimed: false,
-                claim_token_expires_at: expires_iso(30),
+                claim_token_expires_at: format!("{}Z", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")),
             };
 
-            REGISTRATIONS
-                .lock()
-                .unwrap()
-                .insert(record.claim_token_hash.clone(), record.clone());
+            REGISTRATIONS.lock().unwrap().insert(record.claim_token_hash.clone(), record.clone());
             CREDENTIALS.lock().unwrap().insert(
                 credential.clone(),
                 CredentialRecord {
@@ -471,27 +448,16 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 "scopes": pre_claim_scopes,
                 "claim_url": format!("{}/agent/auth/claim", base),
                 "claim_token": claim_token,
-                "claim_token_expires": record.claim_token_expires_at,
                 "claim_view_url": format!("{}/agent/auth/claim/view?token={}", base, claim_view_token),
                 "post_claim_scopes": post_claim_scopes
             })))
         }
         "identity_assertion" => {
-            let assertion_type = payload
-                .get("assertion_type")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            let assertion = payload
-                .get("assertion")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
+            let assertion_type = payload.get("assertion_type").and_then(Value::as_str).unwrap_or_default();
+            let assertion = payload.get("assertion").and_then(Value::as_str).unwrap_or_default();
 
             if assertion_type != "verified_email" || assertion.is_empty() {
-                return Err((
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": "unsupported_registration_shape"})),
-                )
-                    .into_response());
+                return Err((StatusCode::BAD_REQUEST, Json(json!({"error": "unsupported_registration_shape"}))).into_response());
             }
 
             let registration_id = format!("reg_{}", Uuid::new_v4().simple());
@@ -506,35 +472,28 @@ async fn agent_auth(headers: HeaderMap, Json(payload): Json<Value>) -> Result<Js
                 claim_token_hash: hash_value(&claim_token),
                 claim_view_token: claim_view_token.clone(),
                 otp_hash: hash_value(&otp),
+                otp_plaintext: otp,
                 requested_credential_type: requested_credential_type,
                 credential: None,
                 pre_claim_scopes: vec![],
                 post_claim_scopes: post_claim_scopes.clone(),
                 email: Some(assertion.to_string()),
                 claimed: false,
-                claim_token_expires_at: expires_iso(30),
+                claim_token_expires_at: format!("{}Z", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S")),
             };
 
-            REGISTRATIONS
-                .lock()
-                .unwrap()
-                .insert(record.claim_token_hash.clone(), record.clone());
+            REGISTRATIONS.lock().unwrap().insert(record.claim_token_hash.clone(), record.clone());
 
             Ok(Json(json!({
                 "registration_id": registration_id,
                 "registration_type": "email-verification",
                 "claim_url": format!("{}/agent/auth/claim", base),
                 "claim_token": claim_token,
-                "claim_token_expires": record.claim_token_expires_at,
                 "claim_view_url": format!("{}/agent/auth/claim/view?token={}", base, claim_view_token),
                 "post_claim_scopes": post_claim_scopes
             })))
         }
-        _ => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "unsupported_registration_type"})),
-        )
-            .into_response()),
+        _ => Err((StatusCode::BAD_REQUEST, Json(json!({"error": "unsupported_registration_type"}))).into_response()),
     }
 }
 
@@ -559,7 +518,6 @@ async fn start_claim(Json(payload): Json<ClaimRequest>) -> Result<Json<Value>, R
         "registration_id": record.registration_id,
         "claim_attempt_id": format!("claim_attempt_{}", Uuid::new_v4().simple()),
         "status": "initiated",
-        "expires_at": record.claim_token_expires_at,
         "claim_view_url": format!("/agent/auth/claim/view?token={}", record.claim_view_token)
     })))
 }
@@ -618,27 +576,14 @@ async fn complete_claim(Json(payload): Json<ClaimCompleteRequest>) -> Result<Jso
 
 async fn view_claim_otp(Query(query): Query<ClaimViewQuery>) -> Result<Html<String>, Response> {
     let registrations = REGISTRATIONS.lock().unwrap();
-    let record = registrations
-        .values()
-        .find(|entry| entry.claim_view_token == query.token)
-        .ok_or_else(|| {
-            (StatusCode::NOT_FOUND, Json(json!({"error": "invalid_claim_view_token"}))).into_response()
-        })?;
+    let record = registrations.values().find(|entry| entry.claim_view_token == query.token).ok_or_else(|| {
+        (StatusCode::NOT_FOUND, Json(json!({"error": "invalid_claim_view_token"}))).into_response()
+    })?;
 
-    let otp = if record.otp_hash.is_empty() {
-        "unavailable".to_string()
-    } else {
-        // Bootstrap implementation: OTP is regenerated into the page for this one-time view.
-        // For testing and initial integration we keep the OTP derivable from stored state only here.
-        // Since only the hash is stored, provide a fixed display code for view-token flow.
-        // The handler is paired with server-generated OTP verification from tests and bootstrap usage.
-        "123456".to_string()
-    };
-
-    Err((
-        StatusCode::NOT_IMPLEMENTED,
-        Json(json!({"error": "claim_view_not_ready"})),
-    ).into_response())
+    Ok(Html(format!(
+        "<html><body><h1>Conxian Nexus Claim Code</h1><p>Registration: {}</p><p>OTP: <strong>{}</strong></p></body></html>",
+        record.registration_id, record.otp_plaintext
+    )))
 }
 
 #[cfg(test)]
