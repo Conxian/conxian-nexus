@@ -202,7 +202,15 @@ async fn get_mmr_proof(
 ) -> Result<Json<crate::state::MMRProof>, (StatusCode, Json<serde_json::Value>)> {
     let index = match (params.index, params.tx_id) {
         (Some(i), _) => Some(i as usize),
-        (None, Some(tx_id)) => state.nexus_state.get_leaf_index(&tx_id),
+        (None, Some(tx_id)) => {
+            if !tx_id.starts_with("0x") || tx_id.len() != 66 {
+                 return Err(mmr_proof_error(
+                    StatusCode::BAD_REQUEST,
+                    "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)",
+                ));
+            }
+            state.nexus_state.get_leaf_index(&tx_id)
+        },
         _ => {
             return Err(mmr_proof_error(
                 StatusCode::BAD_REQUEST,
@@ -337,12 +345,42 @@ async fn get_status(State(state): State<AppState>) -> Json<serde_json::Value> {
         .unwrap_or(Some(0))
         .unwrap_or(0);
 
+    let mut conn = state
+        .storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await
+        .map_err(|e| {
+            tracing::error!("Redis connection failed for status check: {}", e);
+            e
+        })
+        .ok();
+
+    let safety_mode = if let Some(ref mut c) = conn {
+        redis::cmd("GET")
+            .arg("nexus:safety_mode")
+            .query_async::<Option<bool>>(c)
+            .await
+            .unwrap_or(Some(false))
+            .unwrap_or(false)
+    } else {
+        false
+    };
+
+    let uptime = crate::api::get_uptime();
+    let start_time = crate::api::get_start_time_utc()
+        .map(|t| t.to_rfc3339())
+        .unwrap_or_default();
+
     Json(serde_json::json!({
         "status": "ALIVE",
-        "version": "0.4.11",
+        "version": "0.4.12",
         "state_root": root,
         "processed_height": height,
         "experimental_apis": state.config.experimental_apis_enabled,
+        "uptime_secs": uptime,
+        "start_time": start_time,
+        "safety_mode": safety_mode,
     }))
 }
 
