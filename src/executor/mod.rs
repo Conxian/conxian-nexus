@@ -30,9 +30,8 @@ pub struct NexusExecutor {
 }
 
 impl NexusExecutor {
-    pub fn new(storage: Arc<Storage>) -> Self {
-        // Default to shadow mode for PoC verification
-        let rgb_adapter = rgb::RGBAdapter::new(rgb::RGBRolloutMode::Shadow);
+    pub fn new(storage: Arc<Storage>, rgb_mode: rgb::RGBRolloutMode, known_contracts: std::collections::HashSet<String>) -> Self {
+        let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),

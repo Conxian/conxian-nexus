@@ -25,7 +25,7 @@ async fn test_external_settlement_trigger_unauthorized() {
     };
 
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
@@ -86,7 +86,7 @@ async fn test_external_settlement_trigger_success() {
     };
 
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),

@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(&config.rust_log)
         .init();
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.11)...");
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.12)...");
 
     // Initialize Global Start Time
     api::init_start_time();
@@ -47,7 +47,12 @@ async fn main() -> anyhow::Result<()> {
     let state_tracker = Arc::new(NexusState::new());
 
     // Initialize Executor
-    let executor = Arc::new(NexusExecutor::new(storage.clone()));
+    let rgb_mode = if config.experimental_apis_enabled {
+        conxian_nexus::executor::rgb::RGBRolloutMode::Shadow
+    } else {
+        conxian_nexus::executor::rgb::RGBRolloutMode::Disabled
+    };
+    let executor = Arc::new(NexusExecutor::new(storage.clone(), rgb_mode, std::collections::HashSet::new()));
 
     // Initialize Tableland Adapter [CON-69]
     let tableland = Arc::new(TablelandAdapter::new(

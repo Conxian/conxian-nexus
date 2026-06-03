@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.12] - 2026-06-03
+
+### Added
+- **System Lifecycle Tracking**: Enhanced `/v1/status` with `uptime_secs` and ISO-8601 `start_time`.
+- **RGB Protocol Hardening**: Implemented contract ID validation and support for known contract sets in `RGBAdapter`.
+- **MMR Proof Robustness**: Added strict `tx_id` format validation to the `/v1/mmr-proof` endpoint.
+
+### Changed
+- **Executor Refactor**: Updated `NexusExecutor` to support configurable RGB rollout modes and known contracts.
+- **Safety Mode Transparency**: Integrated `safety_mode` status directly into the high-level system status response.
+- **Version Alignment**: Bumped project version to v0.4.12 across all governance and configuration files.
+
 ## [0.4.11] - 2026-06-15
 
 ### Added
