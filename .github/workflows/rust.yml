@@ -40,3 +40,7 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov --locked
+    - name: Enforce Lightning scoped coverage (>=90%)
+      run: python3 scripts/check_lightning_coverage.py --min-percent 90

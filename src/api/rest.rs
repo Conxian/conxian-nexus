@@ -204,13 +204,13 @@ async fn get_mmr_proof(
         (Some(i), _) => Some(i as usize),
         (None, Some(tx_id)) => {
             if !tx_id.starts_with("0x") || tx_id.len() != 66 {
-                 return Err(mmr_proof_error(
+                return Err(mmr_proof_error(
                     StatusCode::BAD_REQUEST,
                     "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)",
                 ));
             }
             state.nexus_state.get_leaf_index(&tx_id)
-        },
+        }
         _ => {
             return Err(mmr_proof_error(
                 StatusCode::BAD_REQUEST,
@@ -454,4 +454,146 @@ async fn rebuild_state(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     state.nexus_state.set_initial_leaves(Vec::new());
     Ok(Json(serde_json::json!({"status": "rebuild_initiated"})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::executor::rgb::RGBRolloutMode;
+    use crate::executor::NexusExecutor;
+    use crate::state::NexusState;
+    use crate::storage::tableland::TablelandAdapter;
+    use crate::storage::Storage;
+    use axum::body::Body;
+    use axum::http::Request;
+    use serde_json::json;
+    use std::collections::HashSet;
+    use tower::ServiceExt;
+
+    fn test_router_with_experimental_apis(enabled: bool) -> axum::Router {
+        let mut config_value = Config::default_test();
+        config_value.experimental_apis_enabled = enabled;
+        let config = Arc::new(config_value);
+        let storage = Storage::for_tests();
+        let nexus_state = Arc::new(NexusState::new());
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(
+            storage.clone(),
+            config.tableland_base_url.clone(),
+        ));
+
+        app_router(
+            storage,
+            nexus_state,
+            executor,
+            None,
+            tableland,
+            None,
+            None,
+            config,
+        )
+    }
+
+    fn test_router() -> axum::Router {
+        test_router_with_experimental_apis(true)
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_billing_generate_key_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/billing/generate-key")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"organization_id": "   "}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            response.status() == StatusCode::BAD_REQUEST
+                || response.status() == StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_dlc_bond_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/dlc/bond")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "bond_id": "",
+                            "principal_sbtc": 0,
+                            "expiry_height": 100,
+                            "coupon_rate": 0.05
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_track_signature_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/billing/telemetry/track-signature")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "api_key": "cxl_test",
+                            "signature_hash": "hash",
+                            "timestamp": 1700000000,
+                            "hmac": "invalid"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_app_router_excludes_experimental_routes_when_disabled() {
+        let app = test_router_with_experimental_apis(false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/experimental/rebuild-state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
 }

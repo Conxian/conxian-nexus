@@ -18,6 +18,7 @@ type HmacSha256 = Hmac<Sha256>;
 const GRACE_PERIOD_DURATION_SECONDS: i64 = 86400; // 24 hours
 const GRACE_PERIOD_EFFICIENCY: f32 = 0.4;
 const MAX_ORGANIZATION_ID_LEN: usize = 128;
+const FREE_TIER_SIGNATURE_LIMIT: u64 = 50_000;
 
 #[derive(Debug, Deserialize)]
 pub struct GenerateKeyRequest {
@@ -64,6 +65,20 @@ enum GraceStatus {
     Expired,
 }
 
+#[derive(Debug, PartialEq)]
+enum TelemetryAuthError {
+    InvalidApiKey,
+    InvalidHmac,
+}
+
+#[derive(Debug, PartialEq)]
+enum QuotaDecision {
+    WithinLimit,
+    GraceAllowed { grace_start_to_set: Option<i64> },
+    GraceThrottled { remaining: i64 },
+    GraceExpired,
+}
+
 fn determine_grace_status(now: i64, grace_start: i64, roll: f32) -> GraceStatus {
     let elapsed = now - grace_start;
     if elapsed < GRACE_PERIOD_DURATION_SECONDS {
@@ -72,6 +87,62 @@ fn determine_grace_status(now: i64, grace_start: i64, roll: f32) -> GraceStatus 
         GraceStatus::Active { remaining, allowed }
     } else {
         GraceStatus::Expired
+    }
+}
+
+fn compute_expected_hmac(secret: &str, signature_hash: &str, timestamp: i64) -> String {
+    let message = format!("{}:{}", signature_hash, timestamp);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC error");
+    mac.update(message.as_bytes());
+    hex::encode(mac.finalize().into_bytes())
+}
+
+fn validate_telemetry_auth(
+    data: &std::collections::HashMap<String, String>,
+    payload: &TelemetryRequest,
+) -> Result<(), TelemetryAuthError> {
+    if data.is_empty() {
+        return Err(TelemetryAuthError::InvalidApiKey);
+    }
+
+    let secret = data.get("secret").cloned().unwrap_or_default();
+    let expected_hmac = compute_expected_hmac(&secret, &payload.signature_hash, payload.timestamp);
+
+    if expected_hmac != payload.hmac {
+        return Err(TelemetryAuthError::InvalidHmac);
+    }
+
+    Ok(())
+}
+
+fn evaluate_quota_decision(
+    new_usage: u64,
+    now: i64,
+    grace_start: Option<i64>,
+    roll: f32,
+) -> QuotaDecision {
+    if new_usage <= FREE_TIER_SIGNATURE_LIMIT {
+        return QuotaDecision::WithinLimit;
+    }
+
+    let mut grace_start_to_set = None;
+    let effective_grace_start = match grace_start {
+        Some(start) => start,
+        None => {
+            grace_start_to_set = Some(now);
+            now
+        }
+    };
+
+    match determine_grace_status(now, effective_grace_start, roll) {
+        GraceStatus::Active { remaining, allowed } => {
+            if allowed {
+                QuotaDecision::GraceAllowed { grace_start_to_set }
+            } else {
+                QuotaDecision::GraceThrottled { remaining }
+            }
+        }
+        GraceStatus::Expired => QuotaDecision::GraceExpired,
     }
 }
 
@@ -159,20 +230,14 @@ async fn track_signature(
         .await
         .unwrap_or_default();
 
-    if data.is_empty() {
-        return (StatusCode::UNAUTHORIZED, "Invalid API Key").into_response();
-    }
-
-    let secret = data.get("secret").cloned().unwrap_or_default();
-
-    // Verify HMAC
-    let message = format!("{}:{}", payload.signature_hash, payload.timestamp);
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC error");
-    mac.update(message.as_bytes());
-    let expected_hmac = hex::encode(mac.finalize().into_bytes());
-
-    if expected_hmac != payload.hmac {
-        return (StatusCode::UNAUTHORIZED, "Invalid HMAC").into_response();
+    match validate_telemetry_auth(&data, &payload) {
+        Ok(()) => {}
+        Err(TelemetryAuthError::InvalidApiKey) => {
+            return (StatusCode::UNAUTHORIZED, "Invalid API Key").into_response();
+        }
+        Err(TelemetryAuthError::InvalidHmac) => {
+            return (StatusCode::UNAUTHORIZED, "Invalid HMAC").into_response();
+        }
     }
 
     // [CON-473] PoC: Publish to Nostr if enabled
@@ -191,9 +256,9 @@ async fn track_signature(
         .query_async(&mut conn)
         .await
         .unwrap_or(0);
-    let free_limit = 50_000;
-
-    if new_usage > free_limit {
+    let quota_decision = if new_usage <= FREE_TIER_SIGNATURE_LIMIT {
+        QuotaDecision::WithinLimit
+    } else {
         let now = Utc::now().timestamp();
         let grace_start: Option<i64> = redis::cmd("HGET")
             .arg(&redis_key)
@@ -201,46 +266,44 @@ async fn track_signature(
             .query_async(&mut conn)
             .await
             .unwrap_or(None);
-        let grace_start = match grace_start {
-            Some(s) => s,
-            None => {
+        let roll: f32 = rand::thread_rng().gen();
+        evaluate_quota_decision(new_usage, now, grace_start, roll)
+    };
+
+    match quota_decision {
+        QuotaDecision::WithinLimit => {}
+        QuotaDecision::GraceAllowed { grace_start_to_set } => {
+            if let Some(start) = grace_start_to_set {
                 let _: () = redis::cmd("HSET")
                     .arg(&redis_key)
                     .arg("grace_period_start")
-                    .arg(now)
+                    .arg(start)
                     .query_async(&mut conn)
                     .await
                     .unwrap_or(());
-                now
             }
-        };
-
-        let roll: f32 = rand::thread_rng().gen();
-        match determine_grace_status(now, grace_start, roll) {
-            GraceStatus::Active { remaining, allowed } => {
-                if !allowed {
-                    return (
-                        StatusCode::PAYMENT_REQUIRED,
-                        Json(TelemetryResponse {
-                            current_usage: new_usage,
-                            limit: free_limit,
-                            status: "THROTTLED".to_string(),
-                            grace_period_remaining: Some(remaining),
-                            efficiency: Some(GRACE_PERIOD_EFFICIENCY),
-                        }),
-                    )
-                        .into_response();
-                }
-            }
-            GraceStatus::Expired => {
-                return (StatusCode::FORBIDDEN, "License Expired").into_response();
-            }
+        }
+        QuotaDecision::GraceThrottled { remaining } => {
+            return (
+                StatusCode::PAYMENT_REQUIRED,
+                Json(TelemetryResponse {
+                    current_usage: new_usage,
+                    limit: FREE_TIER_SIGNATURE_LIMIT,
+                    status: "THROTTLED".to_string(),
+                    grace_period_remaining: Some(remaining),
+                    efficiency: Some(GRACE_PERIOD_EFFICIENCY),
+                }),
+            )
+                .into_response();
+        }
+        QuotaDecision::GraceExpired => {
+            return (StatusCode::FORBIDDEN, "License Expired").into_response();
         }
     }
 
     Json(TelemetryResponse {
         current_usage: new_usage,
-        limit: free_limit,
+        limit: FREE_TIER_SIGNATURE_LIMIT,
         status: "OK".to_string(),
         grace_period_remaining: None,
         efficiency: None,
@@ -251,6 +314,7 @@ async fn track_signature(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_determine_grace_status() {
@@ -263,5 +327,96 @@ mod tests {
             }
             _ => panic!("Expected Active"),
         }
+    }
+
+    #[test]
+    fn test_validate_telemetry_auth_rejects_unknown_api_key() {
+        let payload = TelemetryRequest {
+            api_key: "cxl_unknown".to_string(),
+            signature_hash: "abc123".to_string(),
+            timestamp: 1_700_000_000,
+            hmac: "bad".to_string(),
+        };
+
+        let result = validate_telemetry_auth(&HashMap::new(), &payload);
+        assert_eq!(result, Err(TelemetryAuthError::InvalidApiKey));
+    }
+
+    #[test]
+    fn test_validate_telemetry_auth_rejects_invalid_hmac() {
+        let payload = TelemetryRequest {
+            api_key: "cxl_known".to_string(),
+            signature_hash: "abc123".to_string(),
+            timestamp: 1_700_000_000,
+            hmac: "bad".to_string(),
+        };
+
+        let mut data = HashMap::new();
+        data.insert("secret".to_string(), "secret123".to_string());
+
+        let result = validate_telemetry_auth(&data, &payload);
+        assert_eq!(result, Err(TelemetryAuthError::InvalidHmac));
+    }
+
+    #[test]
+    fn test_validate_telemetry_auth_accepts_valid_hmac() {
+        let signature_hash = "abc123";
+        let timestamp = 1_700_000_000;
+        let secret = "secret123";
+        let payload = TelemetryRequest {
+            api_key: "cxl_known".to_string(),
+            signature_hash: signature_hash.to_string(),
+            timestamp,
+            hmac: compute_expected_hmac(secret, signature_hash, timestamp),
+        };
+
+        let mut data = HashMap::new();
+        data.insert("secret".to_string(), secret.to_string());
+
+        let result = validate_telemetry_auth(&data, &payload);
+        assert_eq!(result, Ok(()));
+    }
+
+    #[test]
+    fn test_evaluate_quota_decision_within_limit() {
+        let decision = evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1000, Some(900), 0.9);
+        assert_eq!(decision, QuotaDecision::WithinLimit);
+    }
+
+    #[test]
+    fn test_evaluate_quota_decision_sets_grace_start_and_allows() {
+        let now = 1_000_000;
+        let decision = evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT + 1, now, None, 0.3);
+        assert_eq!(
+            decision,
+            QuotaDecision::GraceAllowed {
+                grace_start_to_set: Some(now)
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_quota_decision_throttles_during_grace() {
+        let now = 1_000_000;
+        let grace_start = now - 60;
+        let decision =
+            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT + 1, now, Some(grace_start), 0.95);
+
+        assert_eq!(
+            decision,
+            QuotaDecision::GraceThrottled {
+                remaining: GRACE_PERIOD_DURATION_SECONDS - 60
+            }
+        );
+    }
+
+    #[test]
+    fn test_evaluate_quota_decision_expires_after_grace_window() {
+        let now = 1_000_000;
+        let grace_start = now - (GRACE_PERIOD_DURATION_SECONDS + 1);
+        let decision =
+            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT + 1, now, Some(grace_start), 0.1);
+
+        assert_eq!(decision, QuotaDecision::GraceExpired);
     }
 }
