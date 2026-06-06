@@ -30,7 +30,11 @@ pub struct NexusExecutor {
 }
 
 impl NexusExecutor {
-    pub fn new(storage: Arc<Storage>, rgb_mode: rgb::RGBRolloutMode, known_contracts: std::collections::HashSet<String>) -> Self {
+    pub fn new(
+        storage: Arc<Storage>,
+        rgb_mode: rgb::RGBRolloutMode,
+        known_contracts: std::collections::HashSet<String>,
+    ) -> Self {
         let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
         Self {
             storage,

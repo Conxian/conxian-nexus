@@ -24,7 +24,11 @@ async fn test_mmr_proof_fails_closed_when_required_sibling_missing() {
     };
 
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        conxian_nexus::executor::rgb::RGBRolloutMode::Disabled,
+        std::collections::HashSet::new(),
+    ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
