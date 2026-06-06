@@ -467,11 +467,16 @@ mod tests {
     use crate::storage::Storage;
     use axum::body::Body;
     use axum::http::Request;
+    use axum::response::Response;
     use serde_json::json;
     use std::collections::HashSet;
     use tower::ServiceExt;
 
-    fn test_router_with_experimental_apis(enabled: bool) -> axum::Router {
+    fn test_router_with_options(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+    ) -> axum::Router {
         let mut config_value = Config::default_test();
         config_value.experimental_apis_enabled = enabled;
         let config = Arc::new(config_value);
@@ -479,8 +484,8 @@ mod tests {
         let nexus_state = Arc::new(NexusState::new());
         let executor = Arc::new(NexusExecutor::new(
             storage.clone(),
-            RGBRolloutMode::Disabled,
-            HashSet::new(),
+            rgb_mode,
+            known_contracts,
         ));
         let tableland = Arc::new(TablelandAdapter::new(
             storage.clone(),
@@ -499,8 +504,19 @@ mod tests {
         )
     }
 
+    fn test_router_with_experimental_apis(enabled: bool) -> axum::Router {
+        test_router_with_options(enabled, RGBRolloutMode::Disabled, HashSet::new())
+    }
+
     fn test_router() -> axum::Router {
         test_router_with_experimental_apis(true)
+    }
+
+    async fn response_json(response: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
     }
 
     #[tokio::test]
@@ -550,6 +566,91 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_invalid_contract_id_maps_to_500() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=invalid")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "Invalid RGB contract ID format: must start with rgb: and have sufficient length"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_disabled_adapter_maps_to_500() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "RGB adapter is disabled");
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_returns_ok_with_payload_in_shadow_mode() {
+        let app = test_router_with_options(true, RGBRolloutMode::Shadow, HashSet::new());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["contract_id"], "rgb:contract-123");
+        assert_eq!(body["status"], "verified");
+        assert_eq!(body["mode"], "shadow");
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_returns_not_found_in_active_mode_when_missing() {
+        let app = test_router_with_options(true, RGBRolloutMode::Active, HashSet::new());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "RGB contract not found");
     }
 
     #[tokio::test]
