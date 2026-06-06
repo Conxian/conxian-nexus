@@ -207,9 +207,8 @@ mod tests {
         assert_eq!(result, Err("boom".to_string()));
     }
 
-    fn test_state() -> AppState {
+    fn build_test_state(storage: Arc<Storage>) -> AppState {
         let config = Arc::new(Config::default_test());
-        let storage = Storage::for_tests();
         let nexus_state = Arc::new(NexusState::new());
         let executor = Arc::new(NexusExecutor::new(
             storage.clone(),
@@ -235,6 +234,10 @@ mod tests {
         }
     }
 
+    fn test_state() -> AppState {
+        build_test_state(Storage::for_tests())
+    }
+
     #[tokio::test]
     async fn test_create_dlc_bond_handler_rejects_invalid_payload() {
         let state = test_state();
@@ -250,5 +253,27 @@ mod tests {
             .into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_create_dlc_bond_handler_returns_redis_error_when_connection_fails() {
+        let storage = Arc::new(
+            Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1:1/")
+                .expect("lazy test storage should be constructible"),
+        );
+        let state = build_test_state(storage);
+
+        let request = DlcBondRequest {
+            bond_id: "bond-1".to_string(),
+            principal_sbtc: 100,
+            expiry_height: 500,
+            coupon_rate: 0.05,
+        };
+
+        let response = create_dlc_bond_handler(State(state), Json(request))
+            .await
+            .into_response();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
