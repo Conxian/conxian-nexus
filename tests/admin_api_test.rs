@@ -1,11 +1,20 @@
+use conxian_nexus::executor::rgb::RGBRolloutMode;
+use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::state::NexusState;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::storage::Storage;
 use axum::{
     body::{to_bytes, Body},
+    extract::DefaultBodyLimit,
     http::{header, Request, StatusCode},
     Router,
 };
 use conxian_nexus::api::admin::{admin_routes, public_auth_md_routes};
-use conxian_nexus::config::ENV_ADMIN_API_TOKEN;
+use conxian_nexus::api::rest::AppState;
+use conxian_nexus::config::{Config, ENV_ADMIN_API_TOKEN};
 use serde_json::Value;
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tower::util::ServiceExt;
@@ -13,9 +22,41 @@ use tower::util::ServiceExt;
 const RELEASE_APPROVAL_PAYLOAD: &str = r#"{"artifactId":"artifact-1","requestedBy":"actor-1"}"#;
 
 fn test_router() -> Router {
+    let mut config_val = Config::from_env().unwrap_or_else(|_| Config::default_test());
+    if let Ok(token) = std::env::var(ENV_ADMIN_API_TOKEN) {
+        config_val.admin_api_token = Some(token);
+    }
+    let config = Arc::new(config_val);
+    let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+    let nexus_state = Arc::new(NexusState::new());
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
+    ));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        config.tableland_base_url.clone(),
+    ));
+
+    let state = AppState {
+        storage,
+        nexus_state,
+        executor,
+        oracle: None,
+        tableland,
+        kwil: None,
+        nostr: None,
+        gateway_url: None,
+        http_client: reqwest::Client::new(),
+        config,
+    };
+
     Router::new()
         .merge(public_auth_md_routes())
         .nest("/admin/v1", admin_routes())
+        .layer(DefaultBodyLimit::max(1024 * 1024))
+        .with_state(state)
 }
 
 fn admin_api_token_lock() -> &'static AsyncMutex<()> {

@@ -35,5 +35,6 @@ Please include:
 ## Security expectations
 
 - keep secrets and credentials out of source control
-- redact sensitive values from logs and debug output
+- redact sensitive values from logs and debug output (Zero-Secret Logging)
+- centralize configuration through the `Config` struct to ensure consistent redaction and governance
 - use protected channels for incident handling
