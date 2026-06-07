@@ -23,8 +23,8 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (115, 120),  # RGB endpoint route wiring in app_router
-        (424, 449),  # RGB contract endpoint handler + error mapping
+        (115, 122),  # RGB endpoint route wiring in app_router
+        (424, 450),  # RGB contract endpoint handler + error mapping
     ],
     "src/executor/rgb.rs": [
         (17, 25),  # rollout mode display behavior
