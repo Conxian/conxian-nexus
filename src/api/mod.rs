@@ -10,8 +10,8 @@ pub mod services;
 pub mod settlement;
 pub mod zkml;
 
-use std::sync::OnceLock;
 use chrono::{DateTime, Utc};
+use std::sync::OnceLock;
 use std::time::Instant;
 
 pub static START_TIME: OnceLock<Instant> = OnceLock::new();
