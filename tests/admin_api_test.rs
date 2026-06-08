@@ -6,20 +6,183 @@ use conxian_nexus::storage::Storage;
 use axum::{
     body::{to_bytes, Body},
     extract::DefaultBodyLimit,
-    http::{header, Request, StatusCode},
+    http::{header, Method, Request, StatusCode},
     Router,
 };
 use conxian_nexus::api::admin::{admin_routes, public_auth_md_routes};
 use conxian_nexus::api::rest::AppState;
 use conxian_nexus::config::{Config, ENV_ADMIN_API_TOKEN};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tower::util::ServiceExt;
 
 const RELEASE_APPROVAL_PAYLOAD: &str = r#"{"artifactId":"artifact-1","requestedBy":"actor-1"}"#;
+const RELEASE_DECISION_PAYLOAD: &str =
+    r#"{"artifactId":"artifact-1","decision":"approve","actorId":"actor-1"}"#;
+const GOVERNANCE_DECISION_PAYLOAD: &str =
+    r#"{"actionId":"action-1","decision":"approve","actorId":"actor-1"}"#;
+const SAFETY_MODE_ACK_PAYLOAD: &str = r#"{"ackBy":"operator-1","reason":"acknowledged"}"#;
+
+#[derive(Clone)]
+struct CanonicalEndpoint {
+    method: Method,
+    request_path: &'static str,
+    contract_path: &'static str,
+    body: Option<&'static str>,
+}
+
+fn canonical_admin_v1_endpoints() -> Vec<CanonicalEndpoint> {
+    vec![
+        CanonicalEndpoint {
+            method: Method::POST,
+            request_path: "/admin/v1/releases/request-approval",
+            contract_path: "/admin/v1/releases/request-approval",
+            body: Some(RELEASE_APPROVAL_PAYLOAD),
+        },
+        CanonicalEndpoint {
+            method: Method::POST,
+            request_path: "/admin/v1/releases/decision",
+            contract_path: "/admin/v1/releases/decision",
+            body: Some(RELEASE_DECISION_PAYLOAD),
+        },
+        CanonicalEndpoint {
+            method: Method::POST,
+            request_path: "/admin/v1/governance/decision",
+            contract_path: "/admin/v1/governance/decision",
+            body: Some(GOVERNANCE_DECISION_PAYLOAD),
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/runtime/health",
+            contract_path: "/admin/v1/runtime/health",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/runtime/readiness",
+            contract_path: "/admin/v1/runtime/readiness",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/audit-events",
+            contract_path: "/admin/v1/audit-events",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/chains",
+            contract_path: "/admin/v1/chains",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/chains/bitcoin%2Fmainnet/status",
+            contract_path: "/admin/v1/chains/{chain}/status",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/attestations",
+            contract_path: "/admin/v1/attestations",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/attestations/attestation-1",
+            contract_path: "/admin/v1/attestations/{id}",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/drift",
+            contract_path: "/admin/v1/drift",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/safety-mode",
+            contract_path: "/admin/v1/safety-mode",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::POST,
+            request_path: "/admin/v1/safety-mode/ack",
+            contract_path: "/admin/v1/safety-mode/ack",
+            body: Some(SAFETY_MODE_ACK_PAYLOAD),
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/promotion-evidence/release%2F2026.06",
+            contract_path: "/admin/v1/promotion-evidence/{release}",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/environments",
+            contract_path: "/admin/v1/environments",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/environments/production",
+            contract_path: "/admin/v1/environments/{env}",
+            body: None,
+        },
+    ]
+}
+
+fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
+    let openapi = std::fs::read_to_string("docs/openapi.yaml")
+        .expect("docs/openapi.yaml should be readable from repo root");
+    let mut in_paths = false;
+    let mut current_path: Option<String> = None;
+    let mut methods = BTreeSet::new();
+
+    for raw_line in openapi.lines() {
+        if raw_line.trim() == "paths:" {
+            in_paths = true;
+            continue;
+        }
+
+        if !in_paths {
+            continue;
+        }
+
+        if !raw_line.starts_with("  ") {
+            break;
+        }
+
+        if raw_line.starts_with("  /") && raw_line.trim_end().ends_with(':') {
+            current_path = Some(raw_line.trim().trim_end_matches(':').to_string());
+            continue;
+        }
+
+        let Some(path) = current_path.as_ref() else {
+            continue;
+        };
+
+        if !path.starts_with("/admin/v1") {
+            continue;
+        }
+
+        let method_name = raw_line.trim().strip_suffix(':').filter(|name| {
+            matches!(
+                *name,
+                "get" | "post" | "put" | "patch" | "delete" | "head" | "options"
+            )
+        });
+
+        if let Some(method_name) = method_name {
+            methods.insert(format!("{} {}", method_name.to_uppercase(), path));
+        }
+    }
+
+    methods
+}
 
 fn test_router() -> Router {
     let mut config_val = Config::from_env().unwrap_or_else(|_| Config::default_test());
@@ -502,4 +665,56 @@ async fn test_unauthorized_status_includes_www_authenticate_metadata() {
         .to_str()
         .unwrap();
     assert!(header_value.contains("resource_metadata"));
+}
+
+#[tokio::test]
+async fn test_canonical_admin_v1_routes_are_reachable_with_expected_methods() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+
+    for endpoint in canonical_admin_v1_endpoints() {
+        let mut builder = Request::builder()
+            .method(endpoint.method.clone())
+            .uri(endpoint.request_path)
+            .header(header::HOST, "nexus.test")
+            .header(header::AUTHORIZATION, "Bearer expected-admin-token");
+
+        let request = if let Some(payload) = endpoint.body {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+            builder.body(Body::from(payload)).unwrap()
+        } else {
+            builder.body(Body::empty()).unwrap()
+        };
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+
+        assert_ne!(
+            status,
+            StatusCode::NOT_FOUND,
+            "{} {} should not 404",
+            endpoint.method,
+            endpoint.request_path
+        );
+        assert_ne!(
+            status,
+            StatusCode::METHOD_NOT_ALLOWED,
+            "{} {} should accept canonical method",
+            endpoint.method,
+            endpoint.request_path
+        );
+    }
+}
+
+#[test]
+fn test_openapi_admin_v1_surface_matches_router_contract() {
+    let expected: BTreeSet<String> = canonical_admin_v1_endpoints()
+        .into_iter()
+        .map(|endpoint| format!("{} {}", endpoint.method, endpoint.contract_path))
+        .chain(std::iter::once("GET /admin/v1/status".to_string()))
+        .collect();
+
+    let openapi_paths = parse_openapi_admin_v1_methods();
+    assert_eq!(openapi_paths, expected);
 }
