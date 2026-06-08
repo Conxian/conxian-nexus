@@ -30,7 +30,7 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (71, 139),  # app_router wiring (including billing/dlc nesting)
+        (71, 140),  # app_router wiring (including billing/dlc nesting)
     ],
 }
 

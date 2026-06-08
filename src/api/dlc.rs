@@ -23,7 +23,7 @@ pub struct DlcBondResponse {
 }
 
 fn validate_dlc_request(payload: &DlcBondRequest) -> Result<(), &'static str> {
-    if payload.bond_id.is_empty() {
+    if payload.bond_id.trim().is_empty() {
         return Err("bond_id is required");
     }
 
@@ -149,7 +149,19 @@ mod tests {
             coupon_rate: 0.05,
         };
 
-        assert!(validate_dlc_request(&request).is_err());
+        assert_eq!(validate_dlc_request(&request), Err("bond_id is required"));
+    }
+
+    #[test]
+    fn test_validate_dlc_request_rejects_whitespace_bond_id() {
+        let request = DlcBondRequest {
+            bond_id: "   ".to_string(),
+            principal_sbtc: 1,
+            expiry_height: 100,
+            coupon_rate: 0.05,
+        };
+
+        assert_eq!(validate_dlc_request(&request), Err("bond_id is required"));
     }
 
     #[test]
@@ -161,7 +173,10 @@ mod tests {
             coupon_rate: 0.05,
         };
 
-        assert!(validate_dlc_request(&request).is_err());
+        assert_eq!(
+            validate_dlc_request(&request),
+            Err("principal_sbtc must be greater than zero")
+        );
     }
 
     #[test]

@@ -1,42 +1,38 @@
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
 
 #[tokio::test]
-async fn test_mmr_proof_fails_closed_when_required_sibling_missing() {
-    let config = Config::default_test();
-
-    let storage = match Storage::from_config(&config).await {
-        Ok(s) => Arc::new(s),
-        Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
-        }
-    };
-
+async fn test_mmr_proof_invalid_tx_id_returns_bad_request() {
+    let config = Arc::new(Config::default_test());
+    let storage = Arc::new(
+        Storage::new_lazy(
+            "postgres://localhost:1/nexus_test?connect_timeout=1",
+            "redis://127.0.0.1/",
+        )
+        .expect("lazy test storage should be constructible"),
+    );
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
-        conxian_nexus::executor::rgb::RGBRolloutMode::Disabled,
-        std::collections::HashSet::new(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
     ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
     ));
-
-    // Manually insert a leaf but NO nodes in DB.
-    // This will trigger the INTERNAL_SERVER_ERROR because siblings are missing.
-    nexus_state.update_state("tx1", 100);
 
     let app = app_router(
         storage,
@@ -46,7 +42,7 @@ async fn test_mmr_proof_fails_closed_when_required_sibling_missing() {
         tableland,
         None,
         None,
-        Arc::new(Config::default_test()),
+        config,
     );
 
     let response = app
@@ -60,5 +56,12 @@ async fn test_mmr_proof_fails_closed_when_required_sibling_missing() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json["error"],
+        "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"
+    );
 }

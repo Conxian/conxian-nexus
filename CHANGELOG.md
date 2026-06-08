@@ -5,11 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [0.4.12] - 2026-06-03
 
 ### Added
+- **Glass Node Dashboard**: Implemented a lightweight HTML interface at `/` for real-time monitoring.
+- **API Completion**: Wired `/health`, `/v1/services`, and `/v1/bitvm2/verify-state-root` endpoints.
 - **System Lifecycle Tracking**: Enhanced `/v1/status` with `uptime_secs` and ISO-8601 `start_time`.
 - **RGB Protocol Hardening**: Implemented contract ID validation and support for known contract sets in `RGBAdapter`.
 - **MMR Proof Robustness**: Added strict `tx_id` format validation to the `/v1/mmr-proof` endpoint.
 
 ### Changed
+- **Identity Consistency**: Aligned identity resolution to use POST with JSON body for protocol-wide consistency.
 - **Executor Refactor**: Updated `NexusExecutor` to support configurable RGB rollout modes and known contracts.
 - **Safety Mode Transparency**: Integrated `safety_mode` status directly into the high-level system status response.
 - **Version Alignment**: Bumped project version to v0.4.12 across all governance and configuration files.
