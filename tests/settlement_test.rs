@@ -1,37 +1,41 @@
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
-use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::executor::{rgb::RGBRolloutMode, NexusExecutor};
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
-use serde_json::json;
+use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
 
-#[tokio::test]
-async fn test_external_settlement_trigger_unauthorized() {
-    let config = Config::default_test();
+async fn build_test_app() -> Option<axum::Router> {
+    let config = Arc::new(Config::default_test());
 
     let storage = match Storage::from_config(&config).await {
         Ok(s) => Arc::new(s),
         Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
+            eprintln!("Skipping settlement integration tests: database not available");
+            return None;
         }
     };
 
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
+    ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    Some(app_router(
         storage,
         nexus_state,
         executor,
@@ -39,69 +43,16 @@ async fn test_external_settlement_trigger_unauthorized() {
         tableland,
         None,
         None,
-        Arc::new(Config::default_test()),
-    );
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/settlement/trigger")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    json!({
-                        "source": "ISO20022",
-                        "external_id": "MSG123",
-                        "payload": {"amount": 1000, "currency": "USD"}
-                    })
-                    .to_string(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // Default config has no TEE keys, so it should be unauthorized or service unavailable
-    assert!(
-        response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::SERVICE_UNAVAILABLE
-    );
+        config,
+    ))
 }
 
 #[tokio::test]
-async fn test_external_settlement_trigger_success() {
-    let mut config = Config::default_test();
-    // Simulate trusted keys
-    config
-        .erp_attestation_trusted_keys
-        .insert("tee-key-1".to_string(), "secret".to_string());
-    let config = Arc::new(config);
-
-    let storage = match Storage::from_config(&config).await {
-        Ok(s) => Arc::new(s),
-        Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
-        }
+async fn rejects_missing_routing_policy() {
+    let app = match build_test_app().await {
+        Some(app) => app,
+        None => return,
     };
-
-    let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
-
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        None,
-        tableland,
-        None,
-        None,
-        config.clone(),
-    );
 
     let response = app
         .oneshot(
@@ -112,8 +63,12 @@ async fn test_external_settlement_trigger_success() {
                 .body(Body::from(
                     json!({
                         "source": "ISO20022",
-                        "external_id": "MSG124",
-                        "payload": {"amount": 500, "currency": "ZAR"}
+                        "external_id": "MSG-MISSING-POLICY",
+                        "payload": {
+                            "amount": 1000,
+                            "currency": "USD"
+                        },
+                        "attestation": "TEE_TEST_SIGNATURE"
                     })
                     .to_string(),
                 ))
@@ -122,8 +77,104 @@ async fn test_external_settlement_trigger_success() {
         .await
         .unwrap();
 
-    // Should return 202 Accepted if validated
-    assert!(
-        response.status() == StatusCode::ACCEPTED || response.status() == StatusCode::UNAUTHORIZED
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "PolicyBlocked");
+    assert_eq!(json["policy_rejection"]["code"], "missing_routing_policy");
+}
+
+#[tokio::test]
+async fn rejects_t1_non_ibc_routing_policy() {
+    let app = match build_test_app().await {
+        Some(app) => app,
+        None => return,
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/settlement/trigger")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source": "ISO20022",
+                        "external_id": "MSG-T1-NON-IBC",
+                        "payload": {
+                            "amount": 500,
+                            "currency": "USD",
+                            "routing_policy": {
+                                "system": "Hyperlane",
+                                "trust_tier": "T1",
+                                "verification_class": "app_defined_multiverifier",
+                                "policy_version": "2026-06-01",
+                                "evidence_hash": "0xdef456"
+                            }
+                        },
+                        "attestation": "TEE_TEST_SIGNATURE"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "PolicyBlocked");
+    assert_eq!(json["policy_rejection"]["code"], "t1_requires_ibc");
+}
+
+#[tokio::test]
+async fn allows_valid_approved_policy_payload() {
+    let app = match build_test_app().await {
+        Some(app) => app,
+        None => return,
+    };
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/settlement/trigger")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "source": "ISO20022",
+                        "external_id": "MSG-VALID-POLICY",
+                        "payload": {
+                            "amount": 750,
+                            "currency": "USD",
+                            "routing_policy": {
+                                "system": "IBC",
+                                "trust_tier": "T1",
+                                "verification_class": "light_client",
+                                "policy_version": "2026-06-01",
+                                "evidence_hash": "0xabc123",
+                                "requested_trust_tier": "T1"
+                            }
+                        },
+                        "attestation": "TEE_TEST_SIGNATURE"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    assert_ne!(status, StatusCode::FORBIDDEN);
+    assert_ne!(
+        json.get("status").and_then(|v| v.as_str()),
+        Some("PolicyBlocked")
     );
 }
