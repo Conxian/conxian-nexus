@@ -1,5 +1,7 @@
+use crate::api::rest::AppState;
+use crate::config::Config;
 use axum::{
-    extract::{Json, Path, Query},
+    extract::{Json, Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -113,10 +115,7 @@ struct ClaimViewQuery {
     token: String,
 }
 
-pub fn admin_routes<S>() -> Router<S>
-where
-    S: Clone + Send + Sync + 'static,
-{
+pub fn admin_routes() -> Router<AppState> {
     Router::new()
         // legacy compatibility endpoint retained for existing clients
         .route("/status", get(get_protected_status))
@@ -138,10 +137,7 @@ where
         .route("/environments/{env}", get(get_environment))
 }
 
-pub fn public_auth_md_routes<S>() -> Router<S>
-where
-    S: Clone + Send + Sync + 'static,
-{
+pub fn public_auth_md_routes() -> Router<AppState> {
     Router::new()
         .route("/auth.md", get(get_auth_md))
         .route(
@@ -158,11 +154,8 @@ where
         .route("/agent/auth/claim/view", get(view_claim_otp))
 }
 
-fn configured_admin_token() -> Option<String> {
-    std::env::var(crate::config::ENV_ADMIN_API_TOKEN)
-        .ok()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
+fn configured_admin_token(config: &Config) -> Option<&str> {
+    config.admin_api_token.as_deref().filter(|s| !s.is_empty())
 }
 
 fn hash_value(value: &str) -> String {
@@ -259,8 +252,8 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn authorize_admin_write(headers: &HeaderMap) -> Result<(), Response> {
-    let Some(expected_token) = configured_admin_token() else {
+fn authorize_admin_write(headers: &HeaderMap, config: &Config) -> Result<(), Response> {
+    let Some(expected_token) = configured_admin_token(config) else {
         return Err(admin_token_not_configured_response());
     };
 
@@ -281,12 +274,16 @@ fn authorize_admin_write(headers: &HeaderMap) -> Result<(), Response> {
     Ok(())
 }
 
-fn authorize_for_scope(headers: &HeaderMap, required_scope: &str) -> Result<Vec<String>, Response> {
+fn authorize_for_scope(
+    headers: &HeaderMap,
+    config: &Config,
+    required_scope: &str,
+) -> Result<Vec<String>, Response> {
     let Some(token) = bearer_token(headers) else {
         return Err(unauthorized_response(headers));
     };
 
-    if let Some(expected_token) = configured_admin_token() {
+    if let Some(expected_token) = configured_admin_token(config) {
         if token == expected_token {
             return Ok(vec![
                 "admin.write".to_string(),
@@ -313,9 +310,10 @@ fn authorize_for_scope(headers: &HeaderMap, required_scope: &str) -> Result<Vec<
 }
 
 async fn get_protected_status(
+    State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ProtectedStatusResponse>, Response> {
-    let scopes = authorize_for_scope(&headers, "api.read")?;
+    let scopes = authorize_for_scope(&headers, &state.config, "api.read")?;
     Ok(Json(ProtectedStatusResponse {
         status: "ok",
         scopes,
@@ -323,10 +321,11 @@ async fn get_protected_status(
 }
 
 async fn request_release_approval(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseApprovalRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
-    authorize_admin_write(&headers)?;
+    authorize_admin_write(&headers, &state.config)?;
 
     Ok(Json(ReleaseApprovalResponse {
         accepted: true,
@@ -340,10 +339,11 @@ async fn request_release_approval(
 }
 
 async fn submit_release_decision(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    authorize_admin_write(&headers)?;
+    authorize_admin_write(&headers, &state.config)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -357,10 +357,11 @@ async fn submit_release_decision(
 }
 
 async fn submit_governance_decision(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<GovernanceDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    authorize_admin_write(&headers)?;
+    authorize_admin_write(&headers, &state.config)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -398,8 +399,11 @@ fn environment_payload(env: &str) -> Value {
     })
 }
 
-async fn get_runtime_health(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn get_runtime_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "status": "ready",
@@ -410,8 +414,11 @@ async fn get_runtime_health(headers: HeaderMap) -> Result<Json<Value>, Response>
     })))
 }
 
-async fn get_runtime_readiness(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn get_runtime_readiness(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "status": "ready",
@@ -422,8 +429,11 @@ async fn get_runtime_readiness(headers: HeaderMap) -> Result<Json<Value>, Respon
     })))
 }
 
-async fn list_audit_events(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn list_audit_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "events": [
@@ -437,8 +447,11 @@ async fn list_audit_events(headers: HeaderMap) -> Result<Json<Value>, Response> 
     })))
 }
 
-async fn list_chain_statuses(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn list_chain_statuses(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "chains": [
@@ -449,18 +462,22 @@ async fn list_chain_statuses(headers: HeaderMap) -> Result<Json<Value>, Response
 }
 
 async fn get_chain_status(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path(chain): Path<String>,
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "chain": chain_status_payload(&chain)
     })))
 }
 
-async fn list_attestations(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn list_attestations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "attestations": [
@@ -477,10 +494,11 @@ async fn list_attestations(headers: HeaderMap) -> Result<Json<Value>, Response> 
 }
 
 async fn get_attestation(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "attestation": {
@@ -495,8 +513,11 @@ async fn get_attestation(
     })))
 }
 
-async fn get_drift_status(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn get_drift_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "status": "clear",
@@ -506,8 +527,11 @@ async fn get_drift_status(headers: HeaderMap) -> Result<Json<Value>, Response> {
     })))
 }
 
-async fn get_safety_mode_status(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn get_safety_mode_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "enabled": false,
@@ -517,10 +541,11 @@ async fn get_safety_mode_status(headers: HeaderMap) -> Result<Json<Value>, Respo
 }
 
 async fn acknowledge_safety_mode(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, Response> {
-    authorize_admin_write(&headers)?;
+    authorize_admin_write(&headers, &state.config)?;
 
     let ack_by = payload
         .get("ackBy")
@@ -549,10 +574,11 @@ async fn acknowledge_safety_mode(
 }
 
 async fn get_promotion_evidence(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path(release): Path<String>,
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "releaseId": release,
@@ -564,8 +590,11 @@ async fn get_promotion_evidence(
     })))
 }
 
-async fn list_environments(headers: HeaderMap) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+async fn list_environments(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(json!({
         "environments": [
@@ -576,15 +605,16 @@ async fn list_environments(headers: HeaderMap) -> Result<Json<Value>, Response> 
 }
 
 async fn get_environment(
+    State(state): State<AppState>,
     headers: HeaderMap,
     Path(env): Path<String>,
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, "api.read")?;
+    authorize_for_scope(&headers, &state.config, "api.read")?;
 
     Ok(Json(environment_payload(&env)))
 }
 
-async fn get_auth_md(headers: HeaderMap) -> Html<String> {
+async fn get_auth_md(State(_state): State<AppState>, headers: HeaderMap) -> Html<String> {
     let base = service_base(&headers);
     Html(format!(
         r#"# auth.md
@@ -635,7 +665,10 @@ Post-claim credentials receive `api.read` and `api.write`.
     ))
 }
 
-async fn get_oauth_protected_resource_metadata(headers: HeaderMap) -> Json<Value> {
+async fn get_oauth_protected_resource_metadata(
+    State(_state): State<AppState>,
+    headers: HeaderMap,
+) -> Json<Value> {
     let base = service_base(&headers);
     Json(json!({
         "resource": format!("{}/", base),
@@ -646,7 +679,10 @@ async fn get_oauth_protected_resource_metadata(headers: HeaderMap) -> Json<Value
     }))
 }
 
-async fn get_oauth_authorization_server_metadata(headers: HeaderMap) -> Json<Value> {
+async fn get_oauth_authorization_server_metadata(
+    State(_state): State<AppState>,
+    headers: HeaderMap,
+) -> Json<Value> {
     let base = service_base(&headers);
     Json(json!({
         "issuer": base,
@@ -665,6 +701,7 @@ async fn get_oauth_authorization_server_metadata(headers: HeaderMap) -> Json<Val
 }
 
 async fn agent_auth(
+    State(_state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, Response> {
@@ -799,7 +836,10 @@ async fn agent_auth(
     }
 }
 
-async fn start_claim(Json(payload): Json<ClaimRequest>) -> Result<Json<Value>, Response> {
+async fn start_claim(
+    State(_state): State<AppState>,
+    Json(payload): Json<ClaimRequest>,
+) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
     let mut registrations = REGISTRATIONS.lock().unwrap();
     let Some(record) = registrations.get_mut(&claim_hash) else {
@@ -837,6 +877,7 @@ async fn start_claim(Json(payload): Json<ClaimRequest>) -> Result<Json<Value>, R
 }
 
 async fn complete_claim(
+    State(_state): State<AppState>,
     Json(payload): Json<ClaimCompleteRequest>,
 ) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
@@ -904,7 +945,10 @@ async fn complete_claim(
     })))
 }
 
-async fn view_claim_otp(Query(query): Query<ClaimViewQuery>) -> Result<Html<String>, Response> {
+async fn view_claim_otp(
+    State(_state): State<AppState>,
+    Query(query): Query<ClaimViewQuery>,
+) -> Result<Html<String>, Response> {
     let registrations = REGISTRATIONS.lock().unwrap();
     let record = registrations
         .values()

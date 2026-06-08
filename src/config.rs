@@ -28,6 +28,7 @@ pub(crate) fn parse_flag(value: &str) -> bool {
 #[derive(Clone, serde::Deserialize)]
 pub struct Config {
     pub nostr_secret_key: Option<String>,
+    pub admin_api_token: Option<String>,
     pub nostr_relays: Vec<String>,
     pub tableland_base_url: String,
     pub kwil_provider_url: Option<String>,
@@ -57,6 +58,10 @@ impl std::fmt::Debug for Config {
             .field(
                 "nostr_secret_key",
                 &self.nostr_secret_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field(
+                "admin_api_token",
+                &self.admin_api_token.as_ref().map(|_| "<redacted>"),
             )
             .field("nostr_relays", &self.nostr_relays)
             .field("tableland_base_url", &self.tableland_base_url)
@@ -98,6 +103,7 @@ impl Config {
             gateway_url: None,
             experimental_apis_enabled: true,
             nostr_secret_key: None,
+            admin_api_token: None,
             nostr_relays: vec![],
             tableland_base_url: "https://validator.tableland.xyz".to_string(),
             kwil_provider_url: None,
@@ -207,6 +213,7 @@ impl Config {
         }
 
         let nostr_secret_key = env::var("NOSTR_SECRET_KEY").ok().filter(|s| !s.is_empty());
+        let admin_api_token = env::var(ENV_ADMIN_API_TOKEN).ok().filter(|s| !s.is_empty());
         let nostr_relays = env::var("NOSTR_RELAYS")
             .unwrap_or_else(|_| "ws://127.0.0.1:8080".to_string())
             .split(",")
@@ -245,6 +252,7 @@ impl Config {
 
         Ok(Self {
             nostr_secret_key,
+            admin_api_token,
             nostr_relays,
             tableland_base_url,
             kwil_provider_url,
@@ -291,6 +299,7 @@ mod tests {
         env::set_var(ENV_ERP_ATTESTATION_TRUSTED_KEYS, r#"{"key1": "secret1"}"#);
         env::set_var("WORLDID_APP_ID", "app123");
         env::set_var("ZKML_VK_B64_MODEL1", "vk123");
+        env::set_var("NEXUS_ADMIN_API_TOKEN", "test-token");
 
         let config = Config::from_env().unwrap();
         assert_eq!(
@@ -305,5 +314,6 @@ mod tests {
         );
         assert_eq!(config.worldid_app_id, "app123");
         assert_eq!(config.zkml_vks.get("ZKML_VK_B64_MODEL1").unwrap(), "vk123");
+        assert_eq!(config.admin_api_token.as_deref(), Some("test-token"));
     }
 }
