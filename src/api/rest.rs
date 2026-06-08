@@ -470,18 +470,28 @@ mod tests {
     use axum::response::Response;
     use serde_json::json;
     use std::collections::HashSet;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
-    fn test_router_with_options(
+    const MAINNET_LIKE_TX_ID: &str =
+        "0x4d3f94d20d5d31ef15f4f7f0f6c52f1571318dd43259a59e86cdc84e64546a1e";
+
+    fn test_router_with_state(
         enabled: bool,
         rgb_mode: RGBRolloutMode,
         known_contracts: HashSet<String>,
+        nexus_state: Arc<NexusState>,
     ) -> axum::Router {
         let mut config_value = Config::default_test();
         config_value.experimental_apis_enabled = enabled;
         let config = Arc::new(config_value);
-        let storage = Storage::for_tests();
-        let nexus_state = Arc::new(NexusState::new());
+        let storage = Arc::new(
+            Storage::new_lazy(
+                "postgres://localhost:1/nexus_test?connect_timeout=1",
+                "redis://127.0.0.1/",
+            )
+            .expect("lazy test storage should be constructible"),
+        );
         let executor = Arc::new(NexusExecutor::new(
             storage.clone(),
             rgb_mode,
@@ -501,6 +511,19 @@ mod tests {
             None,
             None,
             config,
+        )
+    }
+
+    fn test_router_with_options(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+    ) -> axum::Router {
+        test_router_with_state(
+            enabled,
+            rgb_mode,
+            known_contracts,
+            Arc::new(NexusState::new()),
         )
     }
 
@@ -560,6 +583,110 @@ mod tests {
                         })
                         .to_string(),
                     ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_rejects_missing_index_and_tx_id() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "provide either `index` or `tx_id`");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_rejects_invalid_tx_id_format() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?tx_id=tx1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_prefers_index_when_both_params_present() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?index=0&tx_id=bad")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "leaf at index 0 was not found");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_returns_not_found_for_unknown_mainnet_like_tx() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/v1/mmr-proof?tx_id={MAINNET_LIKE_TX_ID}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "requested transaction was not found in MMR leaves"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_missing_contract_id_query_is_bad_request() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract")
+                    .body(Body::empty())
                     .unwrap(),
             )
             .await
