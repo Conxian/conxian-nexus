@@ -22,7 +22,11 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
             .expect("Failed to create storage"),
     );
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        conxian_nexus::executor::rgb::RGBRolloutMode::Disabled,
+        std::collections::HashSet::new(),
+    ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),

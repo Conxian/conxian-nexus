@@ -204,13 +204,13 @@ async fn get_mmr_proof(
         (Some(i), _) => Some(i as usize),
         (None, Some(tx_id)) => {
             if !tx_id.starts_with("0x") || tx_id.len() != 66 {
-                 return Err(mmr_proof_error(
+                return Err(mmr_proof_error(
                     StatusCode::BAD_REQUEST,
                     "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)",
                 ));
             }
             state.nexus_state.get_leaf_index(&tx_id)
-        },
+        }
         _ => {
             return Err(mmr_proof_error(
                 StatusCode::BAD_REQUEST,
@@ -454,4 +454,374 @@ async fn rebuild_state(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     state.nexus_state.set_initial_leaves(Vec::new());
     Ok(Json(serde_json::json!({"status": "rebuild_initiated"})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use crate::executor::rgb::RGBRolloutMode;
+    use crate::executor::NexusExecutor;
+    use crate::state::NexusState;
+    use crate::storage::tableland::TablelandAdapter;
+    use crate::storage::Storage;
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::response::Response;
+    use serde_json::json;
+    use std::collections::HashSet;
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    const MAINNET_LIKE_TX_ID: &str =
+        "0x4d3f94d20d5d31ef15f4f7f0f6c52f1571318dd43259a59e86cdc84e64546a1e";
+
+    fn test_router_with_state(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+        nexus_state: Arc<NexusState>,
+    ) -> axum::Router {
+        let mut config_value = Config::default_test();
+        config_value.experimental_apis_enabled = enabled;
+        let config = Arc::new(config_value);
+        let storage = Arc::new(
+            Storage::new_lazy(
+                "postgres://localhost:1/nexus_test?connect_timeout=1",
+                "redis://127.0.0.1/",
+            )
+            .expect("lazy test storage should be constructible"),
+        );
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            rgb_mode,
+            known_contracts,
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(
+            storage.clone(),
+            config.tableland_base_url.clone(),
+        ));
+
+        app_router(
+            storage,
+            nexus_state,
+            executor,
+            None,
+            tableland,
+            None,
+            None,
+            config,
+        )
+    }
+
+    fn test_router_with_options(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+    ) -> axum::Router {
+        test_router_with_state(
+            enabled,
+            rgb_mode,
+            known_contracts,
+            Arc::new(NexusState::new()),
+        )
+    }
+
+    fn test_router_with_experimental_apis(enabled: bool) -> axum::Router {
+        test_router_with_options(enabled, RGBRolloutMode::Disabled, HashSet::new())
+    }
+
+    fn test_router() -> axum::Router {
+        test_router_with_experimental_apis(true)
+    }
+
+    async fn response_json(response: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_billing_generate_key_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/billing/generate-key")
+                    .header("content-type", "application/json")
+                    .body(Body::from(json!({"organization_id": "   "}).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            response.status() == StatusCode::BAD_REQUEST
+                || response.status() == StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_dlc_bond_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/dlc/bond")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "bond_id": "",
+                            "principal_sbtc": 0,
+                            "expiry_height": 100,
+                            "coupon_rate": 0.05
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_rejects_missing_index_and_tx_id() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "provide either `index` or `tx_id`");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_rejects_invalid_tx_id_format() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?tx_id=tx1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_prefers_index_when_both_params_present() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?index=0&tx_id=bad")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "leaf at index 0 was not found");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_returns_not_found_for_unknown_mainnet_like_tx() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/v1/mmr-proof?tx_id={MAINNET_LIKE_TX_ID}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "requested transaction was not found in MMR leaves"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_missing_contract_id_query_is_bad_request() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_invalid_contract_id_maps_to_500() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=invalid")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "Invalid RGB contract ID format: must start with rgb: and have sufficient length"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_disabled_adapter_maps_to_500() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "RGB adapter is disabled");
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_returns_ok_with_payload_in_shadow_mode() {
+        let app = test_router_with_options(true, RGBRolloutMode::Shadow, HashSet::new());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        assert_eq!(body["contract_id"], "rgb:contract-123");
+        assert_eq!(body["status"], "verified");
+        assert_eq!(body["mode"], "shadow");
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_returns_not_found_in_active_mode_when_missing() {
+        let app = test_router_with_options(true, RGBRolloutMode::Active, HashSet::new());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "RGB contract not found");
+    }
+
+    #[tokio::test]
+    async fn test_app_router_wires_track_signature_route() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/billing/telemetry/track-signature")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        json!({
+                            "api_key": "cxl_test",
+                            "signature_hash": "hash",
+                            "timestamp": 1700000000,
+                            "hmac": "invalid"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_app_router_excludes_experimental_routes_when_disabled() {
+        let app = test_router_with_experimental_apis(false);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/experimental/rebuild-state")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
 }

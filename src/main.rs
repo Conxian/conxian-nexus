@@ -52,7 +52,11 @@ async fn main() -> anyhow::Result<()> {
     } else {
         conxian_nexus::executor::rgb::RGBRolloutMode::Disabled
     };
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), rgb_mode, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        rgb_mode,
+        std::collections::HashSet::new(),
+    ));
 
     // Initialize Tableland Adapter [CON-69]
     let tableland = Arc::new(TablelandAdapter::new(

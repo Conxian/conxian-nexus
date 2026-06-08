@@ -16,7 +16,11 @@ async fn test_rgb_contract_lookup_shadow_mode() {
     let config = Arc::new(Config::default_test());
     let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Shadow, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        conxian_nexus::executor::rgb::RGBRolloutMode::Shadow,
+        std::collections::HashSet::new(),
+    ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
@@ -60,7 +64,11 @@ async fn test_rgb_contract_lookup_not_found() {
     let config = Arc::new(Config::default_test());
     let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
     let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(storage.clone(), conxian_nexus::executor::rgb::RGBRolloutMode::Active, std::collections::HashSet::new()));
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        conxian_nexus::executor::rgb::RGBRolloutMode::Active,
+        std::collections::HashSet::new(),
+    ));
     let tableland = Arc::new(TablelandAdapter::new(
         storage.clone(),
         config.tableland_base_url.clone(),
