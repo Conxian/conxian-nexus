@@ -154,6 +154,9 @@ pub fn public_auth_md_routes() -> Router<AppState> {
         .route("/agent/auth/claim/view", get(view_claim_otp))
 }
 
+fn configured_admin_token(config: &Config) -> Option<&str> {
+    config.admin_api_token.as_deref().filter(|s| !s.is_empty())
+}
 fn hash_value(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
@@ -249,7 +252,7 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
 }
 
 fn authorize_admin_write(headers: &HeaderMap, config: &Config) -> Result<(), Response> {
-    let Some(expected_token) = &config.admin_api_token else {
+    let Some(expected_token) = configured_admin_token(config) else {
         return Err(admin_token_not_configured_response());
     };
 
@@ -260,7 +263,7 @@ fn authorize_admin_write(headers: &HeaderMap, config: &Config) -> Result<(), Res
         ));
     };
 
-    if token != **expected_token {
+    if token != expected_token {
         return Err(bearer_unauthorized_response(
             headers,
             "Invalid admin API token",
@@ -279,8 +282,8 @@ fn authorize_for_scope(
         return Err(unauthorized_response(headers));
     };
 
-    if let Some(expected_token) = &config.admin_api_token {
-        if token == **expected_token {
+    if let Some(expected_token) = configured_admin_token(config) {
+        if token == expected_token {
             return Ok(vec![
                 "admin.write".to_string(),
                 "api.read".to_string(),
