@@ -49,6 +49,7 @@ pub struct Config {
     pub rust_log: String,
     pub worldid_app_id: String,
     pub zkml_vks: HashMap<String, String>,
+    pub admin_api_token: Option<String>,
 }
 
 impl std::fmt::Debug for Config {
@@ -82,6 +83,7 @@ impl std::fmt::Debug for Config {
             .field("rust_log", &self.rust_log)
             .field("worldid_app_id", &self.worldid_app_id)
             .field("zkml_vks", &"<redacted>")
+            .field("admin_api_token", &self.admin_api_token.as_ref().map(|_| "<redacted>"))
             .finish()
     }
 }
@@ -111,6 +113,7 @@ impl Config {
             rust_log: "info".to_string(),
             worldid_app_id: "".to_string(),
             zkml_vks: HashMap::new(),
+            admin_api_token: None,
         }
     }
 
@@ -236,6 +239,10 @@ impl Config {
 
         let worldid_app_id = env::var("WORLDID_APP_ID").unwrap_or_default();
 
+        let admin_api_token = env::var(ENV_ADMIN_API_TOKEN)
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
         let mut zkml_vks = HashMap::new();
         for (key, value) in env::vars() {
             if key.starts_with("ZKML_VK_B64_") {
@@ -275,6 +282,7 @@ impl Config {
             rust_log,
             worldid_app_id,
             zkml_vks,
+            admin_api_token,
         })
     }
 }

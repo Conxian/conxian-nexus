@@ -54,17 +54,17 @@ struct RawRoutingPolicyMetadata {
 }
 
 #[derive(Debug)]
-struct RoutingPolicyMetadata {
-    system: RoutingSystem,
-    trust_tier: TrustTier,
-    verification_class: VerificationClass,
-    policy_version: String,
-    evidence_hash: String,
-    requested_trust_tier: Option<TrustTier>,
+pub struct RoutingPolicyMetadata {
+    pub system: RoutingSystem,
+    pub trust_tier: TrustTier,
+    pub verification_class: VerificationClass,
+    pub policy_version: String,
+    pub evidence_hash: String,
+    pub requested_trust_tier: Option<TrustTier>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RoutingSystem {
+pub enum RoutingSystem {
     Ibc,
     Hyperlane,
     LayerZeroV2,
@@ -119,7 +119,7 @@ impl RoutingSystem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum TrustTier {
+pub enum TrustTier {
     T1,
     T2,
     T3,
@@ -148,7 +148,7 @@ impl TrustTier {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum VerificationClass {
+pub enum VerificationClass {
     LightClient,
     ExternalQuorum,
     AppDefinedMultiverifier,
@@ -177,10 +177,10 @@ impl VerificationClass {
 }
 
 #[derive(Debug)]
-struct RoutingPolicyBlock {
-    code: &'static str,
-    reason: String,
-    details: Option<serde_json::Value>,
+pub struct RoutingPolicyBlock {
+    pub code: &'static str,
+    pub reason: String,
+    pub details: Option<serde_json::Value>,
 }
 
 impl RoutingPolicyBlock {
@@ -261,7 +261,7 @@ fn optional_non_empty_field(
     }
 }
 
-fn validate_routing_policy_metadata(
+pub fn validate_routing_policy_metadata(
     payload: &serde_json::Value,
 ) -> Result<RoutingPolicyMetadata, RoutingPolicyBlock> {
     let routing_policy = extract_routing_policy(payload)

@@ -1,3 +1,11 @@
+use conxian_nexus::api::rest::AppState;
+use conxian_nexus::config::Config;
+use conxian_nexus::state::NexusState;
+use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::storage::Storage;
+use std::sync::Arc;
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
@@ -175,13 +183,38 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
 
     methods
 }
-
 fn test_router() -> Router {
-    Router::new()
-        .merge(public_auth_md_routes())
-        .nest("/admin/v1", admin_routes())
-}
+    let config = Arc::new(Config::from_env().unwrap_or_else(|_| Config::default_test()));
+    let storage = Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/").unwrap());
+    let nexus_state = Arc::new(NexusState::new());
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        std::collections::HashSet::new(),
+    ));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        config.tableland_base_url.clone(),
+    ));
 
+    let state = AppState {
+        storage,
+        nexus_state,
+        executor,
+        oracle: None,
+        tableland,
+        kwil: None,
+        nostr: None,
+        gateway_url: None,
+        http_client: reqwest::Client::new(),
+        config: config.clone(),
+    };
+
+    Router::new()
+        .merge(public_auth_md_routes(state.clone()))
+        .nest("/admin/v1", admin_routes(state.clone()))
+        .with_state(state)
+}
 fn admin_api_token_lock() -> &'static AsyncMutex<()> {
     static LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| AsyncMutex::new(()))

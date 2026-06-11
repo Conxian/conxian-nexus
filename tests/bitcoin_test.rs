@@ -306,7 +306,7 @@ async fn test_dlc_bond_creation_invalid_json() {
                 .method("POST")
                 .uri("/v1/dlc/bond")
                 .header("Content-Type", "application/json")
-                .body(Body::from("not-json")),
+                .body(Body::from("not-json")).unwrap(),
         )
         .await
         .unwrap();
@@ -463,7 +463,7 @@ async fn test_dlc_bond_creation_high_coupon_rate() {
 async fn test_btc_tx_id_format_validation() {
     // BTC transaction IDs must be 64-character hex (0x-prefixed 66-char for Nexus)
     // Valid: 0x + 64 hex chars = 66 chars
-    let valid_txid = "0x" + &"a".repeat(64);
+    let valid_txid = "0x".to_owned() + &"a".repeat(64);
     assert_eq!(valid_txid.len(), 66);
 
     let config = Config::default_test();
@@ -505,8 +505,7 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", valid_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -527,8 +526,7 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", invalid_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -540,15 +538,14 @@ async fn test_btc_tx_id_format_validation() {
     );
 
     // Invalid: wrong length (not 66)
-    let short_txid = "0x" + &"a".repeat(32); // only 34 chars
+    let short_txid = "0x".to_owned() + &"a".repeat(32); // only 34 chars
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", short_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -595,7 +592,7 @@ async fn test_rgb_contract_lookup_with_btc_tx_ids() {
     // Verify RGB adapter handles BTC tx IDs correctly (rejects non-rgb: prefixed)
     let adapter = RGBAdapter::new(RGBRolloutMode::Shadow);
 
-    let btc_tx = "0x" + &"a".repeat(64);
+    let btc_tx = "0x".to_owned() + &"a".repeat(64);
     let result = adapter.lookup_contract(&btc_tx).await;
     assert!(result.is_err(), "RGB adapter must reject BTC tx IDs");
 }

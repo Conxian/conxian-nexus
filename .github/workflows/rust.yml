@@ -16,6 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
+        fetch-depth: 0
         submodules: recursive
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -27,6 +28,10 @@ jobs:
       run: python3 scripts/verify_submodule_integrity.py
     - name: BOS Production Boundary Check (Bash)
       run: ./scripts/check_production_boundary.sh
+    - name: Secret Scanning
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
     name: Build & Test
