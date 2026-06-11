@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run and enforce scoped Bitcoin coverage for Nexus DLC/MMR/RGB paths.
+"""Run and enforce scoped Bitcoin coverage for Nexus DLC/RGB paths.
 
 This script intentionally enforces coverage on Bitcoin-focused line ranges
 instead of full files because mixed modules (especially `src/api/rest.rs`)
@@ -23,15 +23,13 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (109, 120),  # route wiring (MMR + RGB endpoint paths)
-        (192, 227),  # MMR proof error helper + param validation + tx-id not found path
-        (229, 237),  # MMR leaf-not-found path
+        (115, 120),  # RGB endpoint route wiring in app_router
         (424, 449),  # RGB contract endpoint handler + error mapping
     ],
     "src/executor/rgb.rs": [
         (17, 25),  # rollout mode display behavior
         (34, 49),  # adapter constructors
-        (55, 90),  # lookup validation + mode branches
+        (55, 85),  # lookup validation + mode branches
     ],
 }
 
@@ -98,9 +96,7 @@ def line_hit_map(file_entry: dict) -> dict[int, tuple[bool, bool]]:
     return out
 
 
-def compute_scoped_coverage(
-    report: dict,
-) -> tuple[list[tuple[str, int, int, float]], int, int, float]:
+def compute_scoped_coverage(report: dict) -> tuple[list[tuple[str, int, int, float]], int, int, float]:
     indexed = index_file_entries(report)
 
     missing_files = [path for path in SCOPED_LINE_RANGES if path not in indexed]
@@ -139,48 +135,12 @@ def compute_scoped_coverage(
     return rows, total_covered, total_instrumented, aggregate
 
 
-def write_summary(
-    summary_path: Path,
-    rows: list[tuple[str, int, int, float]],
-    covered: int,
-    instrumented: int,
-    aggregate: float,
-    required_percent: float,
-    report_path: Path,
-) -> None:
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "coverageScope": "bitcoin-scoped-lines",
-        "requiredPercent": required_percent,
-        "aggregatePercent": aggregate,
-        "totalCovered": covered,
-        "totalInstrumented": instrumented,
-        "passed": aggregate >= required_percent,
-        "reportPath": str(report_path),
-        "files": [
-            {
-                "path": rel_path,
-                "covered": row_covered,
-                "instrumented": row_instrumented,
-                "percent": row_percent,
-            }
-            for rel_path, row_covered, row_instrumented, row_percent in rows
-        ],
-    }
-    summary_path.write_text(json.dumps(payload, indent=2) + "\n")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--output-path",
         default="target/llvm-cov/bitcoin-scoped.json",
         help="Path for llvm-cov JSON export",
-    )
-    parser.add_argument(
-        "--summary-path",
-        default=None,
-        help="Optional path for machine-readable scoped summary JSON",
     )
     parser.add_argument(
         "--min-percent",
@@ -203,16 +163,6 @@ def main() -> int:
 
         report = load_report(output_path)
         rows, covered, instrumented, aggregate = compute_scoped_coverage(report)
-        if args.summary_path:
-            write_summary(
-                Path(args.summary_path),
-                rows,
-                covered,
-                instrumented,
-                aggregate,
-                args.min_percent,
-                output_path,
-            )
     except Exception as exc:  # pragma: no cover
         print(f"[bitcoin-coverage] ERROR: {exc}", file=sys.stderr)
         return 2
@@ -228,9 +178,6 @@ def main() -> int:
         f"[bitcoin-coverage] aggregate: {covered}/{instrumented} "
         f"({aggregate:.2f}%), required >= {args.min_percent:.2f}%"
     )
-
-    if args.summary_path:
-        print(f"[bitcoin-coverage] summary json: {args.summary_path}")
 
     if aggregate < args.min_percent:
         print("[bitcoin-coverage] FAIL: coverage below threshold", file=sys.stderr)

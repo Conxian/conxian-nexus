@@ -157,7 +157,6 @@ pub fn public_auth_md_routes() -> Router<AppState> {
 fn configured_admin_token(config: &Config) -> Option<&str> {
     config.admin_api_token.as_deref().filter(|s| !s.is_empty())
 }
-
 fn hash_value(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());

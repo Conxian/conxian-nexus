@@ -33,8 +33,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 fn compute_telemetry_hmac(signature_hash: &str, timestamp: i64, api_secret: &str) -> String {
     let message = format!("{}:{}", signature_hash, timestamp);
-    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes())
-        .expect("HMAC error");
+    let mut mac = HmacSha256::new_from_slice(api_secret.as_bytes()).expect("HMAC error");
     mac.update(message.as_bytes());
     hex::encode(mac.finalize().into_bytes())
 }
@@ -160,7 +159,7 @@ fn test_ln_grace_status_beyond_expiry() {
 fn test_ln_grace_status_efficiency_threshold_rejected() {
     let start = 1_000_000;
     let now = start + 3600; // 1 hour in
-    // roll > 0.4 -> disallowed
+                            // roll > 0.4 -> disallowed
     match determine_grace_status(now, start, 0.41) {
         GraceStatus::Active { allowed, .. } => {
             assert!(!allowed, "Roll above 0.4 must be disallowed");
@@ -533,13 +532,16 @@ fn test_ln_hmac_sha256_implementation() {
     let secret = "test_key_hash";
     let message = "ln_billing_message:1717000000";
 
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
-        .expect("HMAC-SHA256 init");
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC-SHA256 init");
     mac.update(message.as_bytes());
     let result = mac.finalize().into_bytes();
     let hex_result = hex::encode(result);
 
-    assert_eq!(hex_result.len(), 64, "HMAC-SHA256 output must be 64 hex chars");
+    assert_eq!(
+        hex_result.len(),
+        64,
+        "HMAC-SHA256 output must be 64 hex chars"
+    );
     assert!(!hex_result.is_empty());
 }
 
