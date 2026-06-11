@@ -1,5 +1,5 @@
 use axum::{
-    body::{to_bytes, Body},
+    body::Body,
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
@@ -13,8 +13,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
 
+const MAINNET_LIKE_TX_ID: &str =
+    "0x4d3f94d20d5d31ef15f4f7f0f6c52f1571318dd43259a59e86cdc84e64546a1e";
+
 #[tokio::test]
-async fn test_mmr_proof_invalid_tx_id_returns_bad_request() {
+async fn test_mmr_proof_returns_not_found_for_mainnet_like_tx_when_leaf_absent() {
     let config = Arc::new(Config::default_test());
     let storage = Arc::new(
         Storage::new_lazy(
@@ -23,6 +26,7 @@ async fn test_mmr_proof_invalid_tx_id_returns_bad_request() {
         )
         .expect("lazy test storage should be constructible"),
     );
+
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
@@ -49,19 +53,12 @@ async fn test_mmr_proof_invalid_tx_id_returns_bad_request() {
         .oneshot(
             Request::builder()
                 .method("GET")
-                .uri("/v1/mmr-proof?tx_id=tx1")
+                .uri(format!("/v1/mmr-proof?tx_id={MAINNET_LIKE_TX_ID}"))
                 .body(Body::empty())
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-
-    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(
-        json["error"],
-        "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"
-    );
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
