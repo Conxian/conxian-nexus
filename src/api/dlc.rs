@@ -137,6 +137,7 @@ mod tests {
     use crate::storage::tableland::TablelandAdapter;
     use crate::storage::Storage;
     use axum::extract::State;
+    use axum::response::Response;
     use std::collections::HashSet;
     use std::sync::Arc;
 
@@ -253,6 +254,13 @@ mod tests {
         build_test_state(Storage::for_tests())
     }
 
+    async fn response_json(response: Response) -> serde_json::Value {
+        let body = axum::body::to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .unwrap();
+        serde_json::from_slice(&body).unwrap()
+    }
+
     #[tokio::test]
     async fn test_create_dlc_bond_handler_rejects_invalid_payload() {
         let state = test_state();
@@ -268,6 +276,10 @@ mod tests {
             .into_response();
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["status"], "Error");
+        assert_eq!(body["dlc_contract_id"], "");
+        assert_eq!(body["next_coupon_height"], 0);
     }
 
     #[tokio::test]

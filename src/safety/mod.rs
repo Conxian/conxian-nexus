@@ -19,6 +19,19 @@ pub struct NexusSafety {
     http_client: Client,
 }
 
+pub async fn is_safety_mode_active(storage: &Storage) -> anyhow::Result<bool> {
+    let mut conn = storage
+        .redis_client
+        .get_multiplexed_async_connection()
+        .await?;
+    let is_safety_mode: bool = redis::cmd("GET")
+        .arg("nexus:safety_mode")
+        .query_async::<bool>(&mut conn)
+        .await
+        .unwrap_or(false);
+    Ok(is_safety_mode)
+}
+
 impl NexusSafety {
     /// Creates a new safety monitor with a default max drift of 2 blocks.
     pub fn new(storage: Arc<Storage>, rpc_url: String, gateway_url: Option<String>) -> Self {

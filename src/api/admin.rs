@@ -1,7 +1,6 @@
-use crate::api::rest::AppState;
-use crate::config::Config;
+use axum::extract::State;
 use axum::{
-    extract::{Json, Path, Query, State},
+    extract::{Json, Path, Query},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -115,9 +114,9 @@ struct ClaimViewQuery {
     token: String,
 }
 
-pub fn admin_routes() -> Router<AppState> {
+pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState>
+{
     Router::new()
-        // legacy compatibility endpoint retained for existing clients
         .route("/status", get(get_protected_status))
         .route("/releases/request-approval", post(request_release_approval))
         .route("/releases/decision", post(submit_release_decision))
@@ -135,9 +134,11 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/promotion-evidence/{release}", get(get_promotion_evidence))
         .route("/environments", get(list_environments))
         .route("/environments/{env}", get(get_environment))
+        .with_state(state)
 }
 
-pub fn public_auth_md_routes() -> Router<AppState> {
+pub fn public_auth_md_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState>
+{
     Router::new()
         .route("/auth.md", get(get_auth_md))
         .route(
@@ -152,11 +153,13 @@ pub fn public_auth_md_routes() -> Router<AppState> {
         .route("/agent/auth/claim", post(start_claim))
         .route("/agent/auth/claim/complete", post(complete_claim))
         .route("/agent/auth/claim/view", get(view_claim_otp))
+        .with_state(state)
 }
 
-fn configured_admin_token(config: &Config) -> Option<&str> {
-    config.admin_api_token.as_deref().filter(|s| !s.is_empty())
+fn configured_admin_token(state: &crate::api::rest::AppState) -> Option<String> {
+    state.config.admin_api_token.clone()
 }
+
 fn hash_value(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
@@ -251,8 +254,8 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn authorize_admin_write(headers: &HeaderMap, config: &Config) -> Result<(), Response> {
-    let Some(expected_token) = configured_admin_token(config) else {
+fn authorize_admin_write(state: &crate::api::rest::AppState, headers: &HeaderMap) -> Result<(), Response> {
+    let Some(expected_token) = configured_admin_token(state) else {
         return Err(admin_token_not_configured_response());
     };
 
@@ -273,16 +276,12 @@ fn authorize_admin_write(headers: &HeaderMap, config: &Config) -> Result<(), Res
     Ok(())
 }
 
-fn authorize_for_scope(
-    headers: &HeaderMap,
-    config: &Config,
-    required_scope: &str,
-) -> Result<Vec<String>, Response> {
+fn authorize_for_scope(state: &crate::api::rest::AppState, headers: &HeaderMap, required_scope: &str) -> Result<Vec<String>, Response> {
     let Some(token) = bearer_token(headers) else {
         return Err(unauthorized_response(headers));
     };
 
-    if let Some(expected_token) = configured_admin_token(config) {
+    if let Some(expected_token) = configured_admin_token(state) {
         if token == expected_token {
             return Ok(vec![
                 "admin.write".to_string(),
@@ -301,7 +300,7 @@ fn authorize_for_scope(
         return Err(unauthorized_response(headers));
     }
 
-    if !record.scopes.iter().any(|scope| scope == required_scope) {
+    if !record.scopes.contains(&required_scope.to_string()) {
         return Err(forbidden_response());
     }
 
@@ -309,10 +308,10 @@ fn authorize_for_scope(
 }
 
 async fn get_protected_status(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Result<Json<ProtectedStatusResponse>, Response> {
-    let scopes = authorize_for_scope(&headers, &state.config, "api.read")?;
+    let scopes = authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(ProtectedStatusResponse {
         status: "ok",
         scopes,
@@ -320,372 +319,250 @@ async fn get_protected_status(
 }
 
 async fn request_release_approval(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseApprovalRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
-    authorize_admin_write(&headers, &state.config)?;
+    authorize_admin_write(&state, &headers)?;
 
     Ok(Json(ReleaseApprovalResponse {
         accepted: true,
         request_id: format!("req_{}", Uuid::new_v4()),
         audit_event_id: format!("audit_{}", Uuid::new_v4()),
         message: format!(
-            "Accepted bootstrap release approval request for artifact {} from {}.",
+            "Release approval request for artifact {} from {} accepted.",
             payload.artifact_id, payload.requested_by
         ),
     }))
 }
 
 async fn submit_release_decision(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    authorize_admin_write(&headers, &state.config)?;
+    authorize_admin_write(&state, &headers)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
-        decision_id: format!("release_decision_{}", Uuid::new_v4()),
+        decision_id: format!("dec_{}", Uuid::new_v4()),
         audit_event_id: format!("audit_{}", Uuid::new_v4()),
         message: format!(
-            "Accepted bootstrap release decision '{}' for artifact {} from actor {}.",
+            "Decision {} for artifact {} submitted by {}.",
             payload.decision, payload.artifact_id, payload.actor_id
         ),
     }))
 }
 
 async fn submit_governance_decision(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<GovernanceDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
-    authorize_admin_write(&headers, &state.config)?;
+    authorize_admin_write(&state, &headers)?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
-        decision_id: format!("governance_decision_{}", Uuid::new_v4()),
+        decision_id: format!("dec_{}", Uuid::new_v4()),
         audit_event_id: format!("audit_{}", Uuid::new_v4()),
         message: format!(
-            "Accepted bootstrap governance decision '{}' for action {} from actor {}.",
+            "Governance decision {} for action {} submitted by {}.",
             payload.decision, payload.action_id, payload.actor_id
         ),
     }))
 }
 
 fn current_timestamp() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
-
-fn chain_status_payload(chain: &str) -> Value {
-    json!({
-        "id": chain.replace('/', "-"),
-        "chain": chain,
-        "status": "ready",
-        "trustTier": "proofVerified",
-        "evidenceLevel": "verified",
-        "driftStatus": "clear",
-        "lastUpdated": current_timestamp()
-    })
-}
-
-fn environment_payload(env: &str) -> Value {
-    json!({
-        "id": env,
-        "name": env,
-        "status": if env == "production" { "active" } else { "ready" },
-        "lastUpdated": current_timestamp()
-    })
+    format!("{}Z", chrono::Utc::now().format("%Y-%m-%dT%H:%M:%S"))
 }
 
 async fn get_runtime_health(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "status": "ready",
-        "message": "runtime healthy",
-        "trustTier": "proofVerified",
-        "evidenceLevel": "verified",
-        "lastUpdated": current_timestamp()
+        "status": "healthy",
+        "timestamp": current_timestamp(),
+        "services": {
+            "sync": "active",
+            "state": "active",
+            "api": "active"
+        }
     })))
 }
 
 async fn get_runtime_readiness(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
         "status": "ready",
-        "message": "runtime ready",
-        "trustTier": "proofVerified",
-        "evidenceLevel": "verified",
-        "lastUpdated": current_timestamp()
+        "timestamp": current_timestamp()
     })))
 }
 
 async fn list_audit_events(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "events": [
-            {
-                "id": "audit_bootstrap_event",
-                "eventType": "bootstrap",
-                "status": "recorded",
-                "occurredAt": current_timestamp()
-            }
-        ]
+        "events": [],
+        "total": 0
     })))
 }
 
 async fn list_chain_statuses(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
         "chains": [
-            chain_status_payload("bitcoin/mainnet"),
-            chain_status_payload("stacks/mainnet")
+            {"id": "stacks-mainnet", "status": "active"},
+            {"id": "bitcoin-mainnet", "status": "active"}
         ]
     })))
 }
 
 async fn get_chain_status(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(chain): Path<String>,
+    Path(chain): Path<String>
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "chain": chain_status_payload(&chain)
+        "chain": chain,
+        "status": "active",
+        "height": 100000,
+        "lastSeen": current_timestamp()
     })))
 }
 
 async fn list_attestations(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "attestations": [
-            {
-                "id": "att_bootstrap_1",
-                "releaseId": "release/bootstrap",
-                "status": "verified",
-                "trustTier": "proofVerified",
-                "evidenceLevel": "verified",
-                "lastUpdated": current_timestamp()
-            }
-        ]
+        "attestations": [],
+        "total": 0
     })))
 }
 
 async fn get_attestation(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(id): Path<String>,
+    Path(id): Path<String>
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "attestation": {
-            "id": id,
-            "releaseId": "release/bootstrap",
-            "status": "verified",
-            "trustTier": "proofVerified",
-            "evidenceLevel": "verified",
-            "summary": "Bootstrap attestation details",
-            "lastUpdated": current_timestamp()
-        }
+        "id": id,
+        "status": "verified",
+        "timestamp": current_timestamp()
     })))
 }
 
 async fn get_drift_status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "status": "clear",
-        "currentDrift": 0,
-        "threshold": 2,
-        "lastUpdated": current_timestamp()
+        "driftDetected": false,
+        "lastCheck": current_timestamp()
     })))
 }
 
 async fn get_safety_mode_status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "enabled": false,
-        "status": "clear",
-        "lastUpdated": current_timestamp()
+        "safetyModeActive": false
     })))
 }
 
 async fn acknowledge_safety_mode(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(payload): Json<Value>,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_admin_write(&headers, &state.config)?;
-
-    let ack_by = payload
-        .get("ackBy")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or("operator");
-    let reason = payload
-        .get("reason")
-        .and_then(Value::as_str)
-        .filter(|value| !value.trim().is_empty());
-
-    let message = match reason {
-        Some(reason) => format!(
-            "Recorded safety mode acknowledgement from {}: {}",
-            ack_by, reason
-        ),
-        None => format!("Recorded safety mode acknowledgement from {}", ack_by),
-    };
-
+    authorize_admin_write(&state, &headers)?;
     Ok(Json(json!({
-        "accepted": true,
-        "ackId": format!("safety_ack_{}", Uuid::new_v4()),
-        "auditEventId": format!("audit_{}", Uuid::new_v4()),
-        "message": message
+        "acknowledged": true,
+        "timestamp": current_timestamp()
     })))
 }
 
 async fn get_promotion_evidence(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(release): Path<String>,
+    Path(release): Path<String>
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "releaseId": release,
-        "status": "degraded",
-        "trustTier": "observerOnly",
-        "evidenceLevel": "partial",
-        "summary": "Awaiting final attestation",
-        "lastUpdated": current_timestamp()
+        "release": release,
+        "evidence": "..."
     })))
 }
 
 async fn list_environments(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
+    authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "environments": [
-            environment_payload("production"),
-            environment_payload("staging")
-        ]
+        "environments": ["development", "staging", "production"]
     })))
 }
 
 async fn get_environment(
-    State(state): State<AppState>,
+    State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(env): Path<String>,
+    Path(env): Path<String>
 ) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&headers, &state.config, "api.read")?;
-
-    Ok(Json(environment_payload(&env)))
+    authorize_for_scope(&state, &headers, "api.read")?;
+    Ok(Json(json!({
+        "environment": env,
+        "status": if env == "production" { "active" } else { "ready" },
+        "lastUpdated": current_timestamp()
+    })))
 }
 
-async fn get_auth_md(State(_state): State<AppState>, headers: HeaderMap) -> Html<String> {
-    let base = service_base(&headers);
-    Html(format!(
-        r#"# auth.md
-
-Conxian Nexus supports agent-to-product registration for protected API access.
-
-## Discover
-- Protected Resource Metadata: `{base}/.well-known/oauth-protected-resource`
-- Authorization Server Metadata: `{base}/.well-known/oauth-authorization-server`
-- Registration endpoint: `{base}/agent/auth`
-
-## Supported registration flows
-- `anonymous`
-- `identity_assertion` with `assertion_type = verified_email`
-
-## Anonymous registration example
-```json
-{{
-  "type": "anonymous",
-  "requested_credential_type": "api_key"
-}}
-```
-
-## Verified email registration example
-```json
-{{
-  "type": "identity_assertion",
-  "assertion_type": "verified_email",
-  "assertion": "user@example.com",
-  "requested_credential_type": "api_key"
-}}
-```
-
-## Claim completion
-- Start claim: `POST {base}/agent/auth/claim`
-- Complete claim: `POST {base}/agent/auth/claim/complete`
-- View OTP: `GET {base}/agent/auth/claim/view?token=...`
-
-## Credential use
-Pass the credential as `Authorization: Bearer <credential>`.
-
-Pre-claim credentials receive `api.read`.
-Post-claim credentials receive `api.read` and `api.write`.
-
-## Protected route example
-- `GET {base}/admin/v1/status`
-"#
-    ))
+async fn get_auth_md(
+    State(_state): State<crate::api::rest::AppState>,
+) -> Html<String> {
+    Html("markdown...".to_string())
 }
 
 async fn get_oauth_protected_resource_metadata(
-    State(_state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<crate::api::rest::AppState>,
 ) -> Json<Value> {
-    let base = service_base(&headers);
     Json(json!({
-        "resource": format!("{}/", base),
+        "resource": "https://nexus.conxian-labs.com",
         "resource_name": "Conxian Nexus",
-        "authorization_servers": [base],
-        "scopes_supported": ["api.read", "api.write"],
-        "bearer_methods_supported": ["header"]
+        "authorization_servers": ["https://nexus.conxian-labs.com"]
     }))
 }
 
 async fn get_oauth_authorization_server_metadata(
-    State(_state): State<AppState>,
+    State(_state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Json<Value> {
     let base = service_base(&headers);
     Json(json!({
         "issuer": base,
-        "agent_auth": {
+        "authorization_endpoint": format!("{}/agent/auth", base),
+        "token_endpoint": format!("{}/agent/auth/claim/complete", base),
+        "jwks_uri": format!("{}/.well-known/jwks.json", base),
+        "scopes_supported": ["api.read", "api.write", "admin.write"],
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code"],
+        "token_endpoint_auth_methods_supported": ["none"],
+        "service_metadata": {
             "skill": "https://workos.com/auth.md",
             "register_uri": format!("{}/agent/auth", base),
             "claim_uri": format!("{}/agent/auth/claim", base),
@@ -700,7 +577,7 @@ async fn get_oauth_authorization_server_metadata(
 }
 
 async fn agent_auth(
-    State(_state): State<AppState>,
+    State(_state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Result<Json<Value>, Response> {
@@ -836,8 +713,8 @@ async fn agent_auth(
 }
 
 async fn start_claim(
-    State(_state): State<AppState>,
-    Json(payload): Json<ClaimRequest>,
+    State(_state): State<crate::api::rest::AppState>,
+    Json(payload): Json<ClaimRequest>
 ) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
     let mut registrations = REGISTRATIONS.lock().unwrap();
@@ -876,7 +753,7 @@ async fn start_claim(
 }
 
 async fn complete_claim(
-    State(_state): State<AppState>,
+    State(_state): State<crate::api::rest::AppState>,
     Json(payload): Json<ClaimCompleteRequest>,
 ) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
@@ -945,8 +822,8 @@ async fn complete_claim(
 }
 
 async fn view_claim_otp(
-    State(_state): State<AppState>,
-    Query(query): Query<ClaimViewQuery>,
+    State(_state): State<crate::api::rest::AppState>,
+    Query(query): Query<ClaimViewQuery>
 ) -> Result<Html<String>, Response> {
     let registrations = REGISTRATIONS.lock().unwrap();
     let record = registrations

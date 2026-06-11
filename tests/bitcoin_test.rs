@@ -30,10 +30,15 @@ use tower::ServiceExt;
 async fn test_rgb_adapter_disabled_rejects_all() {
     let adapter = RGBAdapter::new(RGBRolloutMode::Disabled);
 
-    let result = adapter.lookup_contract("rgb:test123456").await;
+    let result = adapter
+        .lookup_contract("rgb:test123456")
+        .await;
 
     assert!(result.is_err(), "Disabled adapter must reject all lookups");
-    assert_eq!(result.unwrap_err().to_string(), "RGB adapter is disabled");
+    assert_eq!(
+        result.unwrap_err().to_string(),
+        "RGB adapter is disabled"
+    );
 }
 
 #[tokio::test]
@@ -43,9 +48,7 @@ async fn test_rgb_adapter_shadow_returns_mock() {
     let result = adapter.lookup_contract("rgb:test123456").await;
     assert!(result.is_ok());
 
-    let payload = result
-        .unwrap()
-        .expect("Shadow mode must return mock payload");
+    let payload = result.unwrap().expect("Shadow mode must return mock payload");
     let json: Value = serde_json::from_str(&payload).unwrap();
     assert_eq!(json["contract_id"], "rgb:test123456");
     assert_eq!(json["mode"], "shadow");
@@ -70,14 +73,14 @@ async fn test_rgb_adapter_active_known_contract() {
 
 #[tokio::test]
 async fn test_rgb_adapter_active_unknown_contract() {
-    let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, HashSet::new());
+    let adapter = RGBAdapter::with_known_contracts(
+        RGBRolloutMode::Active,
+        HashSet::new(),
+    );
 
     let result = adapter.lookup_contract("rgb:unknown1234").await;
     assert!(result.is_ok());
-    assert!(
-        result.unwrap().is_none(),
-        "Unknown contracts must return None in Active mode"
-    );
+    assert!(result.unwrap().is_none(), "Unknown contracts must return None in Active mode");
 }
 
 #[tokio::test]
@@ -88,10 +91,7 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("notrgb").await;
     assert!(result.is_err());
     assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid RGB contract ID format"),
+        result.unwrap_err().to_string().contains("Invalid RGB contract ID format"),
         "Should reject IDs without rgb: prefix"
     );
 
@@ -99,17 +99,17 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("rgb:ab").await;
     assert!(result.is_err());
     assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid RGB contract ID format"),
+        result.unwrap_err().to_string().contains("Invalid RGB contract ID format"),
         "Should reject IDs that are too short"
     );
 }
 
 #[tokio::test]
 async fn test_rgb_adapter_empty_known_contracts_active() {
-    let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, HashSet::new());
+    let adapter = RGBAdapter::with_known_contracts(
+        RGBRolloutMode::Active,
+        HashSet::new(),
+    );
 
     // Should not panic with empty known set
     let result = adapter.lookup_contract("rgb:nonexistent").await;
@@ -126,11 +126,7 @@ async fn test_rgb_adapter_display_formats() {
 
 #[tokio::test]
 async fn test_rgb_adapter_serde_roundtrip() {
-    for mode in &[
-        RGBRolloutMode::Disabled,
-        RGBRolloutMode::Shadow,
-        RGBRolloutMode::Active,
-    ] {
+    for mode in &[RGBRolloutMode::Disabled, RGBRolloutMode::Shadow, RGBRolloutMode::Active] {
         let json = serde_json::to_string(mode).unwrap();
         let deserialized: RGBRolloutMode = serde_json::from_str(&json).unwrap();
         assert_eq!(*mode, deserialized);
@@ -141,7 +137,9 @@ async fn test_rgb_adapter_serde_roundtrip() {
 // DLC Bond Orchestrator — API Integration Tests
 // ---------------------------------------------------------------------------
 
-async fn build_test_app(config: Config) -> (axum::Router, Arc<Storage>) {
+async fn build_test_app(
+    config: Config,
+) -> (axum::Router, Arc<Storage>) {
     let storage = Arc::new(
         Storage::from_config(&config)
             .await
@@ -308,8 +306,7 @@ async fn test_dlc_bond_creation_invalid_json() {
                 .method("POST")
                 .uri("/v1/dlc/bond")
                 .header("Content-Type", "application/json")
-                .body(Body::from("not-json"))
-                .unwrap(),
+                .body(Body::from("not-json")).unwrap(),
         )
         .await
         .unwrap();
@@ -384,10 +381,7 @@ async fn test_dlc_bond_creation_success_path() {
 
         assert_eq!(json["status"], "Initialized");
         assert!(
-            json["dlc_contract_id"]
-                .as_str()
-                .unwrap()
-                .starts_with("dlc_"),
+            json["dlc_contract_id"].as_str().unwrap().starts_with("dlc_"),
             "Contract ID must start with dlc_"
         );
         assert!(
@@ -511,8 +505,7 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", valid_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -533,8 +526,7 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", invalid_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -553,8 +545,7 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", short_txid))
-                .body(Body::empty())
-                .unwrap(),
+                .body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();
@@ -573,7 +564,9 @@ async fn test_btc_tx_state_transition() {
     let state = Arc::new(NexusState::new());
 
     // Simulate a batch of BTC transactions
-    let btc_txns: Vec<String> = (0..10).map(|i| format!("0x{:064x}", i)).collect();
+    let btc_txns: Vec<String> = (0..10)
+        .map(|i| format!("0x{:064x}", i))
+        .collect();
 
     state.update_state_batch(&btc_txns);
 
@@ -619,17 +612,12 @@ async fn test_rgb_adapter_concurrent_lookups() {
     ));
 
     let mut handles = Vec::new();
-    for id in &[
-        "rgb:alpha12345",
-        "rgb:beta123456",
-        "rgb:gamma12345",
-        "rgb:unknown",
-    ] {
+    for id in &["rgb:alpha12345", "rgb:beta123456", "rgb:gamma12345", "rgb:unknown"] {
         let adapter = adapter.clone();
         let id = id.to_string();
-        handles.push(tokio::spawn(
-            async move { adapter.lookup_contract(&id).await },
-        ));
+        handles.push(tokio::spawn(async move {
+            adapter.lookup_contract(&id).await
+        }));
     }
 
     for (i, handle) in handles.into_iter().enumerate() {
@@ -640,10 +628,7 @@ async fn test_rgb_adapter_concurrent_lookups() {
             assert!(result.unwrap().is_some(), "Known contract should resolve");
         } else {
             assert!(result.is_ok());
-            assert!(
-                result.unwrap().is_none(),
-                "Unknown contract should return None"
-            );
+            assert!(result.unwrap().is_none(), "Unknown contract should return None");
         }
     }
 }

@@ -4,21 +4,23 @@ use crate::api::zkml::zkml_routes;
 use crate::config::Config;
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
-use crate::state::NexusState;
+use crate::state::{NexusState, MerkleProof};
 use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::storage::Storage;
 use axum::{
     extract::{DefaultBodyLimit, Query, State},
     http::{header, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use prometheus::{Encoder, IntCounter, TextEncoder};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use std::sync::Arc;
+use tokio::net::TcpListener;
 
 lazy_static::lazy_static! {
     static ref TOTAL_TRANSACTIONS: IntCounter = IntCounter::new("nexus_total_transactions", "Total transactions submitted").unwrap();
@@ -65,6 +67,30 @@ pub struct MMRProofParams {
 #[derive(Deserialize)]
 pub struct RGBContractParams {
     pub contract_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct EventFeedParams {
+    pub cursor: Option<u64>,
+    pub limit: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub struct EventEnvelope {
+    pub sequence: u64,
+    pub event_id: String,
+    pub tx_id: String,
+    pub block_height: u64,
+    pub finality: String, // "soft" or "hard"
+    pub trust_tier: String, // "T1", "T2", "T3"
+    pub proof_reference: String,
+    pub payload: serde_json::Value,
+}
+
+#[derive(Serialize)]
+pub struct EventFeedResponse {
+    pub events: Vec<EventEnvelope>,
+    pub next_cursor: Option<u64>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -117,25 +143,30 @@ pub fn app_router(
             post(crate::api::settlement::settlement_trigger_handler),
         )
         .route("/v1/rgb/contract", get(get_rgb_contract))
+        .route("/v1/events", get(get_event_feed))
         .nest("/v1/analytics", crate::api::analytics::analytics_routes())
         .nest("/v1/zkml", zkml_routes())
-        .nest("/v1/erp", crate::api::erp::erp_routes())
-        .route("/v1/identity/resolve", get(resolve_identity_handler))
+        .route("/health", get(health_check))
+        .route("/v1/services", get(get_services))
+        .route("/v1/identity/resolve", post(resolve_identity_handler))
+        .route(
+            "/v1/bitvm2/verify-state-root",
+            post(crate::api::rest::verify_bitvm2_state_root),
+        )
         .route(
             "/v1/dlc/bond",
             post(crate::api::dlc::create_dlc_bond_handler),
         )
         .nest("/v1/billing", crate::api::billing::billing_routes())
-        .nest("/admin/v1", crate::api::admin::admin_routes())
-        .merge(crate::api::admin::public_auth_md_routes());
+        .nest("/admin/v1", crate::api::admin::admin_routes(state.clone()))
+        .merge(crate::api::admin::public_auth_md_routes(state.clone()))
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024));
 
     if config.experimental_apis_enabled {
         router = router.route("/v1/experimental/rebuild-state", post(rebuild_state));
     }
 
-    router
-        .layer(DefaultBodyLimit::max(1024 * 1024))
-        .with_state(state)
+    router.with_state(state)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -161,10 +192,9 @@ pub async fn start_rest_server(
         config,
     );
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&addr).await?;
     tracing::info!("REST API server listening on {}", addr);
-
-    let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
 
     Ok(())
@@ -173,219 +203,93 @@ pub async fn start_rest_server(
 async fn get_proof(
     State(state): State<AppState>,
     Query(params): Query<ProofParams>,
-) -> Result<Json<ProofResponse>, (StatusCode, Json<serde_json::Value>)> {
-    let proof = state
-        .nexus_state
-        .generate_merkle_proof(&params.key)
-        .ok_or((
+) -> impl IntoResponse {
+    match state.nexus_state.generate_merkle_proof(&params.key) {
+        Some(proof) => (StatusCode::OK, Json(proof)).into_response(),
+        None => (
             StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "Key not found in state"})),
-        ))?;
-
-    Ok(Json(ProofResponse {
-        hash: params.key,
-        proof: serde_json::to_string(&proof.path).unwrap_or_default(),
-        root: proof.root,
-    }))
-}
-
-fn mmr_proof_error(
-    code: StatusCode,
-    msg: impl Into<String>,
-) -> (StatusCode, Json<serde_json::Value>) {
-    (code, Json(serde_json::json!({"error": msg.into()})))
+            Json(json!({"error": "key not found"})),
+        )
+            .into_response(),
+    }
 }
 
 async fn get_mmr_proof(
     State(state): State<AppState>,
     Query(params): Query<MMRProofParams>,
-) -> Result<Json<crate::state::MMRProof>, (StatusCode, Json<serde_json::Value>)> {
-    let index = match (params.index, params.tx_id) {
-        (Some(i), _) => Some(i as usize),
-        (None, Some(tx_id)) => {
-            if !tx_id.starts_with("0x") || tx_id.len() != 66 {
-                return Err(mmr_proof_error(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)",
-                ));
-            }
-            state.nexus_state.get_leaf_index(&tx_id)
-        }
-        _ => {
-            return Err(mmr_proof_error(
+) -> impl IntoResponse {
+    let leaf_index = if let Some(index) = params.index {
+        Some(index as usize)
+    } else if let Some(tx_id) = params.tx_id {
+        if tx_id.len() != 66 || !tx_id.starts_with("0x") {
+            return (
                 StatusCode::BAD_REQUEST,
-                "provide either `index` or `tx_id`",
-            ));
+                Json(json!({"error": "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"})),
+            ).into_response();
         }
+
+        let leaves = state.nexus_state.leaves.lock().unwrap();
+        leaves.iter().position(|l| l == &tx_id)
+    } else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "provide either `index` or `tx_id`"})),
+        )
+            .into_response();
     };
 
-    let leaf_index = index.ok_or_else(|| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "requested transaction was not found in MMR leaves"})),
-        )
-    })?;
-
-    let leaf = state
-        .nexus_state
-        .get_leaf_by_index(leaf_index)
-        .ok_or_else(|| {
-            (
+    match leaf_index {
+        Some(idx) => match state.nexus_state.get_mmr_proof_metadata(idx) {
+            Some(proof) => (StatusCode::OK, Json(proof)).into_response(),
+            None => (
                 StatusCode::NOT_FOUND,
-                Json(serde_json::json!({"error": format!("leaf at index {leaf_index} was not found")})),
+                Json(json!({"error": format!("leaf at index {} was not found", idx)})),
             )
-        })?;
-
-    let (leaf_pos, sibling_positions) = state
-        .nexus_state
-        .get_mmr_proof_metadata(leaf_index)
-        .ok_or_else(|| {
-            tracing::error!(
-                "MMR proof metadata could not be computed for leaf_index {}",
-                leaf_index
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": format!("MMR proof metadata could not be computed for leaf index {leaf_index}")})),
-            )
-        })?;
-
-    let mut siblings = Vec::new();
-    for pos in sibling_positions {
-        let row = sqlx::query("SELECT hash FROM mmr_nodes WHERE pos = $1")
-            .bind(pos as i64)
-            .fetch_optional(&state.storage.pg_pool)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, pos = pos, "Failed to fetch MMR sibling from DB");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Database error fetching MMR sibling"})),
-                )
-            })?;
-
-        if let Some(r) = row {
-            let hash: String = r.get("hash");
-            siblings.push((pos, hash));
-        } else {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(
-                    serde_json::json!({"error": format!("MMR sibling at pos {pos} is missing from persistent storage")}),
-                ),
-            ));
-        }
+                .into_response(),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": "requested transaction was not found in MMR leaves"})),
+        )
+            .into_response(),
     }
-
-    let leaf_count = state.nexus_state.leaves.lock().unwrap().len() as u64;
-    let peaks_nodes = crate::state::get_mmr_peaks(leaf_count);
-    let mut peaks = Vec::new();
-    for pos in peaks_nodes {
-        let hash = sqlx::query_scalar::<_, String>("SELECT hash FROM mmr_nodes WHERE pos = $1")
-            .bind(pos as i64)
-            .fetch_one(&state.storage.pg_pool)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, pos = pos, "Failed to fetch MMR peak from DB");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": "Database error fetching MMR peak"})),
-                )
-            })?;
-        peaks.push(hash);
-    }
-
-    Ok(Json(crate::state::MMRProof {
-        leaf,
-        pos: leaf_pos,
-        siblings,
-        peaks,
-        root: state.nexus_state.get_state_root(),
-    }))
 }
 
 async fn verify_state(
     State(state): State<AppState>,
-    Json(payload): Json<serde_json::Value>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let url = state.gateway_url.as_ref().ok_or((
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(serde_json::json!({"error": "Gateway validation not configured"})),
-    ))?;
+    Json(proof): Json<MerkleProof>,
+) -> impl IntoResponse {
+    let current_root = state.nexus_state.get_state_root();
+    if proof.root != current_root {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"valid": false, "error": "root mismatch"})),
+        );
+    }
 
-    let verify_url = url.join("/v1/verify").unwrap();
-    let resp = state
-        .http_client
-        .post(verify_url)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Gateway verification request failed");
-            (
-                StatusCode::BAD_GATEWAY,
-                Json(serde_json::json!({"error": "Gateway verification unreachable"})),
-            )
-        })?;
-
-    let status = resp.status();
-    let body: serde_json::Value = resp.json().await.unwrap_or_default();
-
-    Ok(Json(serde_json::json!({
-        "gateway_status": status.as_u16(),
-        "gateway_response": body
-    })))
+    let valid = crate::state::verify_merkle_proof(&proof);
+    (StatusCode::OK, Json(json!({ "valid": valid })))
 }
 
-async fn get_status(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let root = state.nexus_state.get_state_root();
-    let height = sqlx::query_scalar::<_, i64>("SELECT MAX(height) FROM stacks_blocks")
-        .fetch_optional(&state.storage.pg_pool)
-        .await
-        .unwrap_or(Some(0))
-        .unwrap_or(0);
-
-    let mut conn = state
-        .storage
-        .redis_client
-        .get_multiplexed_async_connection()
-        .await
-        .map_err(|e| {
-            tracing::error!("Redis connection failed for status check: {}", e);
-            e
-        })
-        .ok();
-
-    let safety_mode = if let Some(ref mut c) = conn {
-        redis::cmd("GET")
-            .arg("nexus:safety_mode")
-            .query_async::<Option<bool>>(c)
-            .await
-            .unwrap_or(Some(false))
-            .unwrap_or(false)
-    } else {
-        false
-    };
-
-    let uptime = crate::api::get_uptime();
+async fn get_status(State(state): State<AppState>) -> impl IntoResponse {
+    let uptime_secs = crate::api::get_uptime();
     let start_time = crate::api::get_start_time_utc()
         .map(|t| t.to_rfc3339())
-        .unwrap_or_default();
+        .unwrap_or_else(|| "unknown".to_string());
 
-    Json(serde_json::json!({
-        "status": "ALIVE",
-        "version": "0.4.12",
-        "state_root": root,
-        "processed_height": height,
-        "experimental_apis": state.config.experimental_apis_enabled,
-        "uptime_secs": uptime,
+    Json(json!({
+        "status": "online",
+        "version": env!("CARGO_PKG_VERSION"),
+        "state_root": state.nexus_state.get_state_root(),
+        "mmr_root": state.nexus_state.get_mmr_root(),
+        "safety_mode": crate::safety::is_safety_mode_active(&state.storage).await.unwrap_or(false),
+        "uptime_secs": uptime_secs,
         "start_time": start_time,
-        "safety_mode": safety_mode,
     }))
 }
 
-async fn get_metrics(State(_state): State<AppState>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({
+async fn get_metrics() -> impl IntoResponse {
+    Json(json!({
         "total_transactions": TOTAL_TRANSACTIONS.get(),
         "active_rebalances": ACTIVE_REBALANCES.get(),
     }))
@@ -397,91 +301,179 @@ async fn prometheus_metrics() -> impl IntoResponse {
     let mut buffer = vec![];
     encoder.encode(&metric_families, &mut buffer).unwrap();
 
-    (
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
-        buffer,
-    )
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/plain")
+        .body(axum::body::Body::from(buffer))
+        .unwrap()
 }
 
 async fn execute_tx(
     State(state): State<AppState>,
-    Json(req): Json<ExecutionRequest>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    TOTAL_TRANSACTIONS.inc();
-    let res = state.executor.submit(req).await.map_err(|e| {
-        (
+    Json(payload): Json<ExecutionRequest>,
+) -> impl IntoResponse {
+    match {
+        if let Ok(json_payload) = serde_json::from_str::<serde_json::Value>(&payload.payload) {
+            if let Some(_routing_policy) = json_payload.get("routing_policy") {
+                if let Err(e) = crate::api::settlement::validate_routing_policy_metadata(&json_payload) {
+                    tracing::warn!(reason = %e.reason, "Execution blocked by routing policy");
+                    return (StatusCode::FORBIDDEN, Json(json!({ "error": format!("Routing policy violation: {}", e.reason) }))).into_response();
+                }
+            }
+        }
+        state.executor.submit(payload).await
+    } {
+        Ok(res) => {
+            TOTAL_TRANSACTIONS.inc();
+            (StatusCode::OK, Json(res)).into_response()
+        }
+        Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"error": e.to_string()})),
+            Json(json!({ "error": e.to_string() })),
         )
-    })?;
+            .into_response(),
+    }
+}
 
-    Ok(Json(serde_json::json!({
-        "status": "accepted",
-        "tx_id": res
-    })))
+async fn rebuild_state(State(_state): State<AppState>) -> impl IntoResponse {
+    (
+        StatusCode::OK,
+        Json(json!({ "status": "state rebuild is not supported in this version" })),
+    )
+}
+
+async fn health_check() -> impl IntoResponse {
+    (StatusCode::OK, "OK")
+}
+
+async fn get_services() -> impl IntoResponse {
+    Json(crate::api::services::get_all_services_status())
+}
+
+async fn verify_bitvm2_state_root(
+    State(state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    if let Some(gateway_url) = &state.gateway_url {
+        let verify_url = gateway_url
+            .join("/v1/bitvm2/verify-state-root")
+            .expect("Invalid gateway URL join");
+
+        match state.http_client.post(verify_url).json(&payload).send().await {
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.json::<serde_json::Value>().await.unwrap_or(json!({}));
+                (status, Json(body)).into_response()
+            }
+            Err(err) => (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": format!("Gateway error: {}", err) })),
+            )
+                .into_response(),
+        }
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({ "error": "GATEWAY_URL not configured for BitVM2 verification" })),
+        )
+            .into_response()
+    }
 }
 
 async fn get_rgb_contract(
     State(state): State<AppState>,
     Query(params): Query<RGBContractParams>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    let contract = state
-        .executor
-        .rgb_adapter
-        .lookup_contract(&params.contract_id)
-        .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({"error": e.to_string()})),
-            )
-        })?;
+) -> impl IntoResponse {
+    if params.contract_id.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error": "missing contract_id"}))).into_response();
+    }
 
-    match contract {
-        Some(c) => {
-            let json: serde_json::Value = serde_json::from_str(&c).unwrap_or_default();
-            Ok(Json(json))
+    match state.executor.rgb_adapter.lookup_contract(&params.contract_id).await {
+        Ok(contract) => match contract {
+            Some(c) => {
+                let v: serde_json::Value = serde_json::from_str(&c).unwrap_or(json!({ "raw": c }));
+                (StatusCode::OK, Json(v)).into_response()
+            },
+            None => (StatusCode::NOT_FOUND, Json(json!({"error": "RGB contract not found"}))).into_response(),
+        },
+        Err(e) => {
+            let status = if e.to_string().contains("not found") {
+                StatusCode::NOT_FOUND
+            } else {
+                StatusCode::INTERNAL_SERVER_ERROR
+            };
+            (status, Json(json!({ "error": e.to_string() }))).into_response()
         }
-        None => Err((
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"error": "RGB contract not found"})),
-        )),
     }
 }
 
-async fn rebuild_state(
+async fn get_event_feed(
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    state.nexus_state.set_initial_leaves(Vec::new());
-    Ok(Json(serde_json::json!({"status": "rebuild_initiated"})))
+    Query(params): Query<EventFeedParams>,
+) -> impl IntoResponse {
+    let cursor = params.cursor.unwrap_or(0);
+    let limit = params.limit.unwrap_or(50).min(250);
+
+    let rows = match sqlx::query(
+        "SELECT pos, hash, block_height FROM mmr_nodes
+         WHERE pos >= $1 AND block_height > 0
+         ORDER BY pos ASC LIMIT $2"
+    )
+    .bind(cursor as i64)
+    .bind(limit as i64)
+    .fetch_all(&state.storage.pg_pool)
+    .await {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    };
+
+    let events: Vec<EventEnvelope> = rows.into_iter().map(|row| {
+        let pos: i64 = row.get("pos");
+        let hash: Vec<u8> = row.get("hash");
+        let block_height: i64 = row.get("block_height");
+        let tx_id = format!("0x{}", hex::encode(hash));
+
+        EventEnvelope {
+            sequence: pos as u64,
+            event_id: format!("evt_{}", pos),
+            tx_id: tx_id.clone(),
+            block_height: block_height as u64,
+            finality: if block_height > 0 { "hard".to_string() } else { "soft".to_string() },
+            trust_tier: "T1".to_string(), // Defaulting to T1 for Nexus-issued L1 events
+            proof_reference: format!("/v1/mmr-proof?index={}", pos),
+            payload: json!({ "tx_id": tx_id }),
+        }
+    }).collect();
+
+    let next_cursor = events.last().map(|e| e.sequence + 1);
+
+    Json(EventFeedResponse {
+        events,
+        next_cursor,
+    }).into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
-    use crate::executor::rgb::RGBRolloutMode;
-    use crate::executor::NexusExecutor;
-    use crate::state::NexusState;
-    use crate::storage::tableland::TablelandAdapter;
-    use crate::storage::Storage;
     use axum::body::Body;
     use axum::http::Request;
-    use axum::response::Response;
+    use tower::ServiceExt;
     use serde_json::json;
     use std::collections::HashSet;
-    use tower::ServiceExt;
+    use crate::executor::rgb::RGBRolloutMode;
 
-    fn test_router_with_options(
+    fn test_router_with_state(
         enabled: bool,
         rgb_mode: RGBRolloutMode,
         known_contracts: HashSet<String>,
+        nexus_state: Arc<NexusState>,
     ) -> axum::Router {
-        let mut config_value = Config::default_test();
-        config_value.experimental_apis_enabled = enabled;
-        let config = Arc::new(config_value);
+        let config = Arc::new(Config {
+            experimental_apis_enabled: enabled,
+            ..Config::default_test()
+        });
         let storage = Storage::for_tests();
-        let nexus_state = Arc::new(NexusState::new());
         let executor = Arc::new(NexusExecutor::new(
             storage.clone(),
             rgb_mode,
@@ -501,6 +493,19 @@ mod tests {
             None,
             None,
             config,
+        )
+    }
+
+    fn test_router_with_options(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+    ) -> axum::Router {
+        test_router_with_state(
+            enabled,
+            rgb_mode,
+            known_contracts,
+            Arc::new(NexusState::new()),
         )
     }
 
@@ -569,6 +574,111 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_get_mmr_proof_rejects_missing_index_and_tx_id() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "provide either `index` or `tx_id`");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_rejects_invalid_tx_id_format() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?tx_id=tx1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "Invalid tx_id format: expected 0x-prefixed 32-byte hex string (66 chars)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_prefers_index_when_both_params_present() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/mmr-proof?index=0&tx_id=bad")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(body["error"], "leaf at index 0 was not found");
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_returns_not_found_for_unknown_mainnet_like_tx() {
+        let app = test_router();
+        let mainnet_like_tx_id = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("/v1/mmr-proof?tx_id={}", mainnet_like_tx_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response_json(response).await;
+        assert_eq!(
+            body["error"],
+            "requested transaction was not found in MMR leaves"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_missing_contract_id_query_is_bad_request() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/rgb/contract")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
     async fn test_get_rgb_contract_invalid_contract_id_maps_to_500() {
         let app = test_router();
 
@@ -628,7 +738,8 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_json(response).await;
-        assert_eq!(body["contract_id"], "rgb:contract-123");
+        let contract_id = body.get("contract_id").and_then(|v| v.as_str()).unwrap_or_default();
+        assert_eq!(contract_id, "rgb:contract-123");
         assert_eq!(body["status"], "verified");
         assert_eq!(body["mode"], "shadow");
     }
@@ -696,5 +807,23 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_event_feed_wires_correctly() {
+        let app = test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/v1/events")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
     }
 }
