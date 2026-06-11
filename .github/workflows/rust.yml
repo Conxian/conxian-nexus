@@ -50,20 +50,4 @@ jobs:
     - name: Enforce Lightning scoped coverage (>=90%)
       run: python3 scripts/check_lightning_coverage.py --min-percent 90
     - name: Enforce Bitcoin scoped coverage (>=95%)
-      run: ./scripts/coverage_bitcoin.sh --min-percent 95
-    - name: Publish Bitcoin coverage summary
-      if: always()
-      run: |
-        if [ -f target/coverage/bitcoin/summary.md ]; then
-          cat target/coverage/bitcoin/summary.md >> "$GITHUB_STEP_SUMMARY"
-        fi
-    - name: Upload Bitcoin coverage artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: bitcoin-coverage
-        path: |
-          target/coverage/bitcoin/llvm-cov-bitcoin.json
-          target/coverage/bitcoin/summary.json
-          target/coverage/bitcoin/summary.md
-        if-no-files-found: warn
+      run: python3 scripts/check_bitcoin_coverage.py --min-percent 95
