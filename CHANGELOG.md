@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.13] - 2026-06-12
+
+### Added
+- **Lightning Resilience & Recovery (SRL-1)**: Implemented a formalized failure taxonomy and payment lifecycle state machine in `src/executor/lightning.rs`.
+- **Tier 1 Chain Families Decision**: Formally prioritized Bitcoin, EVM, and Cosmos as Tier 1 families for Nexus/Gateway (ADR-006).
+- **Universal Chain Support Boundaries**: Defined architectural boundaries between protocol core and edge adapters in `docs/CHAIN_SUPPORT_BOUNDARIES.md`.
+
+### Changed
+- **Executor Enhancement**: Integrated `LightningResilienceAdapter` into `NexusExecutor` for production-ready payment tracking.
+- **Coverage Hardening**: Expanded Lightning coverage tracking to include the new resilience models in `scripts/check_lightning_coverage.py`.
+- **Version Alignment**: Bumped project version to v0.4.13 across all governance and configuration files.
+
+### Fixed
+- **Test Robustness**: Resolved string slice out-of-bounds in `tests/lightning_test.rs` for bech32 npub format checks.
+
+
 ## [0.4.12] - 2026-06-03
 
 ### Added
