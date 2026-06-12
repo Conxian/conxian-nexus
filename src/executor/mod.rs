@@ -1,3 +1,4 @@
+pub mod lightning;
 pub mod rgb;
 
 use crate::storage::Storage;
@@ -27,6 +28,7 @@ pub struct NexusExecutor {
     pub storage: Arc<Storage>,
     pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
     pub rgb_adapter: rgb::RGBAdapter,
+    pub lightning_adapter: lightning::LightningResilienceAdapter,
 }
 
 impl NexusExecutor {
@@ -36,10 +38,12 @@ impl NexusExecutor {
         known_contracts: std::collections::HashSet<String>,
     ) -> Self {
         let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
+        let lightning_adapter = lightning::LightningResilienceAdapter::new();
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
             rgb_adapter,
+            lightning_adapter,
         }
     }
 
