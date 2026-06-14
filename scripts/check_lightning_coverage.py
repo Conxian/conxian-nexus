@@ -30,10 +30,11 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (71, 175),  # app_router wiring (including billing/dlc nesting)
+        (36, 50),   # AppState struct
+        (159, 163), # DLC route wiring
     ],
     "src/executor/lightning.rs": [
-        (1, 200),  # failure taxonomy + state machine + intent models
+        (1, 140),  # failure taxonomy + state machine + intent models
     ],
 }
 
