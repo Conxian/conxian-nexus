@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         .with_env_filter(&config.rust_log)
         .init();
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.12)...");
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.13)...");
 
     // Initialize Global Start Time
     api::init_start_time();

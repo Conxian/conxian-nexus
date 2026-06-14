@@ -40,7 +40,7 @@ async fn test_rgb_contract_lookup_shadow_mode() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/v1/rgb/contract?contract_id=rgb:test123")
+                .uri("/v1/rgb/contract?contract_id=rgb:test123_nia_long_enough_id_for_validation")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -54,7 +54,7 @@ async fn test_rgb_contract_lookup_shadow_mode() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(json["contract_id"], "rgb:test123");
+    assert_eq!(json["contract_id"], "rgb:test123_nia_long_enough_id_for_validation");
     assert_eq!(json["mode"], "shadow");
     assert_eq!(json["status"], "verified");
 }
@@ -88,7 +88,7 @@ async fn test_rgb_contract_lookup_not_found() {
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/v1/rgb/contract?contract_id=rgb:notfound123")
+                .uri("/v1/rgb/contract?contract_id=rgb:notfound123_nia_long_enough_id_for_validation")
                 .body(Body::empty())
                 .unwrap(),
         )

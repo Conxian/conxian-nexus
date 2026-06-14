@@ -2,7 +2,7 @@ use crate::api::billing::nostr::NostrTelemetry;
 use crate::api::identity::resolve_identity_handler;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
-use crate::executor::{ExecutionRequest, NexusExecutor};
+use crate::executor::{ExecutionRequest, NexusExecutor, bitvm::BitVMTransition, evm::EVMReceiptProof, cosmos::IBCClientUpdate};
 use crate::oracle::OracleService;
 use crate::state::{NexusState, MerkleProof};
 use crate::storage::kwil::KwilAdapter;
@@ -153,6 +153,8 @@ pub fn app_router(
             "/v1/bitvm2/verify-state-root",
             post(crate::api::rest::verify_bitvm2_state_root),
         )
+        .route("/v1/evm/verify-receipt", post(verify_evm_receipt))
+        .route("/v1/cosmos/verify-ibc", post(verify_cosmos_ibc_update))
         .route(
             "/v1/dlc/bond",
             post(crate::api::dlc::create_dlc_bond_handler),
@@ -350,10 +352,46 @@ async fn get_services() -> impl IntoResponse {
     Json(crate::api::services::get_all_services_status())
 }
 
+async fn verify_evm_receipt(
+    State(state): State<AppState>,
+    Json(payload): Json<EVMReceiptProof>,
+) -> impl IntoResponse {
+    match state.executor.evm_adapter.verify_receipt_proof(&payload).await {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
+async fn verify_cosmos_ibc_update(
+    State(state): State<AppState>,
+    Json(payload): Json<IBCClientUpdate>,
+) -> impl IntoResponse {
+    match state.executor.cosmos_adapter.verify_client_update(&payload).await {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 async fn verify_bitvm2_state_root(
     State(state): State<AppState>,
     Json(payload): Json<serde_json::Value>,
 ) -> impl IntoResponse {
+    // 1. Attempt local simulation/verification if possible
+    if let Ok(transition) = serde_json::from_value::<BitVMTransition>(payload.clone()) {
+        match state.executor.bitvm_adapter.verify_transition(&transition).await {
+            Ok(result) => {
+                if result.valid {
+                    tracing::info!(trace_id = %transition.trace_id, "BitVM2 transition verified locally");
+                    return (StatusCode::OK, Json(result)).into_response();
+                } else {
+                    tracing::warn!(trace_id = %transition.trace_id, "BitVM2 local verification failed: {}", result.message);
+                }
+            }
+            Err(e) => tracing::error!("BitVM2 local verification error: {}", e),
+        }
+    }
+
+    // 2. Fallback to Gateway proxy if configured
     if let Some(gateway_url) = &state.gateway_url {
         let verify_url = gateway_url
             .join("/v1/bitvm2/verify-state-root")
@@ -374,7 +412,7 @@ async fn verify_bitvm2_state_root(
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "error": "GATEWAY_URL not configured for BitVM2 verification" })),
+            Json(json!({ "error": "GATEWAY_URL not configured for BitVM2 verification fallback" })),
         )
             .into_response()
     }
@@ -390,15 +428,14 @@ async fn get_rgb_contract(
 
     match state.executor.rgb_adapter.lookup_contract(&params.contract_id).await {
         Ok(contract) => match contract {
-            Some(c) => {
-                let v: serde_json::Value = serde_json::from_str(&c).unwrap_or(json!({ "raw": c }));
-                (StatusCode::OK, Json(v)).into_response()
-            },
+            Some(metadata) => (StatusCode::OK, Json(metadata)).into_response(),
             None => (StatusCode::NOT_FOUND, Json(json!({"error": "RGB contract not found"}))).into_response(),
         },
         Err(e) => {
             let status = if e.to_string().contains("not found") {
                 StatusCode::NOT_FOUND
+            } else if e.to_string().contains("Invalid RGB contract ID") {
+                StatusCode::BAD_REQUEST
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
@@ -693,11 +730,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = response_json(response).await;
         assert_eq!(
             body["error"],
-            "Invalid RGB contract ID format: must start with rgb: and have sufficient length"
+            "Invalid RGB contract ID prefix: expected 'rgb:'"
         );
     }
 
@@ -709,7 +746,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123_nia_long_enough_id_for_validation")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -729,7 +766,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123_nia_long_enough_id_for_validation")
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -739,7 +776,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_json(response).await;
         let contract_id = body.get("contract_id").and_then(|v| v.as_str()).unwrap_or_default();
-        assert_eq!(contract_id, "rgb:contract-123");
+        assert_eq!(contract_id, "rgb:contract-123_nia_long_enough_id_for_validation");
         assert_eq!(body["status"], "verified");
         assert_eq!(body["mode"], "shadow");
     }
@@ -752,7 +789,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123")
+                    .uri("/v1/rgb/contract?contract_id=rgb:contract-123_nia_long_enough_id_for_validation")
                     .body(Body::empty())
                     .unwrap(),
             )
