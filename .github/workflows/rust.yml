@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   hygiene:
@@ -19,7 +20,7 @@ jobs:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -28,10 +29,14 @@ jobs:
       run: python3 scripts/verify_submodule_integrity.py
     - name: BOS Production Boundary Check (Bash)
       run: ./scripts/check_production_boundary.sh
-    - name: Secret Scanning
-      uses: gitleaks/gitleaks-action@v2
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Install Gitleaks
+      run: |
+        VERSION="8.18.2"
+        curl -L https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz -o gitleaks.tar.gz
+        tar -xzf gitleaks.tar.gz
+        sudo mv gitleaks /usr/local/bin/
+    - name: Secret Scanning (Gitleaks)
+      run: gitleaks detect --source . -v
 
   build:
     name: Build & Test
