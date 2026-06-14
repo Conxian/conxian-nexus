@@ -1,3 +1,4 @@
+pub mod stacks;
 pub mod cosmos;
 pub mod evm;
 pub mod bitvm;
@@ -35,6 +36,7 @@ pub struct NexusExecutor {
     pub bitvm_adapter: bitvm::BitVMAdapter,
     pub evm_adapter: evm::EVMAdapter,
     pub cosmos_adapter: cosmos::CosmosAdapter,
+    pub stacks_adapter: stacks::StacksAdapter,
 }
 
 impl NexusExecutor {
@@ -48,6 +50,7 @@ impl NexusExecutor {
         let bitvm_adapter = bitvm::BitVMAdapter::new(storage.clone());
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
+        let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
@@ -56,6 +59,7 @@ impl NexusExecutor {
             bitvm_adapter,
             evm_adapter,
             cosmos_adapter,
+            stacks_adapter,
         }
     }
 

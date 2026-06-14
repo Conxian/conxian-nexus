@@ -2,7 +2,7 @@ use crate::api::billing::nostr::NostrTelemetry;
 use crate::api::identity::resolve_identity_handler;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
-use crate::executor::{ExecutionRequest, NexusExecutor, bitvm::BitVMTransition, evm::EVMReceiptProof, cosmos::IBCClientUpdate};
+use crate::executor::{ExecutionRequest, NexusExecutor, bitvm::BitVMTransition, evm::EVMReceiptProof, cosmos::IBCClientUpdate, stacks::StacksTransaction};
 use crate::oracle::OracleService;
 use crate::state::{NexusState, MerkleProof};
 use crate::storage::kwil::KwilAdapter;
@@ -155,6 +155,7 @@ pub fn app_router(
         )
         .route("/v1/evm/verify-receipt", post(verify_evm_receipt))
         .route("/v1/cosmos/verify-ibc", post(verify_cosmos_ibc_update))
+        .route("/v1/stacks/verify-tx", post(verify_stacks_transaction))
         .route(
             "/v1/dlc/bond",
             post(crate::api::dlc::create_dlc_bond_handler),
@@ -172,6 +173,16 @@ pub fn app_router(
 }
 
 #[allow(clippy::too_many_arguments)]
+async fn verify_stacks_transaction(
+    State(state): State<AppState>,
+    Json(payload): Json<StacksTransaction>,
+) -> impl IntoResponse {
+    match state.executor.stacks_adapter.verify_transaction(&payload).await {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+    }
+}
+
 pub async fn start_rest_server(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
