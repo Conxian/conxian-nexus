@@ -5,33 +5,27 @@ All notable changes to this project will be documented in this file.
 ## [0.4.13] - 2026-06-12
 
 ### Added
+- **API Completion**: Wired `/health`, `/v1/services`, and `/v1/bitvm2/verify-state-root` endpoints.
+- **BitVM2 Expansion**: Enhanced `BitVMAdapter` with state transition verification simulation and PostgreSQL audit logging.
+- **Glass Node Dashboard**: Implemented a lightweight HTML interface at `/` for real-time monitoring.
 - **Lightning Resilience & Recovery (SRL-1)**: Implemented a formalized failure taxonomy and payment lifecycle state machine in `src/executor/lightning.rs`.
+- **MMR Proof Robustness**: Added strict `tx_id` format validation to the `/v1/mmr-proof` endpoint.
+- **Multi-Chain Tier 1 Integration**: Implemented initial `EVMAdapter` and `CosmosAdapter` for receipt and IBC verification as per ADR-006.
+- **RGB Protocol Hardening**: Added `RGBSchema` support and strict contract ID validation rules.
+- **System Lifecycle Tracking**: Enhanced `/v1/status` with `uptime_secs` and ISO-8601 `start_time`.
 - **Tier 1 Chain Families Decision**: Formally prioritized Bitcoin, EVM, and Cosmos as Tier 1 families for Nexus/Gateway (ADR-006).
 - **Universal Chain Support Boundaries**: Defined architectural boundaries between protocol core and edge adapters in `docs/CHAIN_SUPPORT_BOUNDARIES.md`.
 
 ### Changed
-- **Executor Enhancement**: Integrated `LightningResilienceAdapter` into `NexusExecutor` for production-ready payment tracking.
 - **Coverage Hardening**: Expanded Lightning coverage tracking to include the new resilience models in `scripts/check_lightning_coverage.py`.
+- **Executor Enhancement**: Integrated `LightningResilienceAdapter` into `NexusExecutor` for production-ready payment tracking.
+- **Executor Refactor**: Updated `NexusExecutor` to support configurable RGB rollout modes and known contracts.
+- **Identity Consistency**: Aligned identity resolution to use POST with JSON body for protocol-wide consistency.
+- **Safety Mode Transparency**: Integrated `safety_mode` status directly into the high-level system status response.
 - **Version Alignment**: Bumped project version to v0.4.13 across all governance and configuration files.
 
 ### Fixed
 - **Test Robustness**: Resolved string slice out-of-bounds in `tests/lightning_test.rs` for bech32 npub format checks.
-
-
-## [0.4.12] - 2026-06-03
-
-### Added
-- **Glass Node Dashboard**: Implemented a lightweight HTML interface at `/` for real-time monitoring.
-- **API Completion**: Wired `/health`, `/v1/services`, and `/v1/bitvm2/verify-state-root` endpoints.
-- **System Lifecycle Tracking**: Enhanced `/v1/status` with `uptime_secs` and ISO-8601 `start_time`.
-- **RGB Protocol Hardening**: Implemented contract ID validation and support for known contract sets in `RGBAdapter`.
-- **MMR Proof Robustness**: Added strict `tx_id` format validation to the `/v1/mmr-proof` endpoint.
-
-### Changed
-- **Identity Consistency**: Aligned identity resolution to use POST with JSON body for protocol-wide consistency.
-- **Executor Refactor**: Updated `NexusExecutor` to support configurable RGB rollout modes and known contracts.
-- **Safety Mode Transparency**: Integrated `safety_mode` status directly into the high-level system status response.
-- **Version Alignment**: Bumped project version to v0.4.12 across all governance and configuration files.
 
 ## [0.4.11] - 2026-06-15
 

@@ -20,6 +20,7 @@ lazy_static::lazy_static! {
 
 #[derive(Clone, Debug)]
 struct RegistrationRecord {
+    #[allow(dead_code)]
     registration_id: String,
     registration_type: String,
     claim_token_hash: String,
@@ -28,15 +29,18 @@ struct RegistrationRecord {
     otp_plaintext: String,
     requested_credential_type: String,
     credential: Option<String>,
+    #[allow(dead_code)]
     pre_claim_scopes: Vec<String>,
     post_claim_scopes: Vec<String>,
     email: Option<String>,
     claimed: bool,
+    #[allow(dead_code)]
     claim_token_expires_at: String,
 }
 
 #[derive(Clone, Debug)]
 struct CredentialRecord {
+    #[allow(dead_code)]
     registration_id: String,
     scopes: Vec<String>,
     revoked: bool,

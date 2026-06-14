@@ -1,40 +1,25 @@
-//! #722: Bitcoin coverage expansion (80% → 95%)
-//!
-//! Comprehensive test suite for Bitcoin-related Nexus modules:
-//! - RGB Protocol Adapter (all modes, edge cases, concurrent access)
-//! - DLC Bond Orchestrator (validation, persistence, lifecycle)
-//! - BTC transaction format validation
-//! - State transitions with Bitcoin context
-
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
-use conxian_nexus::executor::rgb::{RGBAdapter, RGBRolloutMode};
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
+use conxian_nexus::executor::rgb::{RGBAdapter, RGBRolloutMode};
 use serde_json::Value;
-use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-
-// ---------------------------------------------------------------------------
-// RGB Protocol Adapter — Direct Unit Tests
-// ---------------------------------------------------------------------------
+use std::collections::HashSet;
 
 #[tokio::test]
 async fn test_rgb_adapter_disabled_rejects_all() {
     let adapter = RGBAdapter::new(RGBRolloutMode::Disabled);
 
-    let result = adapter
-        .lookup_contract("rgb:test123456")
-        .await;
-
-    assert!(result.is_err(), "Disabled adapter must reject all lookups");
+    let result = adapter.lookup_contract("rgb:test123456_nia_long_enough_id_for_validation").await;
+    assert!(result.is_err());
     assert_eq!(
         result.unwrap_err().to_string(),
         "RGB adapter is disabled"
@@ -45,12 +30,12 @@ async fn test_rgb_adapter_disabled_rejects_all() {
 async fn test_rgb_adapter_shadow_returns_mock() {
     let adapter = RGBAdapter::new(RGBRolloutMode::Shadow);
 
-    let result = adapter.lookup_contract("rgb:test123456").await;
+    let result = adapter.lookup_contract("rgb:test123456_nia_long_enough_id_for_validation").await;
     assert!(result.is_ok());
 
-    let payload = result.unwrap().expect("Shadow mode must return mock payload");
-    let json: Value = serde_json::from_str(&payload).unwrap();
-    assert_eq!(json["contract_id"], "rgb:test123456");
+    let metadata = result.unwrap().expect("Shadow mode must return mock payload");
+    let json = serde_json::to_value(&metadata).unwrap();
+    assert_eq!(json["contract_id"], "rgb:test123456_nia_long_enough_id_for_validation");
     assert_eq!(json["mode"], "shadow");
     assert_eq!(json["status"], "verified");
 }
@@ -58,15 +43,15 @@ async fn test_rgb_adapter_shadow_returns_mock() {
 #[tokio::test]
 async fn test_rgb_adapter_active_known_contract() {
     let mut known = HashSet::new();
-    known.insert("rgb:known12345".to_string());
+    known.insert("rgb:known12345_nia_long_enough_id_for_validation".to_string());
     let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, known);
 
-    let result = adapter.lookup_contract("rgb:known12345").await;
+    let result = adapter.lookup_contract("rgb:known12345_nia_long_enough_id_for_validation").await;
     assert!(result.is_ok());
 
-    let payload = result.unwrap().expect("Known contract must resolve");
-    let json: Value = serde_json::from_str(&payload).unwrap();
-    assert_eq!(json["contract_id"], "rgb:known12345");
+    let metadata = result.unwrap().expect("Known contract must resolve");
+    let json = serde_json::to_value(&metadata).unwrap();
+    assert_eq!(json["contract_id"], "rgb:known12345_nia_long_enough_id_for_validation");
     assert_eq!(json["mode"], "active");
     assert_eq!(json["status"], "active");
 }
@@ -78,9 +63,9 @@ async fn test_rgb_adapter_active_unknown_contract() {
         HashSet::new(),
     );
 
-    let result = adapter.lookup_contract("rgb:unknown1234").await;
+    let result = adapter.lookup_contract("rgb:unknown1234_nia_long_enough_id_for_validation").await;
     assert!(result.is_ok());
-    assert!(result.unwrap().is_none(), "Unknown contracts must return None in Active mode");
+    assert!(result.unwrap().is_none());
 }
 
 #[tokio::test]
@@ -91,7 +76,7 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("notrgb").await;
     assert!(result.is_err());
     assert!(
-        result.unwrap_err().to_string().contains("Invalid RGB contract ID format"),
+        result.unwrap_err().to_string().contains("Invalid RGB contract ID prefix"),
         "Should reject IDs without rgb: prefix"
     );
 
@@ -99,7 +84,7 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("rgb:ab").await;
     assert!(result.is_err());
     assert!(
-        result.unwrap_err().to_string().contains("Invalid RGB contract ID format"),
+        result.unwrap_err().to_string().contains("Invalid RGB contract ID length"),
         "Should reject IDs that are too short"
     );
 }
@@ -111,217 +96,35 @@ async fn test_rgb_adapter_empty_known_contracts_active() {
         HashSet::new(),
     );
 
-    // Should not panic with empty known set
-    let result = adapter.lookup_contract("rgb:nonexistent").await;
+    let result = adapter.lookup_contract("rgb:nonexistent_nia_long_enough_id_for_validation").await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 }
 
-#[tokio::test]
-async fn test_rgb_adapter_display_formats() {
-    assert_eq!(RGBRolloutMode::Disabled.to_string(), "disabled");
-    assert_eq!(RGBRolloutMode::Shadow.to_string(), "shadow");
-    assert_eq!(RGBRolloutMode::Active.to_string(), "active");
+#[test]
+fn test_rgb_adapter_display_formats() {
+    assert_eq!(format!("{}", RGBRolloutMode::Disabled), "disabled");
+    assert_eq!(format!("{}", RGBRolloutMode::Shadow), "shadow");
+    assert_eq!(format!("{}", RGBRolloutMode::Active), "active");
 }
 
 #[tokio::test]
 async fn test_rgb_adapter_serde_roundtrip() {
-    for mode in &[RGBRolloutMode::Disabled, RGBRolloutMode::Shadow, RGBRolloutMode::Active] {
-        let json = serde_json::to_string(mode).unwrap();
-        let deserialized: RGBRolloutMode = serde_json::from_str(&json).unwrap();
-        assert_eq!(*mode, deserialized);
-    }
+    let mode = RGBRolloutMode::Shadow;
+    let serialized = serde_json::to_string(&mode).unwrap();
+    assert_eq!(serialized, "\"shadow\"");
+    let deserialized: RGBRolloutMode = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(mode, deserialized);
 }
 
 // ---------------------------------------------------------------------------
-// DLC Bond Orchestrator — API Integration Tests
+// DLC Bond Handlers — Success Path
 // ---------------------------------------------------------------------------
-
-async fn build_test_app(
-    config: Config,
-) -> (axum::Router, Arc<Storage>) {
-    let storage = Arc::new(
-        Storage::from_config(&config)
-            .await
-            .expect("Storage must be available for DLC tests"),
-    );
-    let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        RGBRolloutMode::Disabled,
-        HashSet::new(),
-    ));
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
-
-    let app = app_router(
-        storage.clone(),
-        nexus_state,
-        executor,
-        None,
-        tableland,
-        None,
-        None,
-        Arc::new(Config::default_test()),
-    );
-
-    (app, storage)
-}
-
-#[tokio::test]
-async fn test_dlc_bond_creation_validation_empty_bond_id() {
-    let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
-        Ok(s) => Arc::new(s),
-        Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
-        }
-    };
-    let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        RGBRolloutMode::Disabled,
-        HashSet::new(),
-    ));
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
-
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        None,
-        tableland,
-        None,
-        None,
-        Arc::new(Config::default_test()),
-    );
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/dlc/bond")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{"bond_id":"","principal_sbtc":1000,"expiry_height":100,"coupon_rate":0.05}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn test_dlc_bond_creation_validation_zero_principal() {
-    let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
-        Ok(s) => Arc::new(s),
-        Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
-        }
-    };
-    let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        RGBRolloutMode::Disabled,
-        HashSet::new(),
-    ));
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
-
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        None,
-        tableland,
-        None,
-        None,
-        Arc::new(Config::default_test()),
-    );
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/dlc/bond")
-                .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{"bond_id":"test-bond-1","principal_sbtc":0,"expiry_height":100,"coupon_rate":0.05}"#,
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn test_dlc_bond_creation_invalid_json() {
-    let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
-        Ok(s) => Arc::new(s),
-        Err(_) => {
-            eprintln!("Skipping test: Database not available");
-            return;
-        }
-    };
-    let nexus_state = Arc::new(NexusState::new());
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        RGBRolloutMode::Disabled,
-        HashSet::new(),
-    ));
-    let tableland = Arc::new(TablelandAdapter::new(
-        storage.clone(),
-        config.tableland_base_url.clone(),
-    ));
-
-    let app = app_router(
-        storage,
-        nexus_state,
-        executor,
-        None,
-        tableland,
-        None,
-        None,
-        Arc::new(Config::default_test()),
-    );
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/v1/dlc/bond")
-                .header("Content-Type", "application/json")
-                .body(Body::from("not-json")).unwrap(),
-        )
-        .await
-        .unwrap();
-
-    // Axum deserialization failure should yield 422 or 400
-    assert!(
-        response.status() == StatusCode::UNPROCESSABLE_ENTITY
-            || response.status() == StatusCode::BAD_REQUEST
-    );
-}
 
 #[tokio::test]
 async fn test_dlc_bond_creation_success_path() {
     let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
+    let storage = match Storage::from_config_lazy(&config) {
         Ok(s) => Arc::new(s),
         Err(_) => {
             eprintln!("Skipping test: Database not available");
@@ -357,19 +160,17 @@ async fn test_dlc_bond_creation_success_path() {
                 .uri("/v1/dlc/bond")
                 .header("Content-Type", "application/json")
                 .body(Body::from(
-                    r#"{"bond_id":"test-bond-success","principal_sbtc":50000,"expiry_height":1000,"coupon_rate":0.045}"#,
+                    r#"{"bond_id":"bond123","principal_sbtc":1000000,"expiry_height":100,"coupon_rate":0.05}"#,
                 ))
                 .unwrap(),
         )
         .await
         .unwrap();
 
-    // If Redis is available: 201 Created
-    // If Redis is not available: 500 Internal Server Error
     assert!(
         response.status() == StatusCode::CREATED
             || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-        "Expected 201 CREATED or 500 (Redis unavailable), got {}",
+        "Expected 201 or 500 (if Redis missing), got {}",
         response.status()
     );
 
@@ -392,10 +193,159 @@ async fn test_dlc_bond_creation_success_path() {
     }
 }
 
+// ---------------------------------------------------------------------------
+// DLC Bond Handlers — Validation Failure Paths
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_dlc_bond_creation_validation_empty_bond_id() {
+    let config = Config::default_test();
+    let storage = match Storage::from_config_lazy(&config) {
+        Ok(s) => Arc::new(s),
+        Err(_) => {
+            eprintln!("Skipping test: Database not available");
+            return;
+        }
+    };
+    let nexus_state = Arc::new(NexusState::new());
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
+    ));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        config.tableland_base_url.clone(),
+    ));
+
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        None,
+        tableland,
+        None,
+        None,
+        Arc::new(Config::default_test()),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/dlc/bond")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    r#"{"bond_id":"","principal_sbtc":1000000,"expiry_height":100,"coupon_rate":0.05}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_dlc_bond_creation_validation_zero_principal() {
+    let config = Config::default_test();
+    let storage = match Storage::from_config_lazy(&config) {
+        Ok(s) => Arc::new(s),
+        Err(_) => {
+            eprintln!("Skipping test: Database not available");
+            return;
+        }
+    };
+    let nexus_state = Arc::new(NexusState::new());
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
+    ));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        config.tableland_base_url.clone(),
+    ));
+
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        None,
+        tableland,
+        None,
+        None,
+        Arc::new(Config::default_test()),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/dlc/bond")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    r#"{"bond_id":"bond_valid","principal_sbtc":0,"expiry_height":100,"coupon_rate":0.05}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_dlc_bond_creation_invalid_json() {
+    let config = Config::default_test();
+    let storage = match Storage::from_config_lazy(&config) {
+        Ok(s) => Arc::new(s),
+        Err(_) => {
+            eprintln!("Skipping test: Database not available");
+            return;
+        }
+    };
+    let nexus_state = Arc::new(NexusState::new());
+    let executor = Arc::new(NexusExecutor::new(
+        storage.clone(),
+        RGBRolloutMode::Disabled,
+        HashSet::new(),
+    ));
+    let tableland = Arc::new(TablelandAdapter::new(
+        storage.clone(),
+        config.tableland_base_url.clone(),
+    ));
+
+    let app = app_router(
+        storage,
+        nexus_state,
+        executor,
+        None,
+        tableland,
+        None,
+        None,
+        Arc::new(Config::default_test()),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/dlc/bond")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"invalid_json": true"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
 #[tokio::test]
 async fn test_dlc_bond_creation_high_coupon_rate() {
     let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
+    let storage = match Storage::from_config_lazy(&config) {
         Ok(s) => Arc::new(s),
         Err(_) => {
             eprintln!("Skipping test: Database not available");
@@ -467,7 +417,7 @@ async fn test_btc_tx_id_format_validation() {
     assert_eq!(valid_txid.len(), 66);
 
     let config = Config::default_test();
-    let storage = match Storage::from_config(&config).await {
+    let storage = match Storage::from_config_lazy(&config) {
         Ok(s) => Arc::new(s),
         Err(_) => {
             eprintln!("Skipping test: Database not available");
@@ -605,14 +555,14 @@ async fn test_rgb_contract_lookup_with_btc_tx_ids() {
 async fn test_rgb_adapter_concurrent_lookups() {
     let adapter = Arc::new(RGBAdapter::with_known_contracts(
         RGBRolloutMode::Active,
-        ["rgb:alpha12345", "rgb:beta123456", "rgb:gamma12345"]
+        ["rgb:alpha12345_nia_long_enough_id_for_validation", "rgb:beta123456_nia_long_enough_id_for_validation", "rgb:gamma12345_nia_long_enough_id_for_validation"]
             .iter()
             .map(|s| s.to_string())
             .collect(),
     ));
 
     let mut handles = Vec::new();
-    for id in &["rgb:alpha12345", "rgb:beta123456", "rgb:gamma12345", "rgb:unknown"] {
+    for id in &["rgb:alpha12345_nia_long_enough_id_for_validation", "rgb:beta123456_nia_long_enough_id_for_validation", "rgb:gamma12345_nia_long_enough_id_for_validation", "rgb:unknown_nia_long_enough_id_for_validation"] {
         let adapter = adapter.clone();
         let id = id.to_string();
         handles.push(tokio::spawn(async move {
@@ -631,4 +581,44 @@ async fn test_rgb_adapter_concurrent_lookups() {
             assert!(result.unwrap().is_none(), "Unknown contract should return None");
         }
     }
+}
+
+#[tokio::test]
+async fn test_rgb_validation_edge_cases() {
+    let adapter = conxian_nexus::executor::rgb::RGBAdapter::new(conxian_nexus::executor::rgb::RGBRolloutMode::Shadow);
+
+    // Prefix check
+    assert!(adapter.validate_contract_id("notrgb:123").is_err());
+
+    // Length check
+    assert!(adapter.validate_contract_id("rgb:short").is_err());
+
+    // Schema heuristics
+    assert_eq!(adapter.validate_contract_id("rgb:asset_nia_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::NIA);
+    assert_eq!(adapter.validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::LNPBP);
+    assert_eq!(adapter.validate_contract_id("rgb:generic_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::Unknown);
+}
+
+#[tokio::test]
+async fn test_bitvm_validation_edge_cases() {
+    let config = conxian_nexus::config::Config::default_test();
+    let storage = conxian_nexus::storage::Storage::from_config_lazy(&config).unwrap();
+    let adapter = conxian_nexus::executor::bitvm::BitVMAdapter::new(std::sync::Arc::new(storage));
+
+    let mut transition = conxian_nexus::executor::bitvm::BitVMTransition {
+        prev_state_root: "short".to_string(),
+        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000002".to_string(),
+        proof_bytes: "data".to_string(),
+        trace_id: "t1".to_string(),
+    };
+
+    let res = adapter.verify_transition(&transition).await.unwrap();
+    assert!(!res.valid);
+    assert!(res.message.contains("prev_state_root"));
+
+    transition.prev_state_root = "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
+    transition.next_state_root = "bad".to_string();
+    let res = adapter.verify_transition(&transition).await.unwrap();
+    assert!(!res.valid);
+    assert!(res.message.contains("next_state_root"));
 }

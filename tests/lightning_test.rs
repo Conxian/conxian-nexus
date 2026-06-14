@@ -242,9 +242,12 @@ fn test_ln_nostr_event_invalid_content_no_api_key() {
 
 #[derive(Debug, Clone)]
 struct MockNostrEvent {
+    #[allow(dead_code)]
     event_id: String,
     created_at: u64,
+    #[allow(dead_code)]
     content: String,
+    #[allow(dead_code)]
     kind: u64,
 }
 

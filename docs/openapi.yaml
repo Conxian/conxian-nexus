@@ -2,11 +2,64 @@ openapi: 3.0.3
 info:
   title: Conxian Nexus (Glass Node) API
   description: High-performance middleware for Stacks L1 state synchronization and multi-protocol support.
-  version: 0.4.12
+  version: 0.4.13
 servers:
   - url: http://localhost:3000
     description: Local development server
 paths:
+  /v1/events:
+    get:
+      summary: Get canonical cross-chain event feed
+      parameters:
+        - name: cursor
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventEnvelope"
+                  next_cursor:
+                    type: integer
+  /v1/rgb/contract:
+    get:
+      summary: Lookup RGB contract metadata
+      parameters:
+        - name: contract_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  contract_id:
+                    type: string
+                  status:
+                    type: string
+                  mode:
+                    type: string
+                  schema:
+                    type: string
+        "404":
+          description: Not Found
   /admin/v1/status:
     get:
       summary: Legacy protected admin status (compatibility route)
@@ -589,4 +642,101 @@ components:
         verified:
           type: boolean
         error:
+          type: string
+
+    EventEnvelope:
+      type: object
+      properties:
+        sequence:
+          type: integer
+        event_id:
+          type: string
+        tx_id:
+          type: string
+        block_height:
+          type: integer
+        finality:
+          type: string
+        trust_tier:
+          type: string
+        proof_reference:
+          type: string
+        payload:
+          type: object
+  /v1/evm/verify-receipt:
+    post:
+      summary: Verify EVM receipt proof
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EVMReceiptProof"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EVMVerificationResult"
+  /v1/cosmos/verify-ibc:
+    post:
+      summary: Verify Cosmos IBC light client update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IBCClientUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IBCVerificationResult"
+
+    EVMReceiptProof:
+      type: object
+      required: [block_hash, transaction_index, proof_nodes, receipt_root]
+      properties:
+        block_hash:
+          type: string
+        transaction_index:
+          type: integer
+        proof_nodes:
+          type: array
+          items:
+            type: string
+        receipt_root:
+          type: string
+    EVMVerificationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        status:
+          type: string
+        verified_at_height:
+          type: integer
+    IBCClientUpdate:
+      type: object
+      required: [client_id, header, trusted_height]
+      properties:
+        client_id:
+          type: string
+        header:
+          type: string
+        trusted_height:
+          type: integer
+    IBCVerificationResult:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        client_id:
+          type: string
+        latest_height:
+          type: integer
+        trust_level:
           type: string
