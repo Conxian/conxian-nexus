@@ -13,7 +13,8 @@ EXCLUDE_DIRS = [
 ]
 
 EXCLUDE_FILES = [
-    "Cargo.lock", "CHANGELOG.md", "README.md", "verify_contamination_guard.py", "check_production_boundary.sh"
+    "Cargo.lock", "CHANGELOG.md", "README.md", "verify_contamination_guard.py", "check_production_boundary.sh",
+    "gitleaks", "gitleaks.tar.gz"
 ]
 
 def check_file(file_path):
