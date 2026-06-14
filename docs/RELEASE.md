@@ -1,46 +1,35 @@
-# Release Discipline
+# Release Runbook
 
-This document defines the minimum release gates for Conxian Nexus.
+## Versioning and tag format
 
-## Release Principles
+- Follow Semantic Versioning: `MAJOR.MINOR.PATCH`.
+- Create release tags as `vMAJOR.MINOR.PATCH`.
 
-- **Fail closed over fail open** for proof, sync, and safety-critical paths.
-- **Ownership before merge** for high-impact changes.
-- **No boundary exceptions**: production boundary checks are mandatory.
-- **Traceable artifacts**: version and changelog updates must match shipped behavior.
+## Changelog requirement
 
-## Required Gates
+- Update `CHANGELOG.md` before tagging.
+- Add an entry for the version being released with the date and notable changes.
 
-A change is release-eligible only if all applicable gates pass.
+## Release steps
 
-1. **Ownership signoff**
-   - Required review from [`.github/CODEOWNERS`](../.github/CODEOWNERS) owners for touched areas.
+1. Ensure `main` is up to date.
+2. Confirm `CHANGELOG.md` includes the release version.
+3. Create an annotated tag:
+   - `git tag -a vX.Y.Z -m "Release vX.Y.Z"`
+4. Push the tag:
+   - `git push origin vX.Y.Z`
+5. Publish the GitHub Release using the matching version and release notes.
 
-2. **CI hygiene and test gates**
-   - [`.github/workflows/rust.yml`](../.github/workflows/rust.yml) passes in full.
-   - Includes contamination, submodule integrity, and production boundary checks.
+## Verification checklist
 
-3. **Boundary integrity gate**
-   - `./scripts/check_production_boundary.sh` must pass locally/CI for release candidates.
+- [ ] Tag `vX.Y.Z` exists on GitHub.
+- [ ] Required CI checks passed for the release commit.
+- [ ] A GitHub release was published for `vX.Y.Z`.
+- [ ] The release notes reflect the corresponding `CHANGELOG.md` section.
 
-4. **Proof and integrity impact gate**
-   - Any proof, MMR, sync, or safety behavior change must include targeted tests.
-   - Regressions or partial-proof behavior are release blockers.
+## Control sign-offs before tagging
 
-5. **Version and release notes consistency (when relevant)**
-   - Public or operationally relevant changes must be reflected in:
-     - [`CHANGELOG.md`](../CHANGELOG.md)
-     - versioned metadata where applicable (for example API spec version in [`docs/openapi.yaml`](./openapi.yaml)).
-
-## Release Checklist (Operator Quick-Run)
-
-- [ ] Required CODEOWNERS approvals recorded.
-- [ ] CI workflow green for release branch/commit.
-- [ ] Boundary checks verified.
-- [ ] Proof/integrity impacts assessed and tested.
-- [ ] Changelog/version metadata updated where relevant.
-- [ ] Release notes drafted with operational impact and rollback notes.
-
-## Control Model Linkage
-
-This release discipline is the execution gate layer for the repository control model in [`docs/CONTROL_MODEL.md`](./CONTROL_MODEL.md).
+- [ ] State-proof and synchronization changes have been reviewed for correctness.
+- [ ] Security-sensitive service or persistence changes have been reviewed.
+- [ ] No private operational data or credentials were introduced.
+- [ ] Authority boundaries remain unchanged and no custody behavior is introduced.

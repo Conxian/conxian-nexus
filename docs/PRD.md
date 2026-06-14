@@ -43,7 +43,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 
 ### 2.10 Lightning Resilience & Recovery (SRL-1)
 - **Requirement**: Implement operational resilience layer for Lightning payments.
-- **Implementation**: **Superior (v0.4.12)**: Integrated `LightningResilienceAdapter` in `NexusExecutor`, providing a formalized failure taxonomy (Permanent, Transient, Indeterminate) and payment lifecycle state transition validation.
+- **Implementation**: **Superior (v0.4.13)**: Integrated `LightningResilienceAdapter` in `NexusExecutor`, providing a formalized failure taxonomy (Permanent, Transient, Indeterminate) and payment lifecycle state transition validation.
 
 ## 3. Technical Stack
 - **Language**: Rust (Tokio, Axum, Tonic)
@@ -78,7 +78,7 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Status**: **Kwil and Tableland Pilot Implementations Aligned (v0.4.2)**.
 - **Next Step**: Full migration of transactional state to Kwil/Sovereign SQL and telemetry to Nostr.
 
-## 5. Mainnet Readiness Evidence Pack (v0.4.12)
+## 5. Mainnet Readiness Evidence Pack (v0.4.13)
 
 ### 5.1 Security & TEE (CON-162)
 - **External Triggers**: ISO 20022, PAPSS, and BRICS triggers are now wired into the execution flow.
@@ -105,3 +105,8 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 5.6 Lightning Resilience (SRL-1)
 - **State Machine**: Formalized payment lifecycle transitions in `LightningResilienceAdapter`.
 - **Failure Handling**: taxonomy-based categorization for permanent vs transient failures, strengthening non-custodial operational recovery.
+
+### 5.7 Multi-Chain Tier 1 Integration (ADR-006)
+- **EVM**: Implemented `EVMAdapter` with receipt proof verification logic, enabling institutional DeFi monitoring.
+- **Cosmos**: Implemented `CosmosAdapter` with IBC Light Client verification, supporting superior interoperability models.
+- **BitVM2**: Enhanced `BitVMAdapter` with local state transition verification and audit logging.

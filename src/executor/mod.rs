@@ -1,3 +1,6 @@
+pub mod cosmos;
+pub mod evm;
+pub mod bitvm;
 pub mod lightning;
 pub mod rgb;
 
@@ -29,6 +32,9 @@ pub struct NexusExecutor {
     pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
     pub rgb_adapter: rgb::RGBAdapter,
     pub lightning_adapter: lightning::LightningResilienceAdapter,
+    pub bitvm_adapter: bitvm::BitVMAdapter,
+    pub evm_adapter: evm::EVMAdapter,
+    pub cosmos_adapter: cosmos::CosmosAdapter,
 }
 
 impl NexusExecutor {
@@ -39,11 +45,17 @@ impl NexusExecutor {
     ) -> Self {
         let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
         let lightning_adapter = lightning::LightningResilienceAdapter::new();
+        let bitvm_adapter = bitvm::BitVMAdapter::new(storage.clone());
+        let evm_adapter = evm::EVMAdapter::new(storage.clone());
+        let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
             rgb_adapter,
             lightning_adapter,
+            bitvm_adapter,
+            evm_adapter,
+            cosmos_adapter,
         }
     }
 
