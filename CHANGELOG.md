@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.4.13] - 2026-06-12
+## [0.4.13] - 2026-06-14
 
 ### Added
 - **API Completion**: Wired `/health`, `/v1/services`, and `/v1/bitvm2/verify-state-root` endpoints.
