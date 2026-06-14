@@ -27,7 +27,7 @@ To set up your local environment for development:
 
 ## Governance Support Routing
 
-- For support and issue-routing guidance, use [SUPPORT.md](SUPPORT.md).
+- For support and issue-routing guidance, use [SUPPORT.md](docs/SUPPORT.md).
 - For vulnerability handling, follow [SECURITY.md](SECURITY.md) and avoid public disclosure.
 
 ## Sensitive File Changes

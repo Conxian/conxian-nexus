@@ -12,4 +12,4 @@ This repository follows Conxian's parent-level governance defaults (policy docs,
 
 Do **not** report vulnerabilities in public issues.
 
-Follow the private reporting process in [SECURITY.md](SECURITY.md) (GitHub private advisories or `security@conxian-labs.com`).
+Follow the private reporting process in [SECURITY.md](../SECURITY.md) (GitHub private advisories or `security@conxian-labs.com`).

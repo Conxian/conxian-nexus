@@ -2,26 +2,27 @@
 
 ## Purpose
 
-`conxian-nexus` is a supporting repo in the Conxian builder platform. Its allowed role is an external API facade or interoperability layer above the canonical adapter layer.
+`conxian-nexus` is a protocol-first "Glass Node" and proof layer. Its role is the primary observation, synchronization, and verification point for multi-chain state transitions (Tier 1 Chain Families).
 
 ## This repo owns
 
-- external-facing API facade behavior when distinct from raw adapter logic
-- interoperability service boundaries that package lower-level gateway capabilities
-- partner-facing or developer-facing API composition when intentionally higher-level than direct gateway adapters
+- protocol-first "Glass Node" implementation
+- multi-chain state monitoring and normalization (Bitcoin, EVM, Cosmos)
+- cryptographic state root commitments (MMR) and proof generation
+- verifiable service interfaces (REST/gRPC) for off-chain state
+- Lightning Resilience and Recovery Layer (SRL-1)
 
 ## This repo does not own
 
-- canonical network adapters
-- provider-specific integration logic that belongs in `conxian-gateway`
-- shared-core ownership
-- protocol identity
+- canonical network adapters (handled by `conxian-gateway`)
+- raw transaction construction for target chains
+- protocol identity (handled by `lib-conxian-core`)
 - reference-client UI behavior
 
 ## Boundary rule
 
-If the concern is about direct Bitcoin mainnet, Lightning, Stacks, Rootstock, or Liquid adapter behavior, it belongs in `conxian-gateway`. If the concern is about a higher-level API surface that packages those capabilities for external consumers, it may belong here.
+If the concern is about direct network transport, RPC adaptation, or raw transaction assembly, it belongs in `conxian-gateway`. If the concern is about observing state, verifying proofs, or maintaining a verifiable synchronization layer across Tier 1 chains, it belongs here.
 
 ## Strategic role
 
-Supporting repo.
+Core Protocol Component (Glass Node).

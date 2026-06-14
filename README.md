@@ -1,14 +1,14 @@
-# Conxian Nexus
+# Conxian Nexus (Glass Node)
 
-Conxian Nexus is a middleware and proof layer that synchronizes off-chain state with Stacks L1 and exposes verifiable state services.
+Conxian Nexus is a protocol-first "Glass Node" and proof layer that synchronizes off-chain state with Stacks L1 and exposes verifiable state services for Tier 1 Chain Families (Bitcoin, EVM, Cosmos).
 
 ## Purpose
 
-Provide a verifiable synchronization, ordering, and proof layer for Conxian services that need authoritative off-chain state aligned with chain activity.
+Provide a verifiable synchronization, ordering, and proof layer for Conxian services that need authoritative off-chain state aligned with chain activity. It serves as the primary observation and verification point for multi-chain state transitions.
 
 ## Status
 
-**Active development (v0.4.13).** Production intent exists, but operators should validate readiness and deployment assumptions before use in critical environments.
+**Active development (v0.4.13).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006. Operators should validate readiness and deployment assumptions before use in critical environments.
 
 ## Scope
 
@@ -64,7 +64,7 @@ cargo test
 - Follow Semantic Versioning.
 - Create annotated tags as `vX.Y.Z`.
 - Document each release in [CHANGELOG.md](./CHANGELOG.md).
-- Use [RELEASE.md](./RELEASE.md) for the release workflow.
+- Use [RELEASE.md](./docs/RELEASE.md) for the release workflow.
 
 ## Security
 
@@ -75,9 +75,9 @@ Do not disclose vulnerabilities publicly. Use [SECURITY.md](./SECURITY.md) or `s
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)
 - [CHANGELOG.md](./CHANGELOG.md)
-- [CODEOWNERS](./CODEOWNERS)
-- [REPO_OWNERSHIP.md](./REPO_OWNERSHIP.md)
-- [RELEASE.md](./RELEASE.md)
+- [CODEOWNERS](./.github/CODEOWNERS)
+- [REPO_OWNERSHIP.md](./docs/REPO_OWNERSHIP.md)
+- [RELEASE.md](./docs/RELEASE.md)
 - [LICENSE](./LICENSE)
 
 ## Contact
