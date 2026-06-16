@@ -1,10 +1,10 @@
 # Conxian Nexus (Glass Node)
 
-Conxian Nexus is a protocol-first "Glass Node" and proof layer that synchronizes off-chain state with Stacks L1 and exposes verifiable state services for Tier 1 Chain Families (Bitcoin, EVM, Cosmos).
+Conxian Nexus is a proof, synchronization, and verification support layer for the broader Conxian ecosystem.
 
 ## Purpose
 
-Provide a verifiable synchronization, ordering, and proof layer for Conxian services that need authoritative off-chain state aligned with chain activity. It serves as the primary observation and verification point for multi-chain state transitions.
+Provide a verifiable synchronization, ordering, and proof layer for Conxian services that need authoritative off-chain state aligned with chain activity.
 
 ## Status
 
@@ -12,15 +12,15 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Scope
 
-This repository focuses on synchronization, proof generation, execution ordering, and service interfaces. It does not represent company administrative systems, legal workflows, or private operational records.
+This repository focuses on synchronization, proof generation, execution ordering, and service interfaces. It is a support and verification surface. It does not represent company administrative systems, legal workflows, or final protocol authority.
 
 ## Governance relation
 
-This repository is maintained by Conxian Labs as public infrastructure supporting the Conxian ecosystem. It may underpin protocol-adjacent services while governance of the broader protocol evolves toward greater decentralization after mainnet.
+This repository is maintained by Conxian-Labs as public infrastructure supporting Conxian. It may underpin protocol-adjacent services, but it does not replace protocol sovereignty or DAO-facing authority.
 
 ## Relationship to the Conxian stack
 
-- `Conxian` is the protocol core.
+- `Conxian` is the protocol and DAO-facing core.
 - `conxian-gateway` is the integration and middleware surface.
 - `conxian_ui` and `conxius-wallet` are public application clients that may consume Nexus-backed services.
 - `lib-conxian-core` provides shared primitives used across the stack.
