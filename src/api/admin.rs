@@ -1,3 +1,5 @@
+#[allow(clippy::result_large_err)]
+#[allow(clippy::result_large_err)]
 use axum::extract::State;
 use axum::{
     extract::{Json, Path, Query},
@@ -682,7 +684,7 @@ async fn agent_auth(
                 claim_view_token: claim_view_token.clone(),
                 otp_hash: hash_value(&otp),
                 otp_plaintext: otp,
-                requested_credential_type: requested_credential_type,
+                requested_credential_type,
                 credential: None,
                 pre_claim_scopes: vec![],
                 post_claim_scopes: post_claim_scopes.clone(),

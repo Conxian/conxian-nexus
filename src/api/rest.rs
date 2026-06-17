@@ -183,6 +183,7 @@ async fn verify_stacks_transaction(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_rest_server(
     storage: Arc<Storage>,
     nexus_state: Arc<NexusState>,
@@ -325,7 +326,7 @@ async fn execute_tx(
     State(state): State<AppState>,
     Json(payload): Json<ExecutionRequest>,
 ) -> impl IntoResponse {
-    match {
+    let res = {
         if let Ok(json_payload) = serde_json::from_str::<serde_json::Value>(&payload.payload) {
             if let Some(_routing_policy) = json_payload.get("routing_policy") {
                 if let Err(e) = crate::api::settlement::validate_routing_policy_metadata(&json_payload) {
@@ -335,7 +336,8 @@ async fn execute_tx(
             }
         }
         state.executor.submit(payload).await
-    } {
+    };
+    match res {
         Ok(res) => {
             TOTAL_TRANSACTIONS.inc();
             (StatusCode::OK, Json(res)).into_response()
@@ -873,5 +875,77 @@ mod tests {
             .unwrap();
 
         assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_success_by_tx_id() {
+        let nexus_state = Arc::new(NexusState::new());
+        let tx_id = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        {
+            let mut leaves = nexus_state.leaves.lock().unwrap();
+            leaves.push(tx_id.clone());
+            let mut mmr = nexus_state.mmr.lock().unwrap();
+            mmr.add_leaf(tx_id.as_bytes());
+        }
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new(), nexus_state);
+        let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_active_found() {
+        let cid = "rgb:contract-found-in-active-mode-sufficient-length";
+        let mut known = HashSet::new();
+        known.insert(cid.to_string());
+        let app = test_router_with_options(true, RGBRolloutMode::Active, known);
+        let response = app.oneshot(Request::builder().uri(&format!("/v1/rgb/contract?contract_id={}", cid)).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_event_feed_with_params() {
+        let app = test_router();
+        let response = app.oneshot(Request::builder().uri("/v1/events?cursor=10&limit=5").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_invalid_tx_id_format_cases() {
+        let app = test_router();
+        let response = app.clone().oneshot(Request::builder().uri("/v1/mmr-proof?tx_id=0x123").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof?tx_id=123456789012345678901234567890123456789012345678901234567890123456").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_rgb_contract_missing_or_invalid() {
+        let app = test_router();
+        let response = app.clone().oneshot(Request::builder().uri("/v1/rgb/contract?contract_id=").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let response = app.oneshot(Request::builder().uri("/v1/rgb/contract?contract_id=invalid").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_missing_all_params() {
+        let app = test_router();
+        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_index_out_of_bounds() {
+        let app = test_router();
+        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof?index=999999").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_tx_id_not_found() {
+        let app = test_router();
+        let tx_id = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

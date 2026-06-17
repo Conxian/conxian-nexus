@@ -161,12 +161,24 @@ mod tests {
     }
 
     #[test]
+    fn test_schema_display() {
+        assert_eq!(RGBSchema::NIA.to_string(), "NIA");
+        assert_eq!(RGBSchema::LNPBP.to_string(), "LNPBP");
+        assert_eq!(RGBSchema::Unknown.to_string(), "Unknown");
+    }
+
+    #[test]
     fn test_schema_validation() {
         let adapter = RGBAdapter::new(RGBRolloutMode::Shadow);
         assert_eq!(adapter.validate_contract_id("rgb:asset_nia_123456789012345678901234567890").unwrap(), RGBSchema::NIA);
         assert_eq!(adapter.validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890").unwrap(), RGBSchema::LNPBP);
         assert_eq!(adapter.validate_contract_id(valid_contract_id()).unwrap(), RGBSchema::Unknown);
-        assert!(adapter.validate_contract_id("invalid").is_err());
+
+        let err_prefix = adapter.validate_contract_id("invalid").unwrap_err();
+        assert!(err_prefix.to_string().contains("prefix"));
+
+        let err_len = adapter.validate_contract_id("rgb:short").unwrap_err();
+        assert!(err_len.to_string().contains("length"));
     }
 
     #[tokio::test]
@@ -182,5 +194,45 @@ mod tests {
         assert_eq!(metadata.status, "verified");
         assert_eq!(metadata.mode, RGBRolloutMode::Shadow);
         assert_eq!(metadata.schema, RGBSchema::Unknown);
+    }
+
+    #[tokio::test]
+    async fn test_lookup_contract_disabled_bails() {
+        let adapter = RGBAdapter::new(RGBRolloutMode::Disabled);
+        let res = adapter.lookup_contract(valid_contract_id()).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_lookup_contract_active_found() {
+        let mut known = HashSet::new();
+        let cid = valid_contract_id();
+        known.insert(cid.to_string());
+        let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, known);
+
+        let metadata = adapter.lookup_contract(cid).await.unwrap().unwrap();
+        assert_eq!(metadata.status, "active");
+        assert_eq!(metadata.mode, RGBRolloutMode::Active);
+    }
+
+    #[tokio::test]
+    async fn test_lookup_contract_active_not_found() {
+        let adapter = RGBAdapter::new(RGBRolloutMode::Active);
+        let res = adapter.lookup_contract(valid_contract_id()).await.unwrap();
+        assert!(res.is_none());
+    }
+
+    #[test]
+    fn test_adapter_constructors() {
+        let adapter1 = RGBAdapter::new(RGBRolloutMode::Disabled);
+        assert_eq!(adapter1.mode, RGBRolloutMode::Disabled);
+        assert!(adapter1.known_contracts.is_empty());
+
+        let mut known = HashSet::new();
+        known.insert("test".to_string());
+        let adapter2 = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, known);
+        assert_eq!(adapter2.mode, RGBRolloutMode::Active);
+        assert_eq!(adapter2.known_contracts.len(), 1);
     }
 }
