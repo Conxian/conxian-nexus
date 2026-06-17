@@ -880,14 +880,16 @@ mod tests {
     #[tokio::test]
     async fn test_get_mmr_proof_success_by_tx_id() {
         let nexus_state = Arc::new(NexusState::new());
-        let tx_id = "0x1234567890123456789012345678901234567890123456789012345678901234".to_string();
+        let tx_id = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
         {
             let mut leaves = nexus_state.leaves.lock().unwrap();
             leaves.push(tx_id.clone());
+            let mut mmr = nexus_state.mmr.lock().unwrap();
+            mmr.add_leaf(tx_id.as_bytes());
         }
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new(), nexus_state);
         let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -923,5 +925,27 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let response = app.oneshot(Request::builder().uri("/v1/rgb/contract?contract_id=invalid").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_missing_all_params() {
+        let app = test_router();
+        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_index_out_of_bounds() {
+        let app = test_router();
+        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof?index=999999").body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_get_mmr_proof_tx_id_not_found() {
+        let app = test_router();
+        let tx_id = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+        let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
