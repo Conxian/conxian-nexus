@@ -62,6 +62,12 @@ pub struct LightningResilienceAdapter {
     // In a real implementation, this would likely hold a reference to storage or a relay.
 }
 
+impl Default for LightningResilienceAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LightningResilienceAdapter {
     pub fn new() -> Self {
         Self {}
@@ -73,15 +79,7 @@ impl LightningResilienceAdapter {
         current: LightningPaymentStatus,
         next: LightningPaymentStatus,
     ) -> bool {
-        match (current, next) {
-            (LightningPaymentStatus::Pending, LightningPaymentStatus::Succeeded) => true,
-            (LightningPaymentStatus::Pending, LightningPaymentStatus::Failed) => true,
-            (LightningPaymentStatus::Pending, LightningPaymentStatus::Recovering) => true,
-            (LightningPaymentStatus::Recovering, LightningPaymentStatus::Succeeded) => true,
-            (LightningPaymentStatus::Recovering, LightningPaymentStatus::Failed) => true,
-            (LightningPaymentStatus::Failed, LightningPaymentStatus::Recovering) => true,
-            _ => false,
-        }
+        matches!((current, next), (LightningPaymentStatus::Pending, LightningPaymentStatus::Succeeded) | (LightningPaymentStatus::Pending, LightningPaymentStatus::Failed) | (LightningPaymentStatus::Pending, LightningPaymentStatus::Recovering) | (LightningPaymentStatus::Recovering, LightningPaymentStatus::Succeeded) | (LightningPaymentStatus::Recovering, LightningPaymentStatus::Failed) | (LightningPaymentStatus::Failed, LightningPaymentStatus::Recovering))
     }
 
     /// Determines the failure taxonomy from a raw error or reason.

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.14] - 2026-06-16
+
+### Added
+- **Clarity 4 Verification**: Integrated `verify_contracts.sh` into CI to ensure protocol adapter alignment with Tier 1 specifications.
+- **Improvement Proposals**: Formalized Nexus Improvement Proposals (NIPs) for governance and resilience expansions in `docs/RESEARCH.md`.
+- **Observability Runbook**: Created `docs/remediation/OBSERVABILITY_RUNBOOK.md` covering sync drift and failure recovery.
+
+### Changed
+- **CI Baseline Hardening**: Remediated Material clippy errors (`result_large_err`, `blocks_in_conditions`) to restore a trustworthy merge signal.
+- **README Alignment**: Refactored landing page to clarify "Glass Node" role and infrastructure boundaries (CON-1215).
+- **Test Coverage**: Increased Bitcoin-scoped coverage to 92.31% via targeted RGB and MMR edge-case testing.
+
+### Security
+- **Governance Remediation**: Drafted remediation plan for single-key admin risks (CON-1202) including multi-agent threshold signing.
+
 ## [0.4.13] - 2026-06-14
 
 ### Added
