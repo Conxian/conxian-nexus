@@ -19,11 +19,11 @@ use std::sync::OnceLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tower::util::ServiceExt;
 
-const RELEASE_APPROVAL_PAYLOAD: &str = r#"{"artifactId":"artifact-1","requestedBy":"actor-1"}"#;
+const RELEASE_APPROVAL_PAYLOAD: &str = r#"{"artifactId":"artifact-1","requestedBy":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
 const RELEASE_DECISION_PAYLOAD: &str =
-    r#"{"artifactId":"artifact-1","decision":"approve","actorId":"actor-1"}"#;
+    r#"{"artifactId":"artifact-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
 const GOVERNANCE_DECISION_PAYLOAD: &str =
-    r#"{"actionId":"action-1","decision":"approve","actorId":"actor-1"}"#;
+    r#"{"actionId":"action-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
 const SAFETY_MODE_ACK_PAYLOAD: &str = r#"{"ackBy":"operator-1","reason":"acknowledged"}"#;
 
 #[derive(Clone)]

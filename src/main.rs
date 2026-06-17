@@ -13,6 +13,13 @@ use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry::{global, trace::TracerProvider};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::Resource;
+use opentelemetry_sdk::trace::{self as sdktrace};
+use tracing_subscriber::{prelude::*, EnvFilter};
+use opentelemetry::KeyValue;
 use lib_conxian_core::Wallet;
 use std::future;
 use std::sync::Arc;
@@ -26,10 +33,39 @@ async fn main() -> anyhow::Result<()> {
 
     let config = Config::from_env().context("Failed to load configuration")?;
 
+    // Initialize tracing
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_filter(EnvFilter::new(&config.rust_log));
+
+    if let Some(endpoint) = &config.otel_exporter_otlp_endpoint {
+        global::set_text_map_propagator(TraceContextPropagator::new());
+        let tracer = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(endpoint)
+            .build()
+            .expect("Failed to create OTLP exporter");
+
+        let tracer = sdktrace::TracerProvider::builder()
+            .with_batch_exporter(tracer, opentelemetry_sdk::runtime::Tokio)
+            .with_resource(Resource::new(vec![
+                KeyValue::new("service.name", config.otel_service_name.clone()),
+            ]))
+            .build()
+            .tracer("conxian-nexus");
+
+        let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .with(otel_layer)
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(fmt_layer)
+            .init();
+    }
+
+
     // Initialize logging using the centralized config
-    tracing_subscriber::fmt()
-        .with_env_filter(&config.rust_log)
-        .init();
 
     tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.13)...");
 

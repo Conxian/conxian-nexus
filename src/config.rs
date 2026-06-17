@@ -50,6 +50,8 @@ pub struct Config {
     pub worldid_app_id: String,
     pub zkml_vks: HashMap<String, String>,
     pub admin_api_token: Option<String>,
+    pub otel_exporter_otlp_endpoint: Option<String>,
+    pub otel_service_name: String,
 }
 
 impl std::fmt::Debug for Config {
@@ -114,6 +116,8 @@ impl Config {
             worldid_app_id: "".to_string(),
             zkml_vks: HashMap::new(),
             admin_api_token: None,
+            otel_exporter_otlp_endpoint: None,
+            otel_service_name: "conxian-nexus".to_string(),
         }
     }
 
@@ -239,6 +243,8 @@ impl Config {
 
         let worldid_app_id = env::var("WORLDID_APP_ID").unwrap_or_default();
 
+        let otel_exporter_otlp_endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let otel_service_name = env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "conxian-nexus".to_string());
         let admin_api_token = env::var(ENV_ADMIN_API_TOKEN)
             .ok()
             .map(|s| s.trim().to_string())
@@ -283,6 +289,8 @@ impl Config {
             worldid_app_id,
             zkml_vks,
             admin_api_token,
+            otel_exporter_otlp_endpoint,
+            otel_service_name,
         })
     }
 }

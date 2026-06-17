@@ -75,16 +75,26 @@ struct ProtectedStatusResponse {
 }
 
 #[derive(Deserialize)]
+#[derive(Debug)]
 pub struct ReleaseApprovalRequest {
     #[serde(rename = "artifactId")]
     pub artifact_id: String,
     #[serde(rename = "requestedBy")]
     pub requested_by: String,
+    #[serde(rename = "secondApprover")]
+    pub second_approver: Option<String>,
+    #[serde(rename = "signatures")]
+    pub signatures: Option<Vec<String>>,
     pub notes: Option<String>,
 }
 
 #[derive(Deserialize)]
+#[derive(Debug)]
 pub struct ReleaseDecisionRequest {
+    #[serde(rename = "secondApprover")]
+    pub second_approver: Option<String>,
+    #[serde(rename = "signatures")]
+    pub signatures: Option<Vec<String>>,
     #[serde(rename = "artifactId")]
     pub artifact_id: String,
     pub decision: String,
@@ -94,7 +104,12 @@ pub struct ReleaseDecisionRequest {
 }
 
 #[derive(Deserialize)]
+#[derive(Debug)]
 pub struct GovernanceDecisionRequest {
+    #[serde(rename = "secondApprover")]
+    pub second_approver: Option<String>,
+    #[serde(rename = "signatures")]
+    pub signatures: Option<Vec<String>>,
     #[serde(rename = "actionId")]
     pub action_id: String,
     pub decision: String,
@@ -324,12 +339,48 @@ async fn get_protected_status(
     }))
 }
 
+pub trait DualSignatureRequest {
+    fn second_approver(&self) -> &Option<String>;
+    fn signatures(&self) -> &Option<Vec<String>>;
+
+    fn validate_dual_signature(&self) -> Result<(), (StatusCode, Json<Value>)> {
+        if self.second_approver().is_none() || self.signatures().as_ref().map(|s| s.len()).unwrap_or(0) < 2 {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({
+                    "error": "insufficient_approvals",
+                    "error_description": "Action requires dual-signature (Two-Person Control)"
+                })),
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl DualSignatureRequest for ReleaseApprovalRequest {
+    fn second_approver(&self) -> &Option<String> { &self.second_approver }
+    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+}
+
+impl DualSignatureRequest for ReleaseDecisionRequest {
+    fn second_approver(&self) -> &Option<String> { &self.second_approver }
+    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+}
+
+impl DualSignatureRequest for GovernanceDecisionRequest {
+    fn second_approver(&self) -> &Option<String> { &self.second_approver }
+    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+}
+
+#[tracing::instrument(skip(state))]
 async fn request_release_approval(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseApprovalRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
+
+    payload.validate_dual_signature().map_err(|e| e.into_response())?;
 
     Ok(Json(ReleaseApprovalResponse {
         accepted: true,
@@ -342,12 +393,16 @@ async fn request_release_approval(
     }))
 }
 
+#[tracing::instrument(skip(state))]
 async fn submit_release_decision(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
+
+    payload.validate_dual_signature().map_err(|e| e.into_response())?;
+
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -360,12 +415,16 @@ async fn submit_release_decision(
     }))
 }
 
+#[tracing::instrument(skip(state))]
 async fn submit_governance_decision(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<GovernanceDecisionRequest>,
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
+
+    payload.validate_dual_signature().map_err(|e| e.into_response())?;
+
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,

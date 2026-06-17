@@ -47,6 +47,7 @@ pub struct AppState {
 }
 
 #[derive(Deserialize)]
+#[derive(Debug)]
 pub struct ProofParams {
     pub key: String,
 }
@@ -59,6 +60,7 @@ pub struct ProofResponse {
 }
 
 #[derive(Deserialize)]
+#[derive(Debug)]
 pub struct MMRProofParams {
     pub index: Option<u64>,
     pub tx_id: Option<String>,
@@ -214,6 +216,7 @@ pub async fn start_rest_server(
     Ok(())
 }
 
+#[tracing::instrument(skip(state))]
 async fn get_proof(
     State(state): State<AppState>,
     Query(params): Query<ProofParams>,
@@ -228,6 +231,7 @@ async fn get_proof(
     }
 }
 
+#[tracing::instrument(skip(state))]
 async fn get_mmr_proof(
     State(state): State<AppState>,
     Query(params): Query<MMRProofParams>,
@@ -322,6 +326,7 @@ async fn prometheus_metrics() -> impl IntoResponse {
         .unwrap()
 }
 
+#[tracing::instrument(skip(state))]
 async fn execute_tx(
     State(state): State<AppState>,
     Json(payload): Json<ExecutionRequest>,

@@ -47,6 +47,7 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 - [Operator Guide](./docs/PRD.md)
 - [API Reference](./docs/openapi.yaml)
 - [Security Model](./SECURITY.md)
+- [Observability & Runbooks](./docs/remediation/OBSERVABILITY_RUNBOOK.md)
 
 ## Getting started
 
