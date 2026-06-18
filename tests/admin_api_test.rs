@@ -711,3 +711,32 @@ fn test_openapi_admin_v1_surface_matches_router_contract() {
     let openapi_paths = parse_openapi_admin_v1_methods();
     assert_eq!(openapi_paths, expected);
 }
+
+#[tokio::test]
+async fn test_admin_write_rejects_single_signature() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+
+    let app = test_router();
+
+    let single_sig_payload = r#"{"artifactId":"artifact-1","requestedBy":"actor-1","signatures":["sig1"]}"#;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/v1/releases/request-approval")
+                .header(header::HOST, "nexus.test")
+                .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(single_sig_payload))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json.get("error").and_then(Value::as_str), Some("insufficient_approvals"));
+}

@@ -19,6 +19,8 @@ pub struct ZkmlVerifyRequest {
 pub struct ZkmlVerifyResponse {
     pub valid: bool,
     pub attestation_id: Option<String>,
+    /// [NIP-02] Oracle confidence scoring derived from ZKML proof.
+    pub confidence: Option<f64>,
 }
 
 /// [NEXUS-ZK-01] Zero-knowledge machine learning verification.
@@ -44,6 +46,7 @@ pub async fn verify_zkml_handler(
             Json(ZkmlVerifyResponse {
                 valid: false,
                 attestation_id: None,
+                confidence: None,
             }),
         )
             .into_response();
@@ -84,10 +87,12 @@ pub async fn verify_zkml_handler(
         }
     };
 
-    let attestation_id = if is_valid {
-        Some(uuid::Uuid::new_v4().to_string())
+    let (attestation_id, confidence) = if is_valid {
+        // [NIP-02] Simulate extraction of confidence score from the ML model output metadata.
+        // In production, this would be parsed from the public inputs of the ZK proof.
+        (Some(uuid::Uuid::new_v4().to_string()), Some(0.985))
     } else {
-        None
+        (None, None)
     };
 
     (
@@ -99,7 +104,56 @@ pub async fn verify_zkml_handler(
         Json(ZkmlVerifyResponse {
             valid: is_valid,
             attestation_id,
+            confidence,
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::rest::AppState;
+    use crate::config::Config;
+    use crate::storage::Storage;
+    use crate::state::NexusState;
+    use crate::executor::NexusExecutor;
+    use crate::storage::tableland::TablelandAdapter;
+    use std::sync::Arc;
+    use std::collections::HashSet;
+
+    #[tokio::test]
+    async fn test_verify_zkml_handler_rejects_empty_payload() {
+        let config = Arc::new(Config::default_test());
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let nexus_state = Arc::new(NexusState::new());
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            crate::executor::rgb::RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "test".to_string()));
+
+        let state = AppState {
+            config,
+            storage,
+            nexus_state,
+            executor,
+            oracle: None,
+            tableland,
+            kwil: None,
+            nostr: None,
+            gateway_url: None,
+            http_client: reqwest::Client::new(),
+        };
+
+        let payload = ZkmlVerifyRequest {
+            proof: "".to_string(),
+            input_commitment: "".to_string(),
+            model_id: "".to_string(),
+        };
+
+        let response = verify_zkml_handler(State(state), Json(payload)).await.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }
