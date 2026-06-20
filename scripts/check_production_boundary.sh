@@ -25,8 +25,6 @@ EXCLUDE_FILES=(
     "README.md"
     "verify_contamination_guard.py"
     "check_production_boundary.sh"
-    "gitleaks"
-    "gitleaks.tar.gz"
 )
 
 # Build exclude arguments for grep
