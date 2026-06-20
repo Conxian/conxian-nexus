@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.15] - 2026-06-18
+
+### Removed
+- **Redundant Artifacts**: Removed `gitleaks` binary, `gitleaks.tar.gz` archive, and `fix_coverage_v2.py` script from the repository root to ensure repository hygiene and avoid tracking generated or third-party artifacts.
+
 ## [0.4.14] - 2026-06-16
 
 ### Added
