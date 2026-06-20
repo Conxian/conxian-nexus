@@ -4,16 +4,16 @@ use axum::{
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-use std::collections::HashSet;
-use conxian_nexus::executor::rgb::RGBRolloutMode;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let config = Config::default_test();

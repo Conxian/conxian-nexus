@@ -87,7 +87,7 @@ impl RGBAdapter {
         }
 
         if contract_id.len() < 40 {
-             anyhow::bail!("Invalid RGB contract ID length: too short");
+            anyhow::bail!("Invalid RGB contract ID length: too short");
         }
 
         // Schema heuristics based on suffix or patterns (simulated)
@@ -101,7 +101,10 @@ impl RGBAdapter {
     }
 
     /// Performs a contract lookup.
-    pub async fn lookup_contract(&self, contract_id: &str) -> anyhow::Result<Option<RGBContractMetadata>> {
+    pub async fn lookup_contract(
+        &self,
+        contract_id: &str,
+    ) -> anyhow::Result<Option<RGBContractMetadata>> {
         let schema = self.validate_contract_id(contract_id)?;
 
         match self.mode {
@@ -170,9 +173,22 @@ mod tests {
     #[test]
     fn test_schema_validation() {
         let adapter = RGBAdapter::new(RGBRolloutMode::Shadow);
-        assert_eq!(adapter.validate_contract_id("rgb:asset_nia_123456789012345678901234567890").unwrap(), RGBSchema::NIA);
-        assert_eq!(adapter.validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890").unwrap(), RGBSchema::LNPBP);
-        assert_eq!(adapter.validate_contract_id(valid_contract_id()).unwrap(), RGBSchema::Unknown);
+        assert_eq!(
+            adapter
+                .validate_contract_id("rgb:asset_nia_123456789012345678901234567890")
+                .unwrap(),
+            RGBSchema::NIA
+        );
+        assert_eq!(
+            adapter
+                .validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890")
+                .unwrap(),
+            RGBSchema::LNPBP
+        );
+        assert_eq!(
+            adapter.validate_contract_id(valid_contract_id()).unwrap(),
+            RGBSchema::Unknown
+        );
 
         let err_prefix = adapter.validate_contract_id("invalid").unwrap_err();
         assert!(err_prefix.to_string().contains("prefix"));

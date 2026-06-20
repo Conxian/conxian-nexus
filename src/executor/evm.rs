@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// EVM Receipt Proof model.
@@ -31,7 +31,10 @@ impl EVMAdapter {
     }
 
     /// Verifies an EVM receipt proof against a known or fetched receipt root.
-    pub async fn verify_receipt_proof(&self, proof: &EVMReceiptProof) -> anyhow::Result<EVMVerificationResult> {
+    pub async fn verify_receipt_proof(
+        &self,
+        proof: &EVMReceiptProof,
+    ) -> anyhow::Result<EVMVerificationResult> {
         // [ADR-006] Implement receipt proof verification logic.
         // In this phase, we perform structural validation and check block hash format.
 

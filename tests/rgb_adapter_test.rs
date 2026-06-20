@@ -54,7 +54,10 @@ async fn test_rgb_contract_lookup_shadow_mode() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
 
-    assert_eq!(json["contract_id"], "rgb:test123_nia_long_enough_id_for_validation");
+    assert_eq!(
+        json["contract_id"],
+        "rgb:test123_nia_long_enough_id_for_validation"
+    );
     assert_eq!(json["mode"], "shadow");
     assert_eq!(json["status"], "verified");
 }

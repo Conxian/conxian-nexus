@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Failure taxonomy for Lightning payments.
@@ -85,19 +85,20 @@ impl LightningResilienceAdapter {
         next: LightningPaymentStatus,
     ) -> bool {
         use LightningPaymentStatus::*;
-        matches!((current, next),
-            (Pending, Succeeded) |
-            (Pending, Failed) |
-            (Pending, Recovering) |
-            (Pending, MppSplitting) |
-            (MppSplitting, Succeeded) |
-            (MppSplitting, Failed) |
-            (MppSplitting, Recovering) |
-            (Recovering, Succeeded) |
-            (Recovering, Failed) |
-            (Recovering, MppSplitting) |
-            (Failed, Recovering) |
-            (Failed, MppSplitting)
+        matches!(
+            (current, next),
+            (Pending, Succeeded)
+                | (Pending, Failed)
+                | (Pending, Recovering)
+                | (Pending, MppSplitting)
+                | (MppSplitting, Succeeded)
+                | (MppSplitting, Failed)
+                | (MppSplitting, Recovering)
+                | (Recovering, Succeeded)
+                | (Recovering, Failed)
+                | (Recovering, MppSplitting)
+                | (Failed, Recovering)
+                | (Failed, MppSplitting)
         )
     }
 
@@ -122,18 +123,39 @@ mod tests {
     #[test]
     fn test_validate_transition() {
         let adapter = LightningResilienceAdapter::new();
-        assert!(adapter.validate_transition(LightningPaymentStatus::Pending, LightningPaymentStatus::MppSplitting));
-        assert!(adapter.validate_transition(LightningPaymentStatus::MppSplitting, LightningPaymentStatus::Succeeded));
-        assert!(adapter.validate_transition(LightningPaymentStatus::Failed, LightningPaymentStatus::MppSplitting));
-        assert!(!adapter.validate_transition(LightningPaymentStatus::Succeeded, LightningPaymentStatus::Pending));
+        assert!(adapter.validate_transition(
+            LightningPaymentStatus::Pending,
+            LightningPaymentStatus::MppSplitting
+        ));
+        assert!(adapter.validate_transition(
+            LightningPaymentStatus::MppSplitting,
+            LightningPaymentStatus::Succeeded
+        ));
+        assert!(adapter.validate_transition(
+            LightningPaymentStatus::Failed,
+            LightningPaymentStatus::MppSplitting
+        ));
+        assert!(!adapter.validate_transition(
+            LightningPaymentStatus::Succeeded,
+            LightningPaymentStatus::Pending
+        ));
     }
 
     #[test]
     fn test_categorize_failure() {
         let adapter = LightningResilienceAdapter::new();
-        assert_eq!(adapter.categorize_failure("no_route to node"), LightningFailureType::Permanent);
-        assert_eq!(adapter.categorize_failure("mpp_partial_failure: path 2 failed"), LightningFailureType::MppPartial);
-        assert_eq!(adapter.categorize_failure("mpp_timeout occurred"), LightningFailureType::Indeterminate);
+        assert_eq!(
+            adapter.categorize_failure("no_route to node"),
+            LightningFailureType::Permanent
+        );
+        assert_eq!(
+            adapter.categorize_failure("mpp_partial_failure: path 2 failed"),
+            LightningFailureType::MppPartial
+        );
+        assert_eq!(
+            adapter.categorize_failure("mpp_timeout occurred"),
+            LightningFailureType::Indeterminate
+        );
     }
 }
 
@@ -145,8 +167,14 @@ mod extra_tests {
     fn test_failure_type_display() {
         assert_eq!(format!("{}", LightningFailureType::Permanent), "permanent");
         assert_eq!(format!("{}", LightningFailureType::Transient), "transient");
-        assert_eq!(format!("{}", LightningFailureType::Indeterminate), "indeterminate");
-        assert_eq!(format!("{}", LightningFailureType::MppPartial), "mpp_partial");
+        assert_eq!(
+            format!("{}", LightningFailureType::Indeterminate),
+            "indeterminate"
+        );
+        assert_eq!(
+            format!("{}", LightningFailureType::MppPartial),
+            "mpp_partial"
+        );
     }
 
     #[test]
@@ -167,7 +195,13 @@ mod extra_tests {
     #[test]
     fn test_categorize_split_error() {
         let adapter = LightningResilienceAdapter::new();
-        assert_eq!(adapter.categorize_failure("split_error: amount too high"), LightningFailureType::MppPartial);
-        assert_eq!(adapter.categorize_failure("random error"), LightningFailureType::Transient);
+        assert_eq!(
+            adapter.categorize_failure("split_error: amount too high"),
+            LightningFailureType::MppPartial
+        );
+        assert_eq!(
+            adapter.categorize_failure("random error"),
+            LightningFailureType::Transient
+        );
     }
 }

@@ -1,6 +1,6 @@
+use conxian_nexus::config::Config;
 use conxian_nexus::executor::stacks::{StacksAdapter, StacksTransaction};
 use conxian_nexus::storage::Storage;
-use conxian_nexus::config::Config;
 use std::sync::Arc;
 
 #[tokio::test]

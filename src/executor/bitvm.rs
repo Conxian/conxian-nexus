@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 
 /// BitVM2 State Transition model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +32,10 @@ impl BitVMAdapter {
     }
 
     /// Simulates a state transition verification and persists the result.
-    pub async fn verify_transition(&self, transition: &BitVMTransition) -> anyhow::Result<BitVMVerificationResult> {
+    pub async fn verify_transition(
+        &self,
+        transition: &BitVMTransition,
+    ) -> anyhow::Result<BitVMVerificationResult> {
         if transition.prev_state_root.len() != 66 || !transition.prev_state_root.starts_with("0x") {
             return Ok(BitVMVerificationResult {
                 valid: false,

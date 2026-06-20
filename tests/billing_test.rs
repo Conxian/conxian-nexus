@@ -4,16 +4,16 @@ use axum::{
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-use std::collections::HashSet;
-use conxian_nexus::executor::rgb::RGBRolloutMode;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let mut config = Config::default_test();
@@ -63,11 +63,14 @@ async fn test_billing_flow() {
                 .method("POST")
                 .uri("/v1/billing/generate-key")
                 .header("Content-Type", "application/json")
-                .body(Body::from(json!({
-                    "organization_id": "org1",
-                    "developer_email": "dev@example.com",
-                    "project_name": "project1"
-                }).to_string()))
+                .body(Body::from(
+                    json!({
+                        "organization_id": "org1",
+                        "developer_email": "dev@example.com",
+                        "project_name": "project1"
+                    })
+                    .to_string(),
+                ))
                 .unwrap(),
         )
         .await
@@ -79,13 +82,16 @@ async fn test_billing_flow() {
     let status = response.status();
     assert!(
         status == StatusCode::OK || status == StatusCode::INTERNAL_SERVER_ERROR,
-        "Expected 200 or 500, got {}", status
+        "Expected 200 or 500, got {}",
+        status
     );
 
     if status == StatusCode::OK {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: Value = serde_json::from_slice(&body).unwrap();
-        let api_key = res["api_key"].as_str().expect("Missing api_key in response");
+        let api_key = res["api_key"]
+            .as_str()
+            .expect("Missing api_key in response");
 
         // 2. Use Key
         let response = app
@@ -100,6 +106,10 @@ async fn test_billing_flow() {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK, "Status endpoint should be reachable");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "Status endpoint should be reachable"
+        );
     }
 }

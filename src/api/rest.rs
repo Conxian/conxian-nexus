@@ -2,9 +2,12 @@ use crate::api::billing::nostr::NostrTelemetry;
 use crate::api::identity::resolve_identity_handler;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
-use crate::executor::{ExecutionRequest, NexusExecutor, bitvm::BitVMTransition, evm::EVMReceiptProof, cosmos::IBCClientUpdate, stacks::StacksTransaction};
+use crate::executor::{
+    bitvm::BitVMTransition, cosmos::IBCClientUpdate, evm::EVMReceiptProof,
+    stacks::StacksTransaction, ExecutionRequest, NexusExecutor,
+};
 use crate::oracle::OracleService;
-use crate::state::{NexusState, MerkleProof};
+use crate::state::{MerkleProof, NexusState};
 use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::storage::Storage;
@@ -46,8 +49,7 @@ pub struct AppState {
     pub config: Arc<Config>,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct ProofParams {
     pub key: String,
 }
@@ -59,8 +61,7 @@ pub struct ProofResponse {
     pub root: String,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct MMRProofParams {
     pub index: Option<u64>,
     pub tx_id: Option<String>,
@@ -83,7 +84,7 @@ pub struct EventEnvelope {
     pub event_id: String,
     pub tx_id: String,
     pub block_height: u64,
-    pub finality: String, // "soft" or "hard"
+    pub finality: String,   // "soft" or "hard"
     pub trust_tier: String, // "T1", "T2", "T3"
     pub proof_reference: String,
     pub payload: serde_json::Value,
@@ -179,9 +180,18 @@ async fn verify_stacks_transaction(
     State(state): State<AppState>,
     Json(payload): Json<StacksTransaction>,
 ) -> impl IntoResponse {
-    match state.executor.stacks_adapter.verify_transaction(&payload).await {
+    match state
+        .executor
+        .stacks_adapter
+        .verify_transaction(&payload)
+        .await
+    {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
@@ -334,9 +344,15 @@ async fn execute_tx(
     let res = {
         if let Ok(json_payload) = serde_json::from_str::<serde_json::Value>(&payload.payload) {
             if let Some(_routing_policy) = json_payload.get("routing_policy") {
-                if let Err(e) = crate::api::settlement::validate_routing_policy_metadata(&json_payload) {
+                if let Err(e) =
+                    crate::api::settlement::validate_routing_policy_metadata(&json_payload)
+                {
                     tracing::warn!(reason = %e.reason, "Execution blocked by routing policy");
-                    return (StatusCode::FORBIDDEN, Json(json!({ "error": format!("Routing policy violation: {}", e.reason) }))).into_response();
+                    return (
+                        StatusCode::FORBIDDEN,
+                        Json(json!({ "error": format!("Routing policy violation: {}", e.reason) })),
+                    )
+                        .into_response();
                 }
             }
         }
@@ -374,9 +390,18 @@ async fn verify_evm_receipt(
     State(state): State<AppState>,
     Json(payload): Json<EVMReceiptProof>,
 ) -> impl IntoResponse {
-    match state.executor.evm_adapter.verify_receipt_proof(&payload).await {
+    match state
+        .executor
+        .evm_adapter
+        .verify_receipt_proof(&payload)
+        .await
+    {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
@@ -384,9 +409,18 @@ async fn verify_cosmos_ibc_update(
     State(state): State<AppState>,
     Json(payload): Json<IBCClientUpdate>,
 ) -> impl IntoResponse {
-    match state.executor.cosmos_adapter.verify_client_update(&payload).await {
+    match state
+        .executor
+        .cosmos_adapter
+        .verify_client_update(&payload)
+        .await
+    {
         Ok(result) => (StatusCode::OK, Json(result)).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
@@ -396,7 +430,12 @@ async fn verify_bitvm2_state_root(
 ) -> impl IntoResponse {
     // 1. Attempt local simulation/verification if possible
     if let Ok(transition) = serde_json::from_value::<BitVMTransition>(payload.clone()) {
-        match state.executor.bitvm_adapter.verify_transition(&transition).await {
+        match state
+            .executor
+            .bitvm_adapter
+            .verify_transition(&transition)
+            .await
+        {
             Ok(result) => {
                 if result.valid {
                     tracing::info!(trace_id = %transition.trace_id, "BitVM2 transition verified locally");
@@ -415,7 +454,13 @@ async fn verify_bitvm2_state_root(
             .join("/v1/bitvm2/verify-state-root")
             .expect("Invalid gateway URL join");
 
-        match state.http_client.post(verify_url).json(&payload).send().await {
+        match state
+            .http_client
+            .post(verify_url)
+            .json(&payload)
+            .send()
+            .await
+        {
             Ok(resp) => {
                 let status = resp.status();
                 let body = resp.json::<serde_json::Value>().await.unwrap_or(json!({}));
@@ -441,13 +486,26 @@ async fn get_rgb_contract(
     Query(params): Query<RGBContractParams>,
 ) -> impl IntoResponse {
     if params.contract_id.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "missing contract_id"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "missing contract_id"})),
+        )
+            .into_response();
     }
 
-    match state.executor.rgb_adapter.lookup_contract(&params.contract_id).await {
+    match state
+        .executor
+        .rgb_adapter
+        .lookup_contract(&params.contract_id)
+        .await
+    {
         Ok(contract) => match contract {
             Some(metadata) => (StatusCode::OK, Json(metadata)).into_response(),
-            None => (StatusCode::NOT_FOUND, Json(json!({"error": "RGB contract not found"}))).into_response(),
+            None => (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "RGB contract not found"})),
+            )
+                .into_response(),
         },
         Err(e) => {
             let status = if e.to_string().contains("not found") {
@@ -472,51 +530,66 @@ async fn get_event_feed(
     let rows = match sqlx::query(
         "SELECT pos, hash, block_height FROM mmr_nodes
          WHERE pos >= $1 AND block_height > 0
-         ORDER BY pos ASC LIMIT $2"
+         ORDER BY pos ASC LIMIT $2",
     )
     .bind(cursor as i64)
     .bind(limit as i64)
     .fetch_all(&state.storage.pg_pool)
-    .await {
+    .await
+    {
         Ok(r) => r,
-        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": e.to_string()})),
+            )
+                .into_response()
+        }
     };
 
-    let events: Vec<EventEnvelope> = rows.into_iter().map(|row| {
-        let pos: i64 = row.get("pos");
-        let hash: Vec<u8> = row.get("hash");
-        let block_height: i64 = row.get("block_height");
-        let tx_id = format!("0x{}", hex::encode(hash));
+    let events: Vec<EventEnvelope> = rows
+        .into_iter()
+        .map(|row| {
+            let pos: i64 = row.get("pos");
+            let hash: Vec<u8> = row.get("hash");
+            let block_height: i64 = row.get("block_height");
+            let tx_id = format!("0x{}", hex::encode(hash));
 
-        EventEnvelope {
-            sequence: pos as u64,
-            event_id: format!("evt_{}", pos),
-            tx_id: tx_id.clone(),
-            block_height: block_height as u64,
-            finality: if block_height > 0 { "hard".to_string() } else { "soft".to_string() },
-            trust_tier: "T1".to_string(), // Defaulting to T1 for Nexus-issued L1 events
-            proof_reference: format!("/v1/mmr-proof?index={}", pos),
-            payload: json!({ "tx_id": tx_id }),
-        }
-    }).collect();
+            EventEnvelope {
+                sequence: pos as u64,
+                event_id: format!("evt_{}", pos),
+                tx_id: tx_id.clone(),
+                block_height: block_height as u64,
+                finality: if block_height > 0 {
+                    "hard".to_string()
+                } else {
+                    "soft".to_string()
+                },
+                trust_tier: "T1".to_string(), // Defaulting to T1 for Nexus-issued L1 events
+                proof_reference: format!("/v1/mmr-proof?index={}", pos),
+                payload: json!({ "tx_id": tx_id }),
+            }
+        })
+        .collect();
 
     let next_cursor = events.last().map(|e| e.sequence + 1);
 
     Json(EventFeedResponse {
         events,
         next_cursor,
-    }).into_response()
+    })
+    .into_response()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executor::rgb::RGBRolloutMode;
     use axum::body::Body;
     use axum::http::Request;
-    use tower::ServiceExt;
     use serde_json::json;
     use std::collections::HashSet;
-    use crate::executor::rgb::RGBRolloutMode;
+    use tower::ServiceExt;
 
     fn test_router_with_state(
         enabled: bool,
@@ -694,7 +767,8 @@ mod tests {
     #[tokio::test]
     async fn test_get_mmr_proof_returns_not_found_for_unknown_mainnet_like_tx() {
         let app = test_router();
-        let mainnet_like_tx_id = "0x0000000000000000000000000000000000000000000000000000000000000000";
+        let mainnet_like_tx_id =
+            "0x0000000000000000000000000000000000000000000000000000000000000000";
 
         let response = app
             .oneshot(
@@ -793,8 +867,14 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         let body = response_json(response).await;
-        let contract_id = body.get("contract_id").and_then(|v| v.as_str()).unwrap_or_default();
-        assert_eq!(contract_id, "rgb:contract-123_nia_long_enough_id_for_validation");
+        let contract_id = body
+            .get("contract_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        assert_eq!(
+            contract_id,
+            "rgb:contract-123_nia_long_enough_id_for_validation"
+        );
         assert_eq!(body["status"], "verified");
         assert_eq!(body["mode"], "shadow");
     }
@@ -879,21 +959,34 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(response.status() == StatusCode::OK || response.status() == StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(
+            response.status() == StatusCode::OK
+                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[tokio::test]
     async fn test_get_mmr_proof_success_by_tx_id() {
         let nexus_state = Arc::new(NexusState::new());
-        let tx_id = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
+        let tx_id =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string();
         {
             let mut leaves = nexus_state.leaves.lock().unwrap();
             leaves.push(tx_id.clone());
             let mut mmr = nexus_state.mmr.lock().unwrap();
             mmr.add_leaf(tx_id.as_bytes());
         }
-        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new(), nexus_state);
-        let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
+        let app =
+            test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new(), nexus_state);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(&format!("/v1/mmr-proof?tx_id={}", tx_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -903,21 +996,46 @@ mod tests {
         let mut known = HashSet::new();
         known.insert(cid.to_string());
         let app = test_router_with_options(true, RGBRolloutMode::Active, known);
-        let response = app.oneshot(Request::builder().uri(&format!("/v1/rgb/contract?contract_id={}", cid)).body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(&format!("/v1/rgb/contract?contract_id={}", cid))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
     async fn test_get_event_feed_with_params() {
         let app = test_router();
-        let response = app.oneshot(Request::builder().uri("/v1/events?cursor=10&limit=5").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/events?cursor=10&limit=5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[tokio::test]
     async fn test_get_mmr_proof_invalid_tx_id_format_cases() {
         let app = test_router();
-        let response = app.clone().oneshot(Request::builder().uri("/v1/mmr-proof?tx_id=0x123").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof?tx_id=0x123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let response = app.oneshot(Request::builder().uri("/v1/mmr-proof?tx_id=123456789012345678901234567890123456789012345678901234567890123456").body(Body::empty()).unwrap()).await.unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
@@ -926,23 +1044,56 @@ mod tests {
     #[tokio::test]
     async fn test_get_rgb_contract_missing_or_invalid() {
         let app = test_router();
-        let response = app.clone().oneshot(Request::builder().uri("/v1/rgb/contract?contract_id=").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/rgb/contract?contract_id=")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-        let response = app.oneshot(Request::builder().uri("/v1/rgb/contract?contract_id=invalid").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/rgb/contract?contract_id=invalid")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn test_get_mmr_proof_missing_all_params() {
         let app = test_router();
-        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
     async fn test_get_mmr_proof_index_out_of_bounds() {
         let app = test_router();
-        let response = app.oneshot(Request::builder().uri("/v1/mmr-proof?index=999999").body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof?index=999999")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
@@ -950,7 +1101,15 @@ mod tests {
     async fn test_get_mmr_proof_tx_id_not_found() {
         let app = test_router();
         let tx_id = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        let response = app.oneshot(Request::builder().uri(&format!("/v1/mmr-proof?tx_id={}", tx_id)).body(Body::empty()).unwrap()).await.unwrap();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(&format!("/v1/mmr-proof?tx_id={}", tx_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
