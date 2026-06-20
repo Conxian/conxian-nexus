@@ -13,18 +13,18 @@ use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry::{global, trace::TracerProvider};
-use opentelemetry_sdk::propagation::TraceContextPropagator;
-use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::trace::{self as sdktrace};
-use tracing_subscriber::{prelude::*, EnvFilter};
-use opentelemetry::KeyValue;
 use lib_conxian_core::Wallet;
+use opentelemetry::KeyValue;
+use opentelemetry::{global, trace::TracerProvider};
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::{self as sdktrace};
+use opentelemetry_sdk::Resource;
 use std::future;
 use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -34,8 +34,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::from_env().context("Failed to load configuration")?;
 
     // Initialize tracing
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_filter(EnvFilter::new(&config.rust_log));
+    let fmt_layer = tracing_subscriber::fmt::layer().with_filter(EnvFilter::new(&config.rust_log));
 
     if let Some(endpoint) = &config.otel_exporter_otlp_endpoint {
         global::set_text_map_propagator(TraceContextPropagator::new());
@@ -47,9 +46,10 @@ async fn main() -> anyhow::Result<()> {
 
         let tracer = sdktrace::TracerProvider::builder()
             .with_batch_exporter(tracer, opentelemetry_sdk::runtime::Tokio)
-            .with_resource(Resource::new(vec![
-                KeyValue::new("service.name", config.otel_service_name.clone()),
-            ]))
+            .with_resource(Resource::new(vec![KeyValue::new(
+                "service.name",
+                config.otel_service_name.clone(),
+            )]))
             .build()
             .tracer("conxian-nexus");
 
@@ -59,15 +59,12 @@ async fn main() -> anyhow::Result<()> {
             .with(otel_layer)
             .init();
     } else {
-        tracing_subscriber::registry()
-            .with(fmt_layer)
-            .init();
+        tracing_subscriber::registry().with(fmt_layer).init();
     }
-
 
     // Initialize logging using the centralized config
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.13)...");
+    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.15)...");
 
     // Initialize Global Start Time
     api::init_start_time();

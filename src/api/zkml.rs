@@ -115,12 +115,12 @@ mod tests {
     use super::*;
     use crate::api::rest::AppState;
     use crate::config::Config;
-    use crate::storage::Storage;
-    use crate::state::NexusState;
     use crate::executor::NexusExecutor;
+    use crate::state::NexusState;
     use crate::storage::tableland::TablelandAdapter;
-    use std::sync::Arc;
+    use crate::storage::Storage;
     use std::collections::HashSet;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_verify_zkml_handler_rejects_empty_payload() {
@@ -153,7 +153,9 @@ mod tests {
             model_id: "".to_string(),
         };
 
-        let response = verify_zkml_handler(State(state), Json(payload)).await.into_response();
+        let response = verify_zkml_handler(State(state), Json(payload))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

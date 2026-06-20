@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// IBC Light Client Update model.
@@ -31,12 +31,15 @@ impl CosmosAdapter {
     }
 
     /// Verifies an IBC light client update.
-    pub async fn verify_client_update(&self, update: &IBCClientUpdate) -> anyhow::Result<IBCVerificationResult> {
+    pub async fn verify_client_update(
+        &self,
+        update: &IBCClientUpdate,
+    ) -> anyhow::Result<IBCVerificationResult> {
         // [ADR-006] Implement IBC Light Client verification within the Nexus state layer.
         // In this phase, we perform client ID validation and structural header checks.
 
         if !update.client_id.contains("-") || update.client_id.len() < 5 {
-             return Ok(IBCVerificationResult {
+            return Ok(IBCVerificationResult {
                 valid: false,
                 client_id: update.client_id.clone(),
                 latest_height: 0,

@@ -85,7 +85,10 @@ impl std::fmt::Debug for Config {
             .field("rust_log", &self.rust_log)
             .field("worldid_app_id", &self.worldid_app_id)
             .field("zkml_vks", &"<redacted>")
-            .field("admin_api_token", &self.admin_api_token.as_ref().map(|_| "<redacted>"))
+            .field(
+                "admin_api_token",
+                &self.admin_api_token.as_ref().map(|_| "<redacted>"),
+            )
             .finish()
     }
 }
@@ -243,8 +246,12 @@ impl Config {
 
         let worldid_app_id = env::var("WORLDID_APP_ID").unwrap_or_default();
 
-        let otel_exporter_otlp_endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-        let otel_service_name = env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "conxian-nexus".to_string());
+        let otel_exporter_otlp_endpoint = env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let otel_service_name =
+            env::var("OTEL_SERVICE_NAME").unwrap_or_else(|_| "conxian-nexus".to_string());
         let admin_api_token = env::var(ENV_ADMIN_API_TOKEN)
             .ok()
             .map(|s| s.trim().to_string())

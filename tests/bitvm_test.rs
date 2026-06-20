@@ -4,16 +4,16 @@ use axum::{
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-use std::collections::HashSet;
-use conxian_nexus::executor::rgb::RGBRolloutMode;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let mut config = Config::default_test();
@@ -73,10 +73,11 @@ async fn test_bitvm2_local_verification_success() {
     // leading to a 500 error in the handler or 503 if unavailable.
     let status = response.status();
     assert!(
-        status == StatusCode::OK ||
-        status == StatusCode::INTERNAL_SERVER_ERROR ||
-        status == StatusCode::SERVICE_UNAVAILABLE,
-        "Unexpected status code: {}", status
+        status == StatusCode::OK
+            || status == StatusCode::INTERNAL_SERVER_ERROR
+            || status == StatusCode::SERVICE_UNAVAILABLE,
+        "Unexpected status code: {}",
+        status
     );
 
     if status == StatusCode::OK {
@@ -111,5 +112,9 @@ async fn test_bitvm2_local_verification_invalid_format() {
         .unwrap();
 
     // Should return Service Unavailable because it fails local validation and fallback is not configured
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "Invalid format should trigger fallback which is unavailable");
+    assert_eq!(
+        response.status(),
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Invalid format should trigger fallback which is unavailable"
+    );
 }

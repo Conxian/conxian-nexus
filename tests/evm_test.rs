@@ -4,16 +4,16 @@ use axum::{
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-use std::collections::HashSet;
-use conxian_nexus::executor::rgb::RGBRolloutMode;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
     let config = Config::default_test();
@@ -101,5 +101,8 @@ async fn test_evm_receipt_verification_invalid_format() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], false);
-    assert!(res["status"].as_str().unwrap().contains("Invalid block hash"));
+    assert!(res["status"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid block hash"));
 }

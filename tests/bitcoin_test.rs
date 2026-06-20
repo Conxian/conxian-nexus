@@ -4,38 +4,44 @@ use axum::{
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
+use conxian_nexus::executor::rgb::{RGBAdapter, RGBRolloutMode};
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
-use conxian_nexus::executor::rgb::{RGBAdapter, RGBRolloutMode};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
-use std::collections::HashSet;
 
 #[tokio::test]
 async fn test_rgb_adapter_disabled_rejects_all() {
     let adapter = RGBAdapter::new(RGBRolloutMode::Disabled);
 
-    let result = adapter.lookup_contract("rgb:test123456_nia_long_enough_id_for_validation").await;
+    let result = adapter
+        .lookup_contract("rgb:test123456_nia_long_enough_id_for_validation")
+        .await;
     assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "RGB adapter is disabled"
-    );
+    assert_eq!(result.unwrap_err().to_string(), "RGB adapter is disabled");
 }
 
 #[tokio::test]
 async fn test_rgb_adapter_shadow_returns_mock() {
     let adapter = RGBAdapter::new(RGBRolloutMode::Shadow);
 
-    let result = adapter.lookup_contract("rgb:test123456_nia_long_enough_id_for_validation").await;
+    let result = adapter
+        .lookup_contract("rgb:test123456_nia_long_enough_id_for_validation")
+        .await;
     assert!(result.is_ok());
 
-    let metadata = result.unwrap().expect("Shadow mode must return mock payload");
+    let metadata = result
+        .unwrap()
+        .expect("Shadow mode must return mock payload");
     let json = serde_json::to_value(&metadata).unwrap();
-    assert_eq!(json["contract_id"], "rgb:test123456_nia_long_enough_id_for_validation");
+    assert_eq!(
+        json["contract_id"],
+        "rgb:test123456_nia_long_enough_id_for_validation"
+    );
     assert_eq!(json["mode"], "shadow");
     assert_eq!(json["status"], "verified");
 }
@@ -46,24 +52,28 @@ async fn test_rgb_adapter_active_known_contract() {
     known.insert("rgb:known12345_nia_long_enough_id_for_validation".to_string());
     let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, known);
 
-    let result = adapter.lookup_contract("rgb:known12345_nia_long_enough_id_for_validation").await;
+    let result = adapter
+        .lookup_contract("rgb:known12345_nia_long_enough_id_for_validation")
+        .await;
     assert!(result.is_ok());
 
     let metadata = result.unwrap().expect("Known contract must resolve");
     let json = serde_json::to_value(&metadata).unwrap();
-    assert_eq!(json["contract_id"], "rgb:known12345_nia_long_enough_id_for_validation");
+    assert_eq!(
+        json["contract_id"],
+        "rgb:known12345_nia_long_enough_id_for_validation"
+    );
     assert_eq!(json["mode"], "active");
     assert_eq!(json["status"], "active");
 }
 
 #[tokio::test]
 async fn test_rgb_adapter_active_unknown_contract() {
-    let adapter = RGBAdapter::with_known_contracts(
-        RGBRolloutMode::Active,
-        HashSet::new(),
-    );
+    let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, HashSet::new());
 
-    let result = adapter.lookup_contract("rgb:unknown1234_nia_long_enough_id_for_validation").await;
+    let result = adapter
+        .lookup_contract("rgb:unknown1234_nia_long_enough_id_for_validation")
+        .await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 }
@@ -76,7 +86,10 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("notrgb").await;
     assert!(result.is_err());
     assert!(
-        result.unwrap_err().to_string().contains("Invalid RGB contract ID prefix"),
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid RGB contract ID prefix"),
         "Should reject IDs without rgb: prefix"
     );
 
@@ -84,19 +97,21 @@ async fn test_rgb_adapter_invalid_contract_id_format() {
     let result = adapter.lookup_contract("rgb:ab").await;
     assert!(result.is_err());
     assert!(
-        result.unwrap_err().to_string().contains("Invalid RGB contract ID length"),
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid RGB contract ID length"),
         "Should reject IDs that are too short"
     );
 }
 
 #[tokio::test]
 async fn test_rgb_adapter_empty_known_contracts_active() {
-    let adapter = RGBAdapter::with_known_contracts(
-        RGBRolloutMode::Active,
-        HashSet::new(),
-    );
+    let adapter = RGBAdapter::with_known_contracts(RGBRolloutMode::Active, HashSet::new());
 
-    let result = adapter.lookup_contract("rgb:nonexistent_nia_long_enough_id_for_validation").await;
+    let result = adapter
+        .lookup_contract("rgb:nonexistent_nia_long_enough_id_for_validation")
+        .await;
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 }
@@ -182,7 +197,10 @@ async fn test_dlc_bond_creation_success_path() {
 
         assert_eq!(json["status"], "Initialized");
         assert!(
-            json["dlc_contract_id"].as_str().unwrap().starts_with("dlc_"),
+            json["dlc_contract_id"]
+                .as_str()
+                .unwrap()
+                .starts_with("dlc_"),
             "Contract ID must start with dlc_"
         );
         assert!(
@@ -455,7 +473,8 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", valid_txid))
-                .body(Body::empty()).unwrap(),
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -476,7 +495,8 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", invalid_txid))
-                .body(Body::empty()).unwrap(),
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -495,7 +515,8 @@ async fn test_btc_tx_id_format_validation() {
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", short_txid))
-                .body(Body::empty()).unwrap(),
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -514,9 +535,7 @@ async fn test_btc_tx_state_transition() {
     let state = Arc::new(NexusState::new());
 
     // Simulate a batch of BTC transactions
-    let btc_txns: Vec<String> = (0..10)
-        .map(|i| format!("0x{:064x}", i))
-        .collect();
+    let btc_txns: Vec<String> = (0..10).map(|i| format!("0x{:064x}", i)).collect();
 
     state.update_state_batch(&btc_txns);
 
@@ -555,19 +574,28 @@ async fn test_rgb_contract_lookup_with_btc_tx_ids() {
 async fn test_rgb_adapter_concurrent_lookups() {
     let adapter = Arc::new(RGBAdapter::with_known_contracts(
         RGBRolloutMode::Active,
-        ["rgb:alpha12345_nia_long_enough_id_for_validation", "rgb:beta123456_nia_long_enough_id_for_validation", "rgb:gamma12345_nia_long_enough_id_for_validation"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        [
+            "rgb:alpha12345_nia_long_enough_id_for_validation",
+            "rgb:beta123456_nia_long_enough_id_for_validation",
+            "rgb:gamma12345_nia_long_enough_id_for_validation",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect(),
     ));
 
     let mut handles = Vec::new();
-    for id in &["rgb:alpha12345_nia_long_enough_id_for_validation", "rgb:beta123456_nia_long_enough_id_for_validation", "rgb:gamma12345_nia_long_enough_id_for_validation", "rgb:unknown_nia_long_enough_id_for_validation"] {
+    for id in &[
+        "rgb:alpha12345_nia_long_enough_id_for_validation",
+        "rgb:beta123456_nia_long_enough_id_for_validation",
+        "rgb:gamma12345_nia_long_enough_id_for_validation",
+        "rgb:unknown_nia_long_enough_id_for_validation",
+    ] {
         let adapter = adapter.clone();
         let id = id.to_string();
-        handles.push(tokio::spawn(async move {
-            adapter.lookup_contract(&id).await
-        }));
+        handles.push(tokio::spawn(
+            async move { adapter.lookup_contract(&id).await },
+        ));
     }
 
     for (i, handle) in handles.into_iter().enumerate() {
@@ -578,14 +606,19 @@ async fn test_rgb_adapter_concurrent_lookups() {
             assert!(result.unwrap().is_some(), "Known contract should resolve");
         } else {
             assert!(result.is_ok());
-            assert!(result.unwrap().is_none(), "Unknown contract should return None");
+            assert!(
+                result.unwrap().is_none(),
+                "Unknown contract should return None"
+            );
         }
     }
 }
 
 #[tokio::test]
 async fn test_rgb_validation_edge_cases() {
-    let adapter = conxian_nexus::executor::rgb::RGBAdapter::new(conxian_nexus::executor::rgb::RGBRolloutMode::Shadow);
+    let adapter = conxian_nexus::executor::rgb::RGBAdapter::new(
+        conxian_nexus::executor::rgb::RGBRolloutMode::Shadow,
+    );
 
     // Prefix check
     assert!(adapter.validate_contract_id("notrgb:123").is_err());
@@ -594,9 +627,24 @@ async fn test_rgb_validation_edge_cases() {
     assert!(adapter.validate_contract_id("rgb:short").is_err());
 
     // Schema heuristics
-    assert_eq!(adapter.validate_contract_id("rgb:asset_nia_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::NIA);
-    assert_eq!(adapter.validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::LNPBP);
-    assert_eq!(adapter.validate_contract_id("rgb:generic_123456789012345678901234567890").unwrap(), conxian_nexus::executor::rgb::RGBSchema::Unknown);
+    assert_eq!(
+        adapter
+            .validate_contract_id("rgb:asset_nia_123456789012345678901234567890")
+            .unwrap(),
+        conxian_nexus::executor::rgb::RGBSchema::NIA
+    );
+    assert_eq!(
+        adapter
+            .validate_contract_id("rgb:asset_lnpbp_123456789012345678901234567890")
+            .unwrap(),
+        conxian_nexus::executor::rgb::RGBSchema::LNPBP
+    );
+    assert_eq!(
+        adapter
+            .validate_contract_id("rgb:generic_123456789012345678901234567890")
+            .unwrap(),
+        conxian_nexus::executor::rgb::RGBSchema::Unknown
+    );
 }
 
 #[tokio::test]
@@ -607,7 +655,8 @@ async fn test_bitvm_validation_edge_cases() {
 
     let mut transition = conxian_nexus::executor::bitvm::BitVMTransition {
         prev_state_root: "short".to_string(),
-        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000002".to_string(),
+        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000002"
+            .to_string(),
         proof_bytes: "data".to_string(),
         trace_id: "t1".to_string(),
     };
@@ -616,7 +665,8 @@ async fn test_bitvm_validation_edge_cases() {
     assert!(!res.valid);
     assert!(res.message.contains("prev_state_root"));
 
-    transition.prev_state_root = "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
+    transition.prev_state_root =
+        "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
     transition.next_state_root = "bad".to_string();
     let res = adapter.verify_transition(&transition).await.unwrap();
     assert!(!res.valid);

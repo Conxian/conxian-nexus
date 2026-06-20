@@ -1,9 +1,9 @@
-pub mod stacks;
+pub mod bitvm;
 pub mod cosmos;
 pub mod evm;
-pub mod bitvm;
 pub mod lightning;
 pub mod rgb;
+pub mod stacks;
 
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};

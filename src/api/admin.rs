@@ -1,5 +1,4 @@
-#[allow(clippy::result_large_err)]
-#[allow(clippy::result_large_err)]
+#![allow(clippy::result_large_err)]
 use axum::extract::State;
 use axum::{
     extract::{Json, Path, Query},
@@ -74,8 +73,7 @@ struct ProtectedStatusResponse {
     scopes: Vec<String>,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct ReleaseApprovalRequest {
     #[serde(rename = "artifactId")]
     pub artifact_id: String,
@@ -88,8 +86,7 @@ pub struct ReleaseApprovalRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct ReleaseDecisionRequest {
     #[serde(rename = "secondApprover")]
     pub second_approver: Option<String>,
@@ -103,8 +100,7 @@ pub struct ReleaseDecisionRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize)]
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct GovernanceDecisionRequest {
     #[serde(rename = "secondApprover")]
     pub second_approver: Option<String>,
@@ -135,8 +131,7 @@ struct ClaimViewQuery {
     token: String,
 }
 
-pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState>
-{
+pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState> {
     Router::new()
         .route("/status", get(get_protected_status))
         .route("/releases/request-approval", post(request_release_approval))
@@ -158,8 +153,9 @@ pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::res
         .with_state(state)
 }
 
-pub fn public_auth_md_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState>
-{
+pub fn public_auth_md_routes(
+    state: crate::api::rest::AppState,
+) -> Router<crate::api::rest::AppState> {
     Router::new()
         .route("/auth.md", get(get_auth_md))
         .route(
@@ -275,7 +271,10 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-fn authorize_admin_write(state: &crate::api::rest::AppState, headers: &HeaderMap) -> Result<(), Response> {
+fn authorize_admin_write(
+    state: &crate::api::rest::AppState,
+    headers: &HeaderMap,
+) -> Result<(), Response> {
     let Some(expected_token) = configured_admin_token(state) else {
         return Err(admin_token_not_configured_response());
     };
@@ -297,7 +296,11 @@ fn authorize_admin_write(state: &crate::api::rest::AppState, headers: &HeaderMap
     Ok(())
 }
 
-fn authorize_for_scope(state: &crate::api::rest::AppState, headers: &HeaderMap, required_scope: &str) -> Result<Vec<String>, Response> {
+fn authorize_for_scope(
+    state: &crate::api::rest::AppState,
+    headers: &HeaderMap,
+    required_scope: &str,
+) -> Result<Vec<String>, Response> {
     let Some(token) = bearer_token(headers) else {
         return Err(unauthorized_response(headers));
     };
@@ -344,7 +347,9 @@ pub trait DualSignatureRequest {
     fn signatures(&self) -> &Option<Vec<String>>;
 
     fn validate_dual_signature(&self) -> Result<(), (StatusCode, Json<Value>)> {
-        if self.second_approver().is_none() || self.signatures().as_ref().map(|s| s.len()).unwrap_or(0) < 2 {
+        if self.second_approver().is_none()
+            || self.signatures().as_ref().map(|s| s.len()).unwrap_or(0) < 2
+        {
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(json!({
@@ -358,18 +363,30 @@ pub trait DualSignatureRequest {
 }
 
 impl DualSignatureRequest for ReleaseApprovalRequest {
-    fn second_approver(&self) -> &Option<String> { &self.second_approver }
-    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+    fn second_approver(&self) -> &Option<String> {
+        &self.second_approver
+    }
+    fn signatures(&self) -> &Option<Vec<String>> {
+        &self.signatures
+    }
 }
 
 impl DualSignatureRequest for ReleaseDecisionRequest {
-    fn second_approver(&self) -> &Option<String> { &self.second_approver }
-    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+    fn second_approver(&self) -> &Option<String> {
+        &self.second_approver
+    }
+    fn signatures(&self) -> &Option<Vec<String>> {
+        &self.signatures
+    }
 }
 
 impl DualSignatureRequest for GovernanceDecisionRequest {
-    fn second_approver(&self) -> &Option<String> { &self.second_approver }
-    fn signatures(&self) -> &Option<Vec<String>> { &self.signatures }
+    fn second_approver(&self) -> &Option<String> {
+        &self.second_approver
+    }
+    fn signatures(&self) -> &Option<Vec<String>> {
+        &self.signatures
+    }
 }
 
 #[tracing::instrument(skip(state))]
@@ -380,7 +397,9 @@ async fn request_release_approval(
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
 
-    payload.validate_dual_signature().map_err(|e| e.into_response())?;
+    payload
+        .validate_dual_signature()
+        .map_err(|e| e.into_response())?;
 
     Ok(Json(ReleaseApprovalResponse {
         accepted: true,
@@ -401,8 +420,9 @@ async fn submit_release_decision(
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
 
-    payload.validate_dual_signature().map_err(|e| e.into_response())?;
-
+    payload
+        .validate_dual_signature()
+        .map_err(|e| e.into_response())?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -423,8 +443,9 @@ async fn submit_governance_decision(
 ) -> Result<Json<WorkflowDecisionResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
 
-    payload.validate_dual_signature().map_err(|e| e.into_response())?;
-
+    payload
+        .validate_dual_signature()
+        .map_err(|e| e.into_response())?;
 
     Ok(Json(WorkflowDecisionResponse {
         accepted: true,
@@ -443,7 +464,7 @@ fn current_timestamp() -> String {
 
 async fn get_runtime_health(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -459,7 +480,7 @@ async fn get_runtime_health(
 
 async fn get_runtime_readiness(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -470,7 +491,7 @@ async fn get_runtime_readiness(
 
 async fn list_audit_events(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -481,7 +502,7 @@ async fn list_audit_events(
 
 async fn list_chain_statuses(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -495,7 +516,7 @@ async fn list_chain_statuses(
 async fn get_chain_status(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(chain): Path<String>
+    Path(chain): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -508,7 +529,7 @@ async fn get_chain_status(
 
 async fn list_attestations(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -520,7 +541,7 @@ async fn list_attestations(
 async fn get_attestation(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(id): Path<String>
+    Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -532,7 +553,7 @@ async fn get_attestation(
 
 async fn get_drift_status(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -543,7 +564,7 @@ async fn get_drift_status(
 
 async fn get_safety_mode_status(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -553,7 +574,7 @@ async fn get_safety_mode_status(
 
 async fn acknowledge_safety_mode(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_admin_write(&state, &headers)?;
     Ok(Json(json!({
@@ -565,7 +586,7 @@ async fn acknowledge_safety_mode(
 async fn get_promotion_evidence(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(release): Path<String>
+    Path(release): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -576,7 +597,7 @@ async fn get_promotion_evidence(
 
 async fn list_environments(
     State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap
+    headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -587,7 +608,7 @@ async fn list_environments(
 async fn get_environment(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(env): Path<String>
+    Path(env): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
@@ -597,9 +618,7 @@ async fn get_environment(
     })))
 }
 
-async fn get_auth_md(
-    State(_state): State<crate::api::rest::AppState>,
-) -> Html<String> {
+async fn get_auth_md(State(_state): State<crate::api::rest::AppState>) -> Html<String> {
     Html("markdown...".to_string())
 }
 
@@ -779,7 +798,7 @@ async fn agent_auth(
 
 async fn start_claim(
     State(_state): State<crate::api::rest::AppState>,
-    Json(payload): Json<ClaimRequest>
+    Json(payload): Json<ClaimRequest>,
 ) -> Result<Json<Value>, Response> {
     let claim_hash = hash_value(&payload.claim_token);
     let mut registrations = REGISTRATIONS.lock().unwrap();
@@ -888,7 +907,7 @@ async fn complete_claim(
 
 async fn view_claim_otp(
     State(_state): State<crate::api::rest::AppState>,
-    Query(query): Query<ClaimViewQuery>
+    Query(query): Query<ClaimViewQuery>,
 ) -> Result<Html<String>, Response> {
     let registrations = REGISTRATIONS.lock().unwrap();
     let record = registrations

@@ -1,29 +1,27 @@
-use conxian_nexus::api::rest::AppState;
-use conxian_nexus::config::Config;
-use conxian_nexus::state::NexusState;
-use conxian_nexus::executor::NexusExecutor;
-use conxian_nexus::executor::rgb::RGBRolloutMode;
-use conxian_nexus::storage::tableland::TablelandAdapter;
-use conxian_nexus::storage::Storage;
-use std::sync::Arc;
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
     Router,
 };
 use conxian_nexus::api::admin::{admin_routes, public_auth_md_routes};
+use conxian_nexus::api::rest::AppState;
+use conxian_nexus::config::Config;
 use conxian_nexus::config::ENV_ADMIN_API_TOKEN;
+use conxian_nexus::executor::rgb::RGBRolloutMode;
+use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::state::NexusState;
+use conxian_nexus::storage::tableland::TablelandAdapter;
+use conxian_nexus::storage::Storage;
 use serde_json::Value;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::sync::Mutex as AsyncMutex;
 use tower::util::ServiceExt;
 
 const RELEASE_APPROVAL_PAYLOAD: &str = r#"{"artifactId":"artifact-1","requestedBy":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
-const RELEASE_DECISION_PAYLOAD: &str =
-    r#"{"artifactId":"artifact-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
-const GOVERNANCE_DECISION_PAYLOAD: &str =
-    r#"{"actionId":"action-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
+const RELEASE_DECISION_PAYLOAD: &str = r#"{"artifactId":"artifact-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
+const GOVERNANCE_DECISION_PAYLOAD: &str = r#"{"actionId":"action-1","decision":"approve","actorId":"actor-1","secondApprover":"actor-2","signatures":["sig1","sig2"]}"#;
 const SAFETY_MODE_ACK_PAYLOAD: &str = r#"{"ackBy":"operator-1","reason":"acknowledged"}"#;
 
 #[derive(Clone)]
@@ -185,7 +183,8 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
 }
 fn test_router() -> Router {
     let config = Arc::new(Config::from_env().unwrap_or_else(|_| Config::default_test()));
-    let storage = Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/").unwrap());
+    let storage =
+        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/").unwrap());
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
@@ -719,7 +718,8 @@ async fn test_admin_write_rejects_single_signature() {
 
     let app = test_router();
 
-    let single_sig_payload = r#"{"artifactId":"artifact-1","requestedBy":"actor-1","signatures":["sig1"]}"#;
+    let single_sig_payload =
+        r#"{"artifactId":"artifact-1","requestedBy":"actor-1","signatures":["sig1"]}"#;
 
     let response = app
         .oneshot(
@@ -738,5 +738,8 @@ async fn test_admin_write_rejects_single_signature() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
     let json: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json.get("error").and_then(Value::as_str), Some("insufficient_approvals"));
+    assert_eq!(
+        json.get("error").and_then(Value::as_str),
+        Some("insufficient_approvals")
+    );
 }

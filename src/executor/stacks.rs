@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::storage::Storage;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Stacks / sBTC Transaction model.
@@ -31,7 +31,10 @@ impl StacksAdapter {
     }
 
     /// Verifies a Stacks transaction (Pilot implementation).
-    pub async fn verify_transaction(&self, tx: &StacksTransaction) -> anyhow::Result<StacksVerificationResult> {
+    pub async fn verify_transaction(
+        &self,
+        tx: &StacksTransaction,
+    ) -> anyhow::Result<StacksVerificationResult> {
         // [CON-709] Pilot implementation for Stacks + sBTC.
         // Performs basic structural validation.
 
