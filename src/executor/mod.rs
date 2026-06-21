@@ -63,7 +63,16 @@ impl NexusExecutor {
         }
     }
 
+    /// Checks if the system is in safety mode and blocks submission if so.
+    pub async fn check_safety_mode(&self) -> anyhow::Result<()> {
+        if crate::safety::is_safety_mode_active(&self.storage).await? {
+            anyhow::bail!("System is in Safety Mode (Sovereign Handoff Active). Execution blocked.");
+        }
+        Ok(())
+    }
+
     pub async fn submit(&self, request: ExecutionRequest) -> anyhow::Result<String> {
+        self.check_safety_mode().await?;
         if !self.validate_transaction(&request).await? {
             anyhow::bail!("Transaction validation failed");
         }

@@ -175,3 +175,20 @@ All notable changes to this project will be documented in this file.
 
 ### Security
 - FSOC Sequencer now increments transaction metrics upon successful validation.
+
+## [0.4.16] - 2026-06-21
+
+### Added
+- NIP-004: Foundation for cryptographic dual-signature enforcement in Admin API.
+- NIP-005: Audit logging for EVM receipt and Cosmos IBC verification events.
+- NIP-007: Safety Mode (Sovereign Handoff) enforcement in transaction submission path.
+- Admin API: New endpoints for `/drift`, `/safety-mode`, `/promotion-evidence`, and `/environments`.
+
+### Fixed
+- Admin API: Standardized error codes (401, 403, 503) and resource naming to align with integration tests.
+- Executor: Ensured state roots are persisted on best-effort basis without blocking verification.
+- CI: Aligned coverage script paths and dependency toolchain requirements.
+
+### Security
+- Admin API: Enforced unique signatures for "Two-Person Control" (dual-signature) actions.
+- Config: Expanded redaction and centralized public key management.

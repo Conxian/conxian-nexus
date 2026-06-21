@@ -1,16 +1,14 @@
-#![allow(clippy::result_large_err)]
-use axum::extract::State;
 use axum::{
-    extract::{Json, Path, Query},
+    extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
-    Router,
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use uuid::Uuid;
 
@@ -19,9 +17,8 @@ lazy_static::lazy_static! {
     static ref CREDENTIALS: Mutex<HashMap<String, CredentialRecord>> = Mutex::new(HashMap::new());
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct RegistrationRecord {
-    #[allow(dead_code)]
     registration_id: String,
     registration_type: String,
     claim_token_hash: String,
@@ -30,50 +27,32 @@ struct RegistrationRecord {
     otp_plaintext: String,
     requested_credential_type: String,
     credential: Option<String>,
-    #[allow(dead_code)]
     pre_claim_scopes: Vec<String>,
     post_claim_scopes: Vec<String>,
     email: Option<String>,
     claimed: bool,
-    #[allow(dead_code)]
     claim_token_expires_at: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct CredentialRecord {
-    #[allow(dead_code)]
     registration_id: String,
     scopes: Vec<String>,
     revoked: bool,
 }
 
-#[derive(Serialize)]
-pub struct ReleaseApprovalResponse {
-    pub accepted: bool,
-    #[serde(rename = "requestId")]
-    pub request_id: String,
-    #[serde(rename = "auditEventId")]
-    pub audit_event_id: String,
-    pub message: String,
+#[derive(Deserialize)]
+struct ClaimViewQuery {
+    token: String,
 }
 
 #[derive(Serialize)]
-pub struct WorkflowDecisionResponse {
-    pub accepted: bool,
-    #[serde(rename = "decisionId")]
-    pub decision_id: String,
-    #[serde(rename = "auditEventId")]
-    pub audit_event_id: String,
-    pub message: String,
+pub struct ProtectedStatusResponse {
+    pub status: &'static str,
+    pub scopes: Vec<String>,
 }
 
-#[derive(Serialize)]
-struct ProtectedStatusResponse {
-    status: &'static str,
-    scopes: Vec<String>,
-}
-
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct ReleaseApprovalRequest {
     #[serde(rename = "artifactId")]
     pub artifact_id: String,
@@ -86,7 +65,17 @@ pub struct ReleaseApprovalRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize)]
+pub struct ReleaseApprovalResponse {
+    pub accepted: bool,
+    #[serde(rename = "requestId")]
+    pub request_id: String,
+    #[serde(rename = "auditEventId")]
+    pub audit_event_id: String,
+    pub message: String,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
 pub struct ReleaseDecisionRequest {
     #[serde(rename = "secondApprover")]
     pub second_approver: Option<String>,
@@ -100,7 +89,7 @@ pub struct ReleaseDecisionRequest {
     pub notes: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct GovernanceDecisionRequest {
     #[serde(rename = "secondApprover")]
     pub second_approver: Option<String>,
@@ -112,6 +101,16 @@ pub struct GovernanceDecisionRequest {
     #[serde(rename = "actorId")]
     pub actor_id: String,
     pub notes: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct WorkflowDecisionResponse {
+    pub accepted: bool,
+    #[serde(rename = "decisionId")]
+    pub decision_id: String,
+    #[serde(rename = "auditEventId")]
+    pub audit_event_id: String,
+    pub message: String,
 }
 
 #[derive(Deserialize)]
@@ -126,11 +125,6 @@ struct ClaimCompleteRequest {
     otp: String,
 }
 
-#[derive(Deserialize)]
-struct ClaimViewQuery {
-    token: String,
-}
-
 pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::rest::AppState> {
     Router::new()
         .route("/status", get(get_protected_status))
@@ -140,16 +134,16 @@ pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::res
         .route("/runtime/health", get(get_runtime_health))
         .route("/runtime/readiness", get(get_runtime_readiness))
         .route("/audit-events", get(list_audit_events))
-        .route("/chains", get(list_chain_statuses))
+        .route("/environments/{env}", get(get_environment))
+        .route("/chains", get(list_chains))
         .route("/chains/{chain}/status", get(get_chain_status))
         .route("/attestations", get(list_attestations))
         .route("/attestations/{id}", get(get_attestation))
-        .route("/drift", get(get_drift_status))
-        .route("/safety-mode", get(get_safety_mode_status))
-        .route("/safety-mode/ack", post(acknowledge_safety_mode))
+        .route("/drift", get(get_drift))
+        .route("/safety-mode", get(get_safety_mode))
+        .route("/safety-mode/ack", post(ack_safety_mode))
         .route("/promotion-evidence/{release}", get(get_promotion_evidence))
         .route("/environments", get(list_environments))
-        .route("/environments/{env}", get(get_environment))
         .with_state(state)
 }
 
@@ -347,14 +341,15 @@ pub trait DualSignatureRequest {
     fn signatures(&self) -> &Option<Vec<String>>;
 
     fn validate_dual_signature(&self) -> Result<(), (StatusCode, Json<Value>)> {
-        if self.second_approver().is_none()
-            || self.signatures().as_ref().map(|s| s.len()).unwrap_or(0) < 2
-        {
+        let signatures = self.signatures().as_ref();
+        let unique_sigs_count = signatures.map(|s| s.iter().collect::<HashSet<_>>().len()).unwrap_or(0);
+
+        if self.second_approver().is_none() || unique_sigs_count < 2 {
             return Err((
                 StatusCode::FORBIDDEN,
                 Json(json!({
                     "error": "insufficient_approvals",
-                    "error_description": "Action requires dual-signature (Two-Person Control)"
+                    "error_description": "Action requires dual-signature (Two-Person Control) with unique signatures"
                 })),
             ));
         }
@@ -500,30 +495,37 @@ async fn list_audit_events(
     })))
 }
 
-async fn list_chain_statuses(
+async fn get_environment(
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap,
+    Path(_env): Path<String>,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&state, &headers, "api.read")?;
+    Ok(Json(json!({
+        "env": "production",
+        "version": env!("CARGO_PKG_VERSION")
+    })))
+}
+
+async fn list_chains(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "chains": [
-            {"id": "stacks-mainnet", "status": "active"},
-            {"id": "bitcoin-mainnet", "status": "active"}
-        ]
+        "chains": ["bitcoin/mainnet", "evm/ethereum", "cosmos/hub"]
     })))
 }
 
 async fn get_chain_status(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(chain): Path<String>,
+    Path(_chain): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "chain": chain,
-        "status": "active",
-        "height": 100000,
-        "lastSeen": current_timestamp()
+        "status": "synchronized",
+        "height": 1000000
     })))
 }
 
@@ -533,52 +535,49 @@ async fn list_attestations(
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "attestations": [],
-        "total": 0
+        "attestations": []
     })))
 }
 
 async fn get_attestation(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
-    Path(id): Path<String>,
+    Path(_id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "id": id,
-        "status": "verified",
-        "timestamp": current_timestamp()
+        "id": _id,
+        "valid": true
     })))
 }
 
-async fn get_drift_status(
+async fn get_drift(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "driftDetected": false,
-        "lastCheck": current_timestamp()
+        "drift": 0
     })))
 }
 
-async fn get_safety_mode_status(
+async fn get_safety_mode(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "safetyModeActive": false
+        "safety_mode": crate::safety::is_safety_mode_active(&state.storage).await.unwrap_or(false)
     })))
 }
 
-async fn acknowledge_safety_mode(
+async fn ack_safety_mode(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_admin_write(&state, &headers)?;
     Ok(Json(json!({
-        "acknowledged": true,
+        "status": "acknowledged",
         "timestamp": current_timestamp()
     })))
 }
@@ -591,7 +590,7 @@ async fn get_promotion_evidence(
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
         "release": release,
-        "evidence": "..."
+        "evidence": []
     })))
 }
 
@@ -601,62 +600,58 @@ async fn list_environments(
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "environments": ["development", "staging", "production"]
+        "environments": ["production"]
     })))
 }
 
-async fn get_environment(
-    State(state): State<crate::api::rest::AppState>,
-    headers: HeaderMap,
-    Path(env): Path<String>,
-) -> Result<Json<Value>, Response> {
-    authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "environment": env,
-        "status": if env == "production" { "active" } else { "ready" },
-        "lastUpdated": current_timestamp()
-    })))
+async fn get_auth_md() -> impl IntoResponse {
+    let md = r#"# Conxian Nexus Administrative Authentication
+
+Nexus protects administrative and release-bearing operations using **Two-Person Control (Dual-Signature)**.
+
+## Authentication Model
+
+1. **Bearer Authorization**: Requests must include a valid `NEXUS_ADMIN_API_TOKEN` or a scoped Agent credential.
+2. **Dual-Signature Enforcement**: Critical actions (releases, governance) require:
+   - A primary requester.
+   - A secondary approver name.
+   - A list of at least two unique signatures.
+
+## Endpoints
+
+- `/admin/v1/release/approval`: Request approval for a new release artifact.
+- `/admin/v1/release/decision`: Submit a final release decision (Approve/Reject).
+- `/admin/v1/governance/decision`: Submit a decision for a system governance action.
+- `/admin/v1/status`: Check current credential scopes.
+
+## Security Controls
+
+- **Fail-Closed**: If the admin token is not configured, write routes return `503 Service Unavailable`.
+- **Zero-Secret Logging**: All sensitive configuration fields are redacted in debug logs.
+"#;
+    Html(md.to_string())
 }
 
-async fn get_auth_md(State(_state): State<crate::api::rest::AppState>) -> Html<String> {
-    Html("markdown...".to_string())
-}
-
-async fn get_oauth_protected_resource_metadata(
-    State(_state): State<crate::api::rest::AppState>,
-) -> Json<Value> {
+async fn get_oauth_protected_resource_metadata(headers: HeaderMap) -> Json<Value> {
+    let base = service_base(&headers);
     Json(json!({
-        "resource": "https://nexus.conxian-labs.com",
         "resource_name": "Conxian Nexus",
-        "authorization_servers": ["https://nexus.conxian-labs.com"]
+        "authorization_servers": [format!("{}/.well-known/oauth-authorization-server", base)],
+        "scopes_supported": ["api.read", "api.write", "admin.write"]
     }))
 }
 
-async fn get_oauth_authorization_server_metadata(
-    State(_state): State<crate::api::rest::AppState>,
-    headers: HeaderMap,
-) -> Json<Value> {
+async fn get_oauth_authorization_server_metadata(headers: HeaderMap) -> Json<Value> {
     let base = service_base(&headers);
     Json(json!({
         "issuer": base,
         "authorization_endpoint": format!("{}/agent/auth", base),
         "token_endpoint": format!("{}/agent/auth/claim/complete", base),
-        "jwks_uri": format!("{}/.well-known/jwks.json", base),
-        "scopes_supported": ["api.read", "api.write", "admin.write"],
-        "response_types_supported": ["code"],
-        "grant_types_supported": ["authorization_code"],
-        "token_endpoint_auth_methods_supported": ["none"],
-        "service_metadata": {
-            "skill": "https://workos.com/auth.md",
-            "register_uri": format!("{}/agent/auth", base),
-            "claim_uri": format!("{}/agent/auth/claim", base),
-            "claim_complete_uri": format!("{}/agent/auth/claim/complete", base),
-            "identity_types_supported": ["anonymous", "identity_assertion"],
-            "anonymous_supported": ["api_key"],
-            "identity_assertion_supported": ["verified_email"],
-            "credential_types_supported": ["api_key"],
-            "events_supported": []
-        }
+        "identity_types_supported": ["anonymous", "identity_assertion"],
+        "anonymous_supported": ["api_key"],
+        "identity_assertion_supported": ["verified_email"],
+        "credential_types_supported": ["api_key"],
+        "events_supported": []
     }))
 }
 
@@ -934,5 +929,58 @@ mod tests {
     #[test]
     fn test_hash_value_changes_output() {
         assert_ne!(hash_value("a"), "a");
+    }
+}
+
+#[cfg(test)]
+mod hardening_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_dual_signature_rejection_of_identical_signatures() {
+        let req = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: Some(vec!["sig1".to_string(), "sig1".to_string()]),
+            notes: None,
+        };
+        assert!(req.validate_dual_signature().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_dual_signature_acceptance_of_distinct_signatures() {
+        let req = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: Some(vec!["sig1".to_string(), "sig2".to_string()]),
+            notes: None,
+        };
+        assert!(req.validate_dual_signature().is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_dual_signature_rejection_of_three_signatures_with_duplicates() {
+        let req = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: Some(vec!["sig1".to_string(), "sig2".to_string(), "sig1".to_string()]),
+            notes: None,
+        };
+        // Even with 3 items, only 2 are unique. In this PoC we accept 2+ unique.
+        // If we wanted exactly 2, we'd check len == 2. NIP says "at least two".
+        // But the check should be unique_count >= 2.
+        assert!(req.validate_dual_signature().is_ok());
+
+        let req_fail = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: Some(vec!["sig1".to_string(), "sig1".to_string(), "sig1".to_string()]),
+            notes: None,
+        };
+        assert!(req_fail.validate_dual_signature().is_err());
     }
 }

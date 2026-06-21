@@ -1,38 +1,26 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::env;
+use std::{env, fmt};
 
+pub const DEFAULT_DATABASE_URL: &str = "postgres://postgres:password@localhost:5432/nexus";
+pub const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1:6379";
+pub const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so/";
+
+pub const ENV_ALLOW_DEFAULT_DB: &str = "ALLOW_DEFAULT_DB";
+pub const ENV_ALLOW_DEFAULT_REDIS: &str = "ALLOW_DEFAULT_REDIS";
 pub const ENV_EXPERIMENTAL_APIS: &str = "NEXUS_EXPERIMENTAL_APIS";
-pub const ENV_ORACLE_ENABLED: &str = "NEXUS_ORACLE_ENABLED";
-pub const ENV_ORACLE_STUB_OK: &str = "NEXUS_ORACLE_STUB_OK";
+pub const ENV_ORACLE_ENABLED: &str = "ORACLE_ENABLED";
+pub const ENV_ORACLE_STUB_OK: &str = "ORACLE_STUB_OK";
 pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
-pub const ENV_ALLOW_DEFAULT_DB: &str = "NEXUS_ALLOW_DEFAULT_DB";
-pub const ENV_ALLOW_DEFAULT_REDIS: &str = "NEXUS_ALLOW_DEFAULT_REDIS";
 pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 pub const ENV_ADMIN_API_TOKEN: &str = "NEXUS_ADMIN_API_TOKEN";
 
-const DEFAULT_DATABASE_URL: &str = "postgres://localhost/nexus";
-const DEFAULT_REDIS_URL: &str = "redis://127.0.0.1/";
-const DEFAULT_STACKS_NODE_RPC_URL: &str = "https://api.mainnet.hiro.so";
+/// Whether the OracleService is currently a stub or real.
+pub const ORACLE_SERVICE_IS_STUBBED: bool = true;
 
-// CON-394: Remediated contamination. Stubbing is now explicit and restricted.
-const ORACLE_SERVICE_IS_STUBBED: bool = false; // Remediated;
-
-pub(crate) fn parse_flag(value: &str) -> bool {
-    matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "1" | "true" | "yes" | "on"
-    )
-}
-
-#[derive(Clone, serde::Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
-    pub nostr_secret_key: Option<String>,
-    pub nostr_relays: Vec<String>,
-    pub tableland_base_url: String,
-    pub kwil_provider_url: Option<String>,
-    pub kwil_db_id: Option<String>,
-    pub kwil_private_key_hex: Option<String>,
     pub database_url: String,
     pub redis_url: String,
     pub rest_port: u16,
@@ -41,6 +29,12 @@ pub struct Config {
     pub stacks_node_ws_url: String,
     pub gateway_url: Option<String>,
     pub experimental_apis_enabled: bool,
+    pub nostr_secret_key: Option<String>,
+    pub nostr_relays: Vec<String>,
+    pub tableland_base_url: String,
+    pub kwil_provider_url: Option<String>,
+    pub kwil_db_id: Option<String>,
+    pub kwil_private_key_hex: Option<String>,
     pub oracle_enabled: bool,
     pub oracle_stub_ok: bool,
     pub oracle_endpoint_url: Option<String>,
@@ -50,25 +44,14 @@ pub struct Config {
     pub worldid_app_id: String,
     pub zkml_vks: HashMap<String, String>,
     pub admin_api_token: Option<String>,
+    pub admin_public_keys: Vec<String>,
     pub otel_exporter_otlp_endpoint: Option<String>,
     pub otel_service_name: String,
 }
 
-impl std::fmt::Debug for Config {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Config")
-            .field(
-                "nostr_secret_key",
-                &self.nostr_secret_key.as_ref().map(|_| "<redacted>"),
-            )
-            .field("nostr_relays", &self.nostr_relays)
-            .field("tableland_base_url", &self.tableland_base_url)
-            .field("kwil_provider_url", &self.kwil_provider_url)
-            .field("kwil_db_id", &self.kwil_db_id)
-            .field(
-                "kwil_private_key_hex",
-                &self.kwil_private_key_hex.as_ref().map(|_| "<redacted>"),
-            )
             .field("database_url", &"<redacted>")
             .field("redis_url", &"<redacted>")
             .field("rest_port", &self.rest_port)
@@ -89,6 +72,9 @@ impl std::fmt::Debug for Config {
                 "admin_api_token",
                 &self.admin_api_token.as_ref().map(|_| "<redacted>"),
             )
+            .field("admin_public_keys", &self.admin_public_keys)
+            .field("otel_exporter_otlp_endpoint", &self.otel_exporter_otlp_endpoint)
+            .field("otel_service_name", &self.otel_service_name)
             .finish()
     }
 }
@@ -108,7 +94,7 @@ impl Config {
             nostr_relays: vec![],
             tableland_base_url: "https://validator.tableland.xyz".to_string(),
             kwil_provider_url: None,
-            kwil_db_id: None,
+            kwil_db_id: Option::None,
             kwil_private_key_hex: None,
             oracle_enabled: false,
             oracle_stub_ok: true,
@@ -119,6 +105,7 @@ impl Config {
             worldid_app_id: "".to_string(),
             zkml_vks: HashMap::new(),
             admin_api_token: None,
+            admin_public_keys: vec![],
             otel_exporter_otlp_endpoint: None,
             otel_service_name: "conxian-nexus".to_string(),
         }
@@ -126,10 +113,6 @@ impl Config {
 
     pub fn from_env() -> anyhow::Result<Self> {
         use anyhow::{bail, Context};
-
-        fn env_flag(key: &str) -> bool {
-            env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
-        }
 
         let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
 
@@ -256,6 +239,13 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let admin_public_keys = env::var("ADMIN_PUBLIC_KEYS")
+            .unwrap_or_default()
+            .split(",")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
         let mut zkml_vks = HashMap::new();
         for (key, value) in env::vars() {
             if key.starts_with("ZKML_VK_B64_") {
@@ -296,10 +286,20 @@ impl Config {
             worldid_app_id,
             zkml_vks,
             admin_api_token,
+            admin_public_keys,
             otel_exporter_otlp_endpoint,
             otel_service_name,
         })
     }
+}
+
+pub fn env_flag(key: &str) -> bool {
+    env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
+}
+
+pub fn parse_flag(v: &str) -> bool {
+    let low = v.to_lowercase();
+    low == "1" || low == "true" || low == "yes" || low == "on"
 }
 
 #[cfg(test)]

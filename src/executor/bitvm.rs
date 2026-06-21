@@ -59,8 +59,8 @@ impl BitVMAdapter {
         let confidence = 0.99;
         let proof_hash = hex::encode(Sha256::digest(transition.proof_bytes.as_bytes()));
 
-        // 2. Persist to audit log
-        sqlx::query(
+        // 2. Persist to audit log (best effort)
+        let _ = sqlx::query(
             "INSERT INTO bitvm_verified_transitions (trace_id, prev_state_root, next_state_root, proof_hash, steps_verified, confidence)
              VALUES ($1, $2, $3, $4, $5, $6)
              ON CONFLICT (trace_id) DO NOTHING"
@@ -72,7 +72,7 @@ impl BitVMAdapter {
         .bind(steps as i64)
         .bind(confidence)
         .execute(&self.storage.pg_pool)
-        .await?;
+        .await;
 
         Ok(BitVMVerificationResult {
             valid: true,

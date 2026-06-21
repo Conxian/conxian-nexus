@@ -21,7 +21,6 @@ pub struct EVMVerificationResult {
 
 /// Protocol Adapter for Ethereum / EVM family.
 pub struct EVMAdapter {
-    #[allow(dead_code)]
     storage: Arc<Storage>,
 }
 
@@ -54,11 +53,28 @@ impl EVMAdapter {
             });
         }
 
+        let status = "Receipt proof verified and audited (simulated)".to_string();
+        let verified_at_height = 1000000;
+
+        // [NIP-005] Persist to audit log (best effort - don't fail verification if DB is down)
+        let _ = sqlx::query(
+            "INSERT INTO evm_verified_receipts (block_hash, transaction_index, receipt_root, status, verified_at_height)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (block_hash, transaction_index) DO NOTHING"
+        )
+        .bind(&proof.block_hash)
+        .bind(proof.transaction_index as i64)
+        .bind(&proof.receipt_root)
+        .bind(&status)
+        .bind(verified_at_height as i64)
+        .execute(&self.storage.pg_pool)
+        .await;
+
         // Mock success for validly formatted inputs
         Ok(EVMVerificationResult {
             valid: true,
-            status: "Receipt proof verified (simulated)".to_string(),
-            verified_at_height: 1000000, // Placeholder height
+            status,
+            verified_at_height,
         })
     }
 }
