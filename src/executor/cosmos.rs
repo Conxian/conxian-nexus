@@ -21,7 +21,6 @@ pub struct IBCVerificationResult {
 
 /// Protocol Adapter for Cosmos / IBC family.
 pub struct CosmosAdapter {
-    #[allow(dead_code)]
     storage: Arc<Storage>,
 }
 
@@ -47,12 +46,27 @@ impl CosmosAdapter {
             });
         }
 
+        let latest_height = update.trusted_height + 1;
+        let trust_level = "T1 (Strict)".to_string();
+
+        // [NIP-005] Persist to audit log (best effort)
+        let _ = sqlx::query(
+            "INSERT INTO cosmos_verified_client_updates (client_id, latest_height, trust_level)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (client_id) DO UPDATE SET latest_height = EXCLUDED.latest_height"
+        )
+        .bind(&update.client_id)
+        .bind(latest_height as i64)
+        .bind(&trust_level)
+        .execute(&self.storage.pg_pool)
+        .await;
+
         // Mock success for validly formatted client IDs
         Ok(IBCVerificationResult {
             valid: true,
             client_id: update.client_id.clone(),
-            latest_height: update.trusted_height + 1,
-            trust_level: "T1 (Strict)".to_string(),
+            latest_height,
+            trust_level,
         })
     }
 }
