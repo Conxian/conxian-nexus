@@ -18,6 +18,8 @@ pub struct ExecutionRequest {
     pub payload: String,
     pub timestamp: DateTime<Utc>,
     pub sender: String,
+    #[serde(default)]
+    pub priority: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -77,14 +79,17 @@ impl NexusExecutor {
             anyhow::bail!("Transaction validation failed");
         }
 
+        // [Hole 4.1] Expand audit logs to include full payload and priority metadata
         sqlx::query(
-            "INSERT INTO me_audit_log (tx_id, payload_hash, sender, arrival_time)
-             VALUES ($1, $2, $3, $4)",
+            "INSERT INTO me_audit_log (tx_id, payload_hash, sender, arrival_time, payload, sequencing_priority)
+             VALUES ($1, $2, $3, $4, $5, $6)",
         )
         .bind(&request.tx_id)
         .bind(hex::encode(Sha256::digest(request.payload.as_bytes())))
         .bind(&request.sender)
         .bind(request.timestamp)
+        .bind(&request.payload)
+        .bind(request.priority)
         .execute(&self.storage.pg_pool)
         .await?;
 
@@ -153,10 +158,12 @@ mod tests {
             payload: "data".to_string(),
             timestamp: Utc::now(),
             sender: "sender".to_string(),
+            priority: 1,
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
         assert_eq!(req.tx_id, deserialized.tx_id);
+        assert_eq!(deserialized.priority, 1);
     }
 
     #[test]
