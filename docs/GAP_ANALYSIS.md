@@ -1,4 +1,4 @@
-# Conxian Nexus: Gap Analysis & Research Map (v0.4.16)
+# Conxian Nexus: Gap Analysis & Research Map (v0.4.17)
 
 This document maps identified security holes and protocol gaps to their research foundations and provides a prioritization score.
 
@@ -28,7 +28,7 @@ This document maps identified security holes and protocol gaps to their research
 ### 2.3 MEV Audit Detail (Hole 4.1)
 - **Gap**: `me_audit_log` is too sparse for forensics.
 - **Research**: MEV Transparency research (v0.4.0 roadmap) requires full payload and sequencing metadata.
-- **Code**: `src/executor/mod.rs`, `migrations/202401010005_mev_audit.sql`
+- **Code**: `src/executor/mod.rs`, `migrations/20240101000005_mev_audit.sql`
 
 ### 2.4 Multi-Chain Verification (NIP-005)
 - **Gap**: Adapters for BitVM2, EVM, and Cosmos are stubs.
