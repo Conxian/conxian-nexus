@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.17] - 2026-06-23
+
+### Added
+- [NIP-007] Fail-closed Safety Mode enforcement in transaction submission path.
+- [Hole 4.1] Expanded MEV audit logs to include full payload and sequencing priority.
+- Comprehensive Gap Analysis and Research Map (`docs/GAP_ANALYSIS.md`).
+- Expanded research on Fedimint, FROST, and OP_CAT in `docs/RESEARCH.md`.
+
+### Changed
+- Updated `ExecutionRequest` to include sequencing priority metadata.
+
 All notable changes to this project will be documented in this file.
 
 ## [0.4.15] - 2026-06-18

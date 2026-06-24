@@ -64,7 +64,10 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize logging using the centralized config
 
-    tracing::info!("Initializing Conxian Nexus (Glass Node v0.4.15)...");
+    tracing::info!(
+        "Initializing Conxian Nexus (Glass Node v{})...",
+        env!("CARGO_PKG_VERSION")
+    );
 
     // Initialize Global Start Time
     api::init_start_time();

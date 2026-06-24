@@ -314,6 +314,7 @@ impl NexusService for NexusGrpcService {
             tx_id: req.tx_id.clone(),
             payload: req.payload,
             sender: req.sender,
+            priority: 0,
             timestamp,
         };
 
