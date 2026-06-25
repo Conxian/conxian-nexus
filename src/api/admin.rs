@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use k256::ecdsa::{VerifyingKey, Signature, signature::Verifier};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -340,9 +341,12 @@ pub trait DualSignatureRequest {
     fn second_approver(&self) -> &Option<String>;
     fn signatures(&self) -> &Option<Vec<String>>;
 
-    fn validate_dual_signature(&self) -> Result<(), (StatusCode, Json<Value>)> {
+    fn approval_message(&self) -> String;
+
+    fn validate_dual_signature(&self, config: &crate::config::Config) -> Result<(), (StatusCode, Json<Value>)> {
         let signatures = self.signatures().as_ref();
-        let unique_sigs_count = signatures.map(|s| s.iter().collect::<HashSet<_>>().len()).unwrap_or(0);
+        let sig_strings = signatures.map(|s| s.iter().collect::<HashSet<_>>()).unwrap_or_default();
+        let unique_sigs_count = sig_strings.len();
 
         if self.second_approver().is_none() || unique_sigs_count < 2 {
             return Err((
@@ -353,11 +357,61 @@ pub trait DualSignatureRequest {
                 })),
             ));
         }
+
+        // [NIP-004] Cryptographic verification
+        if !config.admin_public_keys.is_empty() {
+            let msg_bytes = self.approval_message().into_bytes();
+            let mut verified_count = 0;
+            let mut verified_keys = HashSet::new();
+
+            for sig_hex in sig_strings {
+                let sig_bytes = hex::decode(sig_hex).map_err(|_| (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "invalid_signature_format"}))
+                ))?;
+                let signature = Signature::from_der(&sig_bytes).map_err(|_| (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"error": "invalid_signature_der"}))
+                ))?;
+
+                for pk_hex in &config.admin_public_keys {
+                    let pk_bytes = hex::decode(pk_hex).map_err(|_| (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "invalid_configured_pk"}))
+                    ))?;
+                    let verifying_key = VerifyingKey::from_sec1_bytes(&pk_bytes).map_err(|_| (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({"error": "invalid_configured_sec1_pk"}))
+                    ))?;
+
+                    if verifying_key.verify(&msg_bytes, &signature).is_ok() {
+                        if verified_keys.insert(pk_hex.clone()) {
+                            verified_count += 1;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if verified_count < 2 {
+                return Err((
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({
+                        "error": "cryptographic_verification_failed",
+                        "error_description": format!("Only {} of 2 required cryptographic signatures verified against trusted admin keys", verified_count)
+                    })),
+                ));
+            }
+        }
+
         Ok(())
     }
 }
 
 impl DualSignatureRequest for ReleaseApprovalRequest {
+    fn approval_message(&self) -> String {
+        format!("approve-release-artifact:{}", self.artifact_id)
+    }
     fn second_approver(&self) -> &Option<String> {
         &self.second_approver
     }
@@ -367,6 +421,9 @@ impl DualSignatureRequest for ReleaseApprovalRequest {
 }
 
 impl DualSignatureRequest for ReleaseDecisionRequest {
+    fn approval_message(&self) -> String {
+        format!("release-decision:{}", self.artifact_id)
+    }
     fn second_approver(&self) -> &Option<String> {
         &self.second_approver
     }
@@ -376,6 +433,9 @@ impl DualSignatureRequest for ReleaseDecisionRequest {
 }
 
 impl DualSignatureRequest for GovernanceDecisionRequest {
+    fn approval_message(&self) -> String {
+        format!("governance-decision:{}", self.action_id)
+    }
     fn second_approver(&self) -> &Option<String> {
         &self.second_approver
     }
@@ -393,7 +453,7 @@ async fn request_release_approval(
     authorize_admin_write(&state, &headers)?;
 
     payload
-        .validate_dual_signature()
+        .validate_dual_signature(&state.config)
         .map_err(|e| e.into_response())?;
 
     Ok(Json(ReleaseApprovalResponse {
@@ -416,7 +476,7 @@ async fn submit_release_decision(
     authorize_admin_write(&state, &headers)?;
 
     payload
-        .validate_dual_signature()
+        .validate_dual_signature(&state.config)
         .map_err(|e| e.into_response())?;
 
     Ok(Json(WorkflowDecisionResponse {
@@ -439,7 +499,7 @@ async fn submit_governance_decision(
     authorize_admin_write(&state, &headers)?;
 
     payload
-        .validate_dual_signature()
+        .validate_dual_signature(&state.config)
         .map_err(|e| e.into_response())?;
 
     Ok(Json(WorkflowDecisionResponse {
@@ -945,7 +1005,7 @@ mod hardening_tests {
             signatures: Some(vec!["sig1".to_string(), "sig1".to_string()]),
             notes: None,
         };
-        assert!(req.validate_dual_signature().is_err());
+        assert!(req.validate_dual_signature(&crate::config::Config::default_test()).is_err());
     }
 
     #[tokio::test]
@@ -957,7 +1017,7 @@ mod hardening_tests {
             signatures: Some(vec!["sig1".to_string(), "sig2".to_string()]),
             notes: None,
         };
-        assert!(req.validate_dual_signature().is_ok());
+        assert!(req.validate_dual_signature(&crate::config::Config::default_test()).is_ok());
     }
 
     #[tokio::test]
@@ -972,7 +1032,7 @@ mod hardening_tests {
         // Even with 3 items, only 2 are unique. In this PoC we accept 2+ unique.
         // If we wanted exactly 2, we'd check len == 2. NIP says "at least two".
         // But the check should be unique_count >= 2.
-        assert!(req.validate_dual_signature().is_ok());
+        assert!(req.validate_dual_signature(&crate::config::Config::default_test()).is_ok());
 
         let req_fail = ReleaseApprovalRequest {
             artifact_id: "art_123".to_string(),
@@ -981,6 +1041,75 @@ mod hardening_tests {
             signatures: Some(vec!["sig1".to_string(), "sig1".to_string(), "sig1".to_string()]),
             notes: None,
         };
-        assert!(req_fail.validate_dual_signature().is_err());
+        assert!(req_fail.validate_dual_signature(&crate::config::Config::default_test()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod cryptographic_hardening_tests {
+    use super::*;
+    use k256::ecdsa::{SigningKey, Signature, signature::Signer};
+    use hex;
+
+    #[tokio::test]
+    async fn test_dual_signature_cryptographic_verification_success() {
+        // Setup two trusted keys
+        let sk1 = SigningKey::from_slice(&[1u8; 32]).unwrap();
+        let sk2 = SigningKey::from_slice(&[2u8; 32]).unwrap();
+        let pk1_hex = hex::encode(sk1.verifying_key().to_sec1_bytes());
+        let pk2_hex = hex::encode(sk2.verifying_key().to_sec1_bytes());
+
+        let mut config = crate::config::Config::default_test();
+        config.admin_public_keys = vec![pk1_hex, pk2_hex];
+
+        let req = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: None,
+            notes: None,
+        };
+        let msg = req.approval_message();
+
+        let sig1 = Signer::<Signature>::sign(&sk1, msg.as_bytes()).to_der();
+        let sig2 = Signer::<Signature>::sign(&sk2, msg.as_bytes()).to_der();
+
+        let req_with_sigs = ReleaseApprovalRequest {
+            signatures: Some(vec![hex::encode(sig1), hex::encode(sig2)]),
+            ..req
+        };
+
+        assert!(req_with_sigs.validate_dual_signature(&config).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_dual_signature_cryptographic_verification_failure_wrong_key() {
+        let sk1 = SigningKey::from_slice(&[1u8; 32]).unwrap();
+        let sk_untrusted = SigningKey::from_slice(&[3u8; 32]).unwrap();
+        let pk1_hex = hex::encode(sk1.verifying_key().to_sec1_bytes());
+
+        let mut config = crate::config::Config::default_test();
+        config.admin_public_keys = vec![pk1_hex];
+
+        let req = ReleaseApprovalRequest {
+            artifact_id: "art_123".to_string(),
+            requested_by: "alice".to_string(),
+            second_approver: Some("bob".to_string()),
+            signatures: None,
+            notes: None,
+        };
+        let msg = req.approval_message();
+
+        let sig1 = Signer::<Signature>::sign(&sk1, msg.as_bytes()).to_der();
+        let sig_untrusted = Signer::<Signature>::sign(&sk_untrusted, msg.as_bytes()).to_der();
+
+        let req_with_sigs = ReleaseApprovalRequest {
+            signatures: Some(vec![hex::encode(sig1), hex::encode(sig_untrusted)]),
+            ..req
+        };
+
+        let result = req_with_sigs.validate_dual_signature(&config);
+        assert!(result.is_err());
+        // Since we only have 1 trusted key in config, verified_count will be 1.
     }
 }

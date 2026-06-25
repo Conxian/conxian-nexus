@@ -1,10 +1,25 @@
-# Conxian Nexus Research & Improvement Proposals
+# Conxian Nexus Research & Improvement Proposals (Updated June 2026)
 
-## 1. Multi-Chain Interoperability
-- **Cosmos/IBC**: Researching "superior" interoperability models for cross-chain state proofs.
-  - *Reference*: [IBC Protocol Specification](https://github.com/cosmos/ibc)
-- **BitVM2**: Optimistic bridge research for trust-minimized Bitcoin L2s.
-  - *Reference*: [BitVM: Compute Anything on Bitcoin](https://bitvm.org/bitvm.pdf)
+## 1. Multi-Chain Interoperability (NIP-005)
+
+### 1.1 Bitcoin & BitVM2
+- **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s.
+- **Protocol**: BitVM2 allows for arbitrary computation on Bitcoin via fraudulent proof challenges.
+- **Implementation Path**: Integrate `ark-groth16` or `ark-poly` for verifier logic in the `BitVMAdapter`.
+- **Resources**:
+  - [BitVM2: Bridging Bitcoin](https://bitvm.org/bitvm.pdf)
+  - [arkworks-rs](https://github.com/arkworks-rs)
+
+### 1.2 Cosmos & IBC
+- **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.
+- **Implementation Path**: Utilize `ibc-rs` (Informal Systems) for Tendermint light client verification. Transition from string-matching client IDs to verifying validator set signatures and Merkle proofs for cross-chain packets.
+- **Resources**:
+  - [IBC Protocol Specification](https://github.com/cosmos/ibc)
+  - [Hermes Relayer (informalsystems/hermes)](https://github.com/informalsystems/hermes)
+
+### 1.3 EVM Merkle Patricia Trie (MPT)
+- **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root.
+- **Implementation Path**: Implement MPT verification logic in `evm.rs` to transition from simulated format checks to cryptographic proof of inclusion.
 
 ## 2. Smart Contract Language Evolution
 - **Clarity 4**: Transitioning to passkey-based auth (`secp256r1-verify`) and on-chain contract hashes (`contract-hash?`).
@@ -18,8 +33,9 @@
 
 ## 4. Improvement Proposals (Nexus-Specific)
 - **NIP-01**: Transition Admin API to dual-signature requirement for release approval.
-- **NIP-02**: Implement ZKML verification for oracle confidence scoring.
-- **NIP-03**: Expand SRL-1 Lightning Resilience to include MPP (Multi-Path Payment) recovery.
+- **NIP-04**: Cryptographic Dual-Signature Verification for Admin actions (Implementation in progress).
+- **NIP-05**: Transition from Simulated to Real Multi-Chain Verification.
+- **NIP-07**: Safety Mode Enforcement in Submission Path (Implemented v0.4.17).
 
 ## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304)
 

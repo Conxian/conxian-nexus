@@ -37,6 +37,7 @@ opentelemetry-otlp = { version = "0.27", features = ["grpc-tonic", "tokio"] }
 tracing-opentelemetry = "0.28"
 uuid = { version = "1.23.0", features = ["v4"] }
 nostr-sdk = "0.43"
+k256 = { version = "0.13.4", features = ["ecdsa", "sha256"] }
 
 [build-dependencies]
 tonic-build = "0.13"
