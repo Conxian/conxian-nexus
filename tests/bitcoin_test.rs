@@ -657,7 +657,9 @@ async fn test_bitvm_validation_edge_cases() {
         prev_state_root: "short".to_string(),
         next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000002"
             .to_string(),
-        proof_bytes: "data".to_string(),
+        proof_bytes: "00".to_string(),
+        vk_bytes: "00".to_string(),
+        public_inputs: vec![],
         trace_id: "t1".to_string(),
     };
 
