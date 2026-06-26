@@ -38,6 +38,13 @@ tracing-opentelemetry = "0.28"
 uuid = { version = "1.23.0", features = ["v4"] }
 nostr-sdk = "0.43"
 k256 = { version = "0.13.4", features = ["ecdsa", "sha256"] }
+ark-groth16 = "0.4.0"
+ark-serialize = "0.4.0"
+ark-bls12-381 = "0.4.0"
+ark-crypto-primitives = { version = "0.4.0", features = ["snark"] }
+ark-ff = "0.4.0"
+ark-relations = "0.4.0"
+ark-std = "0.4.0"
 
 [build-dependencies]
 tonic-build = "0.13"

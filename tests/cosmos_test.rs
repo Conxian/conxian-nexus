@@ -71,7 +71,7 @@ async fn test_cosmos_ibc_verification_success() {
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], true);
     assert_eq!(res["client_id"], "07-tendermint-0");
-    assert_eq!(res["trust_level"], "T1 (Strict)");
+    assert_eq!(res["trust_level"], "T1 (NIP-005 Phase 1)");
 }
 
 #[tokio::test]

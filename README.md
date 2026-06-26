@@ -8,7 +8,7 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Status
 
-**Active development (v0.4.13).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
+**Active development (v0.4.17).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
 
 ## Audience
 
