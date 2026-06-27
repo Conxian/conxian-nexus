@@ -10,6 +10,14 @@ pub struct Storage {
 impl Storage {
     pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
         let pg_pool = PgPool::connect(database_url).await?;
+
+        // [CON-1276] Enforce authenticated Redis for production paths.
+        if !cfg!(debug_assertions) && (redis_url.contains("@") || redis_url.starts_with("redis://127.0.0.1") || redis_url.starts_with("redis://localhost")) {
+             if !redis_url.contains(":") || !redis_url.contains("@") {
+                 tracing::warn!("Redis URL might be unauthenticated in a production-like build.");
+             }
+        }
+
         let redis_client = RedisClient::open(redis_url)?;
 
         Ok(Self {

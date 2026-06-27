@@ -1,3 +1,4 @@
+pub mod fedimint;
 pub mod bitvm;
 pub mod cosmos;
 pub mod evm;
@@ -31,6 +32,7 @@ pub struct VaultStatus {
 }
 
 pub struct NexusExecutor {
+    pub fedimint_adapter: fedimint::FedimintAdapter,
     pub storage: Arc<Storage>,
     pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
     pub rgb_adapter: rgb::RGBAdapter,
@@ -53,6 +55,7 @@ impl NexusExecutor {
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
         let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
+        let fedimint_adapter = fedimint::FedimintAdapter::new(storage.clone());
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
@@ -62,6 +65,7 @@ impl NexusExecutor {
             evm_adapter,
             cosmos_adapter,
             stacks_adapter,
+            fedimint_adapter,
         }
     }
 

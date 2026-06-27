@@ -110,15 +110,12 @@ impl OracleAggregator {
             }
         }
 
-        // Production mapping for regional currencies
-        aggregated_rates.entry("ZAR".to_string()).or_insert(18.5);
-        aggregated_rates.entry("NGN".to_string()).or_insert(1500.0);
-        aggregated_rates.entry("BRL".to_string()).or_insert(5.0);
+        // [CON-1276] Remove stub-adjacent regional mapping.
+        // Real-time rates must be fetched from configured providers.
 
         let mut ppp_indices = HashMap::new();
-        ppp_indices.insert("ZAR".to_string(), 0.45);
-        ppp_indices.insert("NGN".to_string(), 0.30);
-        ppp_indices.insert("BRL".to_string(), 0.50);
+        // PPP indices should also be fetched or derived from dynamic sources.
+        // For now, only using verified values.
         ppp_indices.insert("EUR".to_string(), 1.0);
 
         Ok(PppState {
