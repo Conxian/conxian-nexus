@@ -69,3 +69,18 @@
 - **Concept**: Federated blinded mints issuing e-cash.
 - **Application**: Community-governed liquidity pools with high privacy.
 - **Integration**: A "Federation Adapter" using `fedimint-client` to verify issuance/redemption proofs.
+
+## 7. Strategic Research Updates (June 2026)
+
+### 7.1 BitVM3: Recursive Verification & Prover Efficiency
+- **Focus**: Reducing the number of rounds in the challenge-response protocol.
+- **Nexus Role**: The `BitVMAdapter` is being prepared for BitVM3's more efficient prover-prover interaction. Recursive proofs will allow for smaller on-chain footprints during challenges.
+
+### 7.2 Adaptive Proofs (BitVMX)
+- **Concept**: Dynamic proof generation based on the complexity of the state transition.
+- **Application**: High-efficiency computation for complex L2 logic.
+- **Implementation**: Integrated into the `UniversalChainAdapter` framework (CXIP-21).
+
+### 7.3 Zero-Knowledge Contingent Payments (ZKCP)
+- **Concept**: Trustless exchange of information for value on Bitcoin using HTLCs and ZK proofs.
+- **Nexus Role**: Orchestrate the setup and verification of ZKCP intents. Initial scaffolding is present in the core protocol layers.
