@@ -25,7 +25,7 @@ dotenvy = "0.15"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 futures-util = "0.3"
 lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "3b091d2700d840514427e4190c40d631b6d8132c" }
-prometheus = "0.13"
+prometheus = "0.14"
 lazy_static = "1.4"
 reqwest = { version = "0.12", features = ["json"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-native-roots"] }
