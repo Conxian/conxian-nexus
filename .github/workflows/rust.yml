@@ -15,12 +15,12 @@ jobs:
     name: Repo Hygiene & Contamination Guard
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
       with:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -45,7 +45,7 @@ jobs:
     needs: hygiene
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
       with:
         submodules: recursive
     - name: Build
@@ -66,7 +66,7 @@ jobs:
         fi
     - name: Upload Bitcoin coverage artifacts
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1
       with:
         name: bitcoin-coverage
         path: |
