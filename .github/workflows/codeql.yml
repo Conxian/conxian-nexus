@@ -31,3 +31,7 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          # The repository has CodeQL default setup enabled; skip SARIF upload from
+          # this advanced workflow to avoid "advanced configuration" processing errors.
+          upload: false
