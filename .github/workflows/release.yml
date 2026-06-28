@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: 'Release version to publish (X.Y.Z or vX.Y.Z)'
+        required: true
+        type: string
+      publish_to_crates_io:
+        description: 'Publish to crates.io after validation (manual only)'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    name: Validate release metadata and package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
+        with:
+          toolchain: stable
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate version matches Cargo.toml
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.value }}"
+          version="${version#v}"
+          cargo_version=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          if [[ "${version}" != "${cargo_version}" ]]; then
+            echo "error: tag version ${version} != Cargo.toml version ${cargo_version}" >&2
+            exit 1
+          fi
+          echo "Version ${version} matches Cargo.toml"
+
+      - name: Run tests
+        run: cargo test --locked
+
+      - name: Verify crates.io package (dry-run)
+        run: cargo publish --dry-run
+
+  publish-crates-io:
+    name: Publish crate to crates.io (manual gate)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_crates_io }}
+    needs: validate-release
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
+        with:
+          toolchain: stable
+
+      - name: Enforce publish from tag
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
+            echo "error: publishing allowed only from a release tag" >&2
+            exit 1
+          fi
+
+      - name: Verify CARGO_REGISTRY_TOKEN
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [[ -z "${TOKEN}" ]]; then
+            echo "error: CARGO_REGISTRY_TOKEN not set in release environment" >&2
+            exit 1
+          fi
+
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
