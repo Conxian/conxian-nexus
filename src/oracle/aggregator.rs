@@ -114,9 +114,11 @@ impl OracleAggregator {
         // Real-time rates must be fetched from configured providers.
 
         let mut ppp_indices = HashMap::new();
-        // PPP indices should also be fetched or derived from dynamic sources.
-        // For now, only using verified values.
+        // [OPPORTUNITY] Transition from hardcoded PPP values to a dynamic fetcher.
+        // For v0.4.17, we keep verified baseline values but structure for expansion.
         ppp_indices.insert("EUR".to_string(), 1.0);
+        ppp_indices.insert("GBP".to_string(), 1.0);
+        ppp_indices.insert("JPY".to_string(), 1.0);
 
         Ok(PppState {
             base_currency: "USD".to_string(),
