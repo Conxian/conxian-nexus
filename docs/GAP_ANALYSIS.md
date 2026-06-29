@@ -11,8 +11,9 @@ This document maps identified security holes and protocol gaps to their research
 | **Hole 4.1** | MEV Audit Detail Expansion | 6 | 1 | **P1** | **Completed** |
 | **NIP-005** | Real Multi-Chain Verification (Tier 1) | 9 | 9 | **P1** | **Initializing (BitVM2)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
-| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | Backlog |
+| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
 | **NIP-006** | Admin Token Hardening (JWT/RBAC) | 8 | 6 | **P1** | Proposed |
+| **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | Backlog (v0.4.18) |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | Backlog |
 
@@ -29,11 +30,16 @@ This document maps identified security holes and protocol gaps to their research
 - **Code**: `src/api/admin.rs`
 
 ### 2.3 Multi-Chain Verification (NIP-005)
-- **Gap**: Adapters for BitVM2, EVM, and Cosmos are stubs.
+- **Gap**: Adapters for EVM and Cosmos remain Phase 1 (Structural).
 - **Best Candidate**: BitVM2 Groth16 verification via `ark-groth16`.
-- **Status**: Initial cryptographic verification implemented in `src/executor/bitvm.rs`.
-- **Code**: `src/executor/{bitvm, evm, cosmos}.rs`
+- **Status**: Real cryptographic verification implemented in `src/executor/bitvm.rs`.
+- **Next Step**: Integrate `trie_db` for EVM MPT and `ibc-rs` for Cosmos.
 
 ### 2.4 ZKCP Implementation (G-50)
 - **Gap**: Trustless information-for-value exchange on Bitcoin.
-- **Research**: Requires Discreet Log Contracts (DLC) or specific script patterns.
+- **Status**: **Phase 1 Complete**. Scaffolding and tests implemented in dashboard/lib-core.
+- **Code**: `src/api/dlc.rs` (Nexus side intent anchors)
+
+### 2.5 SRL-1 Recovery (Hole 3.1)
+- **Gap**: Failure taxonomy exists, but automatic recovery actions are not triggered.
+- **Status**: **Backlog**. Scheduled for v0.4.18.
