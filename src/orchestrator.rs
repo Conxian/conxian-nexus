@@ -45,6 +45,11 @@ impl AutonomousOrchestrator {
             .get_multiplexed_async_connection()
             .await?;
 
+        // 0. Lightning Recovery (SRL-1)
+        if let Err(e) = self.audit_lightning_payments().await {
+            tracing::error!("Lightning recovery audit failed: {}", e);
+        }
+
         // 1. Check for sync drift
         let drift: u64 = redis::cmd("GET")
             .arg("nexus:drift")
@@ -84,6 +89,87 @@ impl AutonomousOrchestrator {
                 "Nominal"
             }
         );
+        Ok(())
+    }
+
+    /// [Hole 3.1] SRL-1: Poll and recover stale or failed Lightning payments.
+    pub async fn audit_lightning_payments(&self) -> anyhow::Result<()> {
+        let adapter = crate::executor::lightning::LightningResilienceAdapter::new();
+
+        // Find payments that might need recovery
+        let rows = sqlx::query(
+            "SELECT payment_id, payment_hash, amount_msat, status, failure_type, retry_count, created_at, last_updated_at
+             FROM lightning_payment_intents
+             WHERE status IN ('pending', 'recovering', 'mpp_splitting', 'failed')"
+        )
+        .fetch_all(&self.storage.pg_pool)
+        .await?;
+
+        for row in rows {
+            use crate::executor::lightning::{LightningFailureType, LightningPaymentStatus, PaymentIntent};
+            use sqlx::Row;
+
+            let status_str: String = row.try_get("status")?;
+            let failure_type_str: Option<String> = row.try_get("failure_type")?;
+
+            let mut intent = PaymentIntent {
+                payment_id: row.try_get("payment_id")?,
+                payment_hash: row.try_get("payment_hash")?,
+                amount_msat: row.try_get::<i64, _>("amount_msat")? as u64,
+                status: match status_str.as_str() {
+                    "pending" => LightningPaymentStatus::Pending,
+                    "succeeded" => LightningPaymentStatus::Succeeded,
+                    "failed" => LightningPaymentStatus::Failed,
+                    "recovering" => LightningPaymentStatus::Recovering,
+                    "mpp_splitting" => LightningPaymentStatus::MppSplitting,
+                    _ => LightningPaymentStatus::Pending,
+                },
+                failure_type: failure_type_str.and_then(|s| match s.as_str() {
+                    "permanent" => Some(LightningFailureType::Permanent),
+                    "transient" => Some(LightningFailureType::Transient),
+                    "indeterminate" => Some(LightningFailureType::Indeterminate),
+                    "mpp_partial" => Some(LightningFailureType::MppPartial),
+                    _ => None,
+                }),
+                retry_count: row.try_get("retry_count")?,
+                created_at: row.try_get("created_at")?,
+                last_updated_at: row.try_get("last_updated_at")?,
+            };
+
+            if let Some(action) = adapter.process_recovery(&mut intent) {
+                tracing::info!(
+                    payment_id = %intent.payment_id,
+                    action = %action,
+                    "Triggering Lightning recovery action"
+                );
+
+                // Persist the updated state
+                sqlx::query(
+                    "UPDATE lightning_payment_intents
+                     SET status = $1, retry_count = $2, last_updated_at = $3
+                     WHERE payment_id = $4"
+                )
+                .bind(intent.status.to_string())
+                .bind(intent.retry_count)
+                .bind(intent.last_updated_at)
+                .bind(&intent.payment_id)
+                .execute(&self.storage.pg_pool)
+                .await?;
+
+                // Audit the recovery event
+                sqlx::query(
+                    "INSERT INTO lightning_payment_events (event_id, payment_id, status, metadata)
+                     VALUES ($1, $2, $3, $4)"
+                )
+                .bind(format!("rec_{}", uuid::Uuid::new_v4()))
+                .bind(&intent.payment_id)
+                .bind(intent.status.to_string())
+                .bind(format!("Recovery action: {}", action))
+                .execute(&self.storage.pg_pool)
+                .await?;
+            }
+        }
+
         Ok(())
     }
 }

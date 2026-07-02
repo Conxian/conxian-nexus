@@ -13,7 +13,7 @@ This document maps identified security holes and protocol gaps to their research
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
 | **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
 | **NIP-006** | Admin Token Hardening (JWT/RBAC) | 8 | 6 | **P1** | Proposed |
-| **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | Backlog (v0.4.18) |
+| **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | **Completed (v0.4.18)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | Backlog |
 
@@ -42,4 +42,4 @@ This document maps identified security holes and protocol gaps to their research
 
 ### 2.5 SRL-1 Recovery (Hole 3.1)
 - **Gap**: Failure taxonomy exists, but automatic recovery actions are not triggered.
-- **Status**: **Backlog**. Scheduled for v0.4.18.
+- **Status**: **Resolved v0.4.18**. Automatic triggers for retries, split-recovery, and reconciliation implemented.

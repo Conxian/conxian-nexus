@@ -148,6 +148,16 @@ impl NexusExecutor {
     pub async fn get_vaults_from_storage(&self) -> anyhow::Result<Vec<VaultStatus>> {
         Ok(vec![])
     }
+
+    /// [Hole 3.1] Manual or automated trigger for Lightning recovery audit.
+    pub async fn trigger_lightning_recovery(&self) -> anyhow::Result<()> {
+        let orchestrator = crate::orchestrator::AutonomousOrchestrator::new(
+            self.storage.clone(),
+            Arc::new(crate::state::NexusState::new()), // Simplified for trigger
+            None,
+        );
+        orchestrator.audit_lightning_payments().await
+    }
 }
 
 #[cfg(test)]
