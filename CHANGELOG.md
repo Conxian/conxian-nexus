@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.18] - 2026-06-30
+
+### Added
+- [Hole 3.1] SRL-1 Lightning Resilience and Recovery: Implemented automatic recovery triggers for transient failures, MPP partial failures, and indeterminate payment states.
+- [Hole 3.1] Persistence layer for Lightning payment intents and recovery audit events.
+- [Hole 3.1] Integration of Lightning recovery audits into the Autonomous Orchestrator.
+
 ## [0.4.17] - 2026-06-23
 
 ### Added
