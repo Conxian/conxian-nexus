@@ -40,6 +40,19 @@ pub enum LightningPaymentStatus {
     MppSplitting,
 }
 
+impl fmt::Display for LightningPaymentStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Pending => "pending",
+            Self::Succeeded => "succeeded",
+            Self::Failed => "failed",
+            Self::Recovering => "recovering",
+            Self::MppSplitting => "mpp_splitting",
+        };
+        write!(f, "{}", s)
+    }
+}
+
 /// Intent model for a Lightning payment.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentIntent {
@@ -47,6 +60,8 @@ pub struct PaymentIntent {
     pub payment_hash: String,
     pub amount_msat: u64,
     pub status: LightningPaymentStatus,
+    pub failure_type: Option<LightningFailureType>,
+    pub retry_count: i32,
     pub created_at: DateTime<Utc>,
     pub last_updated_at: DateTime<Utc>,
 }
@@ -112,6 +127,63 @@ impl LightningResilienceAdapter {
             LightningFailureType::Indeterminate
         } else {
             LightningFailureType::Transient
+        }
+    }
+
+    /// Determines if a payment intent should trigger recovery based on its current state.
+    pub fn should_recover(&self, intent: &PaymentIntent) -> bool {
+        use LightningPaymentStatus::*;
+        use LightningFailureType::*;
+
+        match (intent.status, intent.failure_type) {
+            (Recovering, _) => true,
+            (Failed, Some(Transient)) if intent.retry_count < 3 => true,
+            (Failed, Some(MppPartial)) => true,
+            (Pending, _) => {
+                let age = Utc::now() - intent.created_at;
+                age.num_seconds() > 300 // 5 minutes
+            }
+            (MppSplitting, _) => {
+                let age = Utc::now() - intent.last_updated_at;
+                age.num_seconds() > 600 // 10 minutes
+            }
+            _ => false,
+        }
+    }
+
+    /// Logic for processing recovery for different failure types.
+    pub fn process_recovery(&self, intent: &mut PaymentIntent) -> Option<&'static str> {
+        use LightningFailureType::*;
+        use LightningPaymentStatus::*;
+
+        if !self.should_recover(intent) {
+            return None;
+        }
+
+        match intent.failure_type {
+            Some(Transient) => {
+                intent.status = Recovering;
+                intent.retry_count += 1;
+                intent.last_updated_at = Utc::now();
+                Some("retry_initiated")
+            }
+            Some(MppPartial) => {
+                intent.status = MppSplitting;
+                intent.last_updated_at = Utc::now();
+                Some("split_recovery_triggered")
+            }
+            Some(Indeterminate) => {
+                // For Indeterminate, we typically stay in Pending/Recovering until reconciliation
+                intent.status = Recovering;
+                intent.last_updated_at = Utc::now();
+                Some("reconciliation_requested")
+            }
+            _ if intent.status == Pending => {
+                intent.status = Recovering;
+                intent.last_updated_at = Utc::now();
+                Some("stale_payment_recovery")
+            }
+            _ => None,
         }
     }
 }
@@ -203,5 +275,49 @@ mod extra_tests {
             adapter.categorize_failure("random error"),
             LightningFailureType::Transient
         );
+    }
+
+    #[test]
+    fn test_should_recover() {
+        let adapter = LightningResilienceAdapter::new();
+        let mut intent = PaymentIntent {
+            payment_id: "p1".to_string(),
+            payment_hash: "h1".to_string(),
+            amount_msat: 1000,
+            status: LightningPaymentStatus::Failed,
+            failure_type: Some(LightningFailureType::Transient),
+            retry_count: 0,
+            created_at: Utc::now(),
+            last_updated_at: Utc::now(),
+        };
+
+        assert!(adapter.should_recover(&intent));
+
+        intent.retry_count = 3;
+        assert!(!adapter.should_recover(&intent));
+
+        intent.status = LightningPaymentStatus::Failed;
+        intent.failure_type = Some(LightningFailureType::MppPartial);
+        assert!(adapter.should_recover(&intent));
+    }
+
+    #[test]
+    fn test_process_recovery_transient() {
+        let adapter = LightningResilienceAdapter::new();
+        let mut intent = PaymentIntent {
+            payment_id: "p1".to_string(),
+            payment_hash: "h1".to_string(),
+            amount_msat: 1000,
+            status: LightningPaymentStatus::Failed,
+            failure_type: Some(LightningFailureType::Transient),
+            retry_count: 0,
+            created_at: Utc::now(),
+            last_updated_at: Utc::now(),
+        };
+
+        let result = adapter.process_recovery(&mut intent);
+        assert_eq!(result, Some("retry_initiated"));
+        assert_eq!(intent.status, LightningPaymentStatus::Recovering);
+        assert_eq!(intent.retry_count, 1);
     }
 }
