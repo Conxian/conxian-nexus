@@ -524,7 +524,7 @@ fn test_ln_nostr_pubkey_format() {
         bech32_pubkey.starts_with(npub_prefix),
         "Nostr pubkeys must be npub-encoded"
     );
-    assert_eq!(&bech32_pubkey[..4], "npub1", "npub format check");
+    assert_eq!(&bech32_pubkey[..5], "npub1", "npub format check");
 }
 
 #[test]
