@@ -5,11 +5,9 @@ use crate::api::rest::AppState;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use chrono::Utc;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-
-use rand::Rng;
 
 pub mod nostr;
 
@@ -157,11 +155,8 @@ async fn generate_developer_key(
     }
 
     let (api_key, api_secret) = {
-        let mut rng = rand::thread_rng();
-        let mut raw_key = [0u8; 32];
-        let mut raw_secret = [0u8; 32];
-        rng.fill(&mut raw_key);
-        rng.fill(&mut raw_secret);
+        let raw_key: [u8; 32] = rand::random();
+        let raw_secret: [u8; 32] = rand::random();
 
         (
             format!("cxl_{}", hex::encode(Sha256::digest(raw_key))),
@@ -266,7 +261,7 @@ async fn track_signature(
             .query_async(&mut conn)
             .await
             .unwrap_or(None);
-        let roll: f32 = rand::thread_rng().gen();
+        let roll: f32 = rand::random();
         evaluate_quota_decision(new_usage, now, grace_start, roll)
     };
 

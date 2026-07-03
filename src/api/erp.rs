@@ -6,7 +6,7 @@ use axum::routing::post;
 use axum::Router;
 use axum::{extract::State, http::StatusCode, Json};
 use chrono::Utc;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;

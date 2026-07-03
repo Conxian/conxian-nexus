@@ -18,7 +18,7 @@ use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::state::NexusState;
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use std::collections::HashSet;

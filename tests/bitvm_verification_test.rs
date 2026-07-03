@@ -6,6 +6,10 @@ use ark_crypto_primitives::snark::{SNARK, CircuitSpecificSetupSNARK};
 use ark_groth16::Groth16;
 use ark_serialize::CanonicalSerialize;
 use ark_ff::UniformRand;
+use ark_relations::{
+    gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
+    lc,
+};
 use ark_std::rand::SeedableRng;
 use std::sync::Arc;
 
@@ -18,22 +22,15 @@ async fn test_cryptographic_bitvm_verification() {
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(42);
 
     struct DummyCircuit { x: Option<Fr> }
-    impl ark_relations::r1cs::ConstraintSynthesizer<Fr> for DummyCircuit {
-        fn generate_constraints(self, cs: ark_relations::r1cs::ConstraintSystemRef<Fr>) -> ark_relations::r1cs::Result<()> {
-            let x = cs.new_witness_variable(|| self.x.ok_or(ark_relations::r1cs::SynthesisError::AssignmentMissing))?;
+    impl ConstraintSynthesizer<Fr> for DummyCircuit {
+        fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
+            let x = cs.new_witness_variable(|| self.x.ok_or(SynthesisError::AssignmentMissing))?;
             let res = cs.new_input_variable(|| {
-                let x_val = self.x.ok_or(ark_relations::r1cs::SynthesisError::AssignmentMissing)?;
+                let x_val = self.x.ok_or(SynthesisError::AssignmentMissing)?;
                 Ok(x_val + x_val)
             })?;
-            // 0.4.x uses slightly different linear combination construction
-            let mut lc_left = ark_relations::r1cs::LinearCombination::zero();
-            lc_left = lc_left + x + x;
-            let mut lc_right = ark_relations::r1cs::LinearCombination::zero();
-            lc_right = lc_right + ark_relations::r1cs::Variable::One;
-            let mut lc_out = ark_relations::r1cs::LinearCombination::zero();
-            lc_out = lc_out + res;
 
-            cs.enforce_constraint(lc_left, lc_right, lc_out)?;
+            cs.enforce_r1cs_constraint(|| lc![x, x], || lc![Variable::One], || lc![res])?;
             Ok(())
         }
     }
