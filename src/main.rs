@@ -14,7 +14,6 @@ use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
 use lib_conxian_core::Wallet;
-use opentelemetry::KeyValue;
 use opentelemetry::{global, trace::TracerProvider};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
@@ -44,12 +43,13 @@ async fn main() -> anyhow::Result<()> {
             .build()
             .expect("Failed to create OTLP exporter");
 
-        let tracer = sdktrace::TracerProvider::builder()
-            .with_batch_exporter(tracer, opentelemetry_sdk::runtime::Tokio)
-            .with_resource(Resource::new(vec![KeyValue::new(
-                "service.name",
-                config.otel_service_name.clone(),
-            )]))
+        let tracer = sdktrace::SdkTracerProvider::builder()
+            .with_batch_exporter(tracer)
+            .with_resource(
+                Resource::builder()
+                    .with_service_name(config.otel_service_name.clone())
+                    .build(),
+            )
             .build()
             .tracer("conxian-nexus");
 
