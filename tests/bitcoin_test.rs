@@ -12,7 +12,7 @@ use conxian_nexus::storage::Storage;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tower::ServiceExt;
+use tower::Service;
 
 #[tokio::test]
 async fn test_rgb_adapter_disabled_rejects_all() {
@@ -157,7 +157,7 @@ async fn test_dlc_bond_creation_success_path() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -169,7 +169,7 @@ async fn test_dlc_bond_creation_success_path() {
     );
 
     let response = app
-        .oneshot(
+        .call(
             Request::builder()
                 .method("POST")
                 .uri("/v1/dlc/bond")
@@ -236,7 +236,7 @@ async fn test_dlc_bond_creation_validation_empty_bond_id() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -248,7 +248,7 @@ async fn test_dlc_bond_creation_validation_empty_bond_id() {
     );
 
     let response = app
-        .oneshot(
+        .call(
             Request::builder()
                 .method("POST")
                 .uri("/v1/dlc/bond")
@@ -285,7 +285,7 @@ async fn test_dlc_bond_creation_validation_zero_principal() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -297,7 +297,7 @@ async fn test_dlc_bond_creation_validation_zero_principal() {
     );
 
     let response = app
-        .oneshot(
+        .call(
             Request::builder()
                 .method("POST")
                 .uri("/v1/dlc/bond")
@@ -334,7 +334,7 @@ async fn test_dlc_bond_creation_invalid_json() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -346,7 +346,7 @@ async fn test_dlc_bond_creation_invalid_json() {
     );
 
     let response = app
-        .oneshot(
+        .call(
             Request::builder()
                 .method("POST")
                 .uri("/v1/dlc/bond")
@@ -381,7 +381,7 @@ async fn test_dlc_bond_creation_high_coupon_rate() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -394,7 +394,7 @@ async fn test_dlc_bond_creation_high_coupon_rate() {
 
     // Bond with extreme values to test serialization boundaries
     let response = app
-        .oneshot(
+        .call(
             Request::builder()
                 .method("POST")
                 .uri("/v1/dlc/bond")
@@ -455,7 +455,7 @@ async fn test_btc_tx_id_format_validation() {
         config.tableland_base_url.clone(),
     ));
 
-    let app = app_router(
+    let mut app = app_router(
         storage,
         nexus_state,
         executor,
@@ -468,8 +468,8 @@ async fn test_btc_tx_id_format_validation() {
 
     // Valid BTC tx_id should work
     let response = app
-        .clone()
-        .oneshot(
+        
+        .call(
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", valid_txid))
@@ -490,8 +490,8 @@ async fn test_btc_tx_id_format_validation() {
     // Invalid: not 0x-prefixed
     let invalid_txid = "a".repeat(64); // no 0x prefix
     let response = app
-        .clone()
-        .oneshot(
+        
+        .call(
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", invalid_txid))
@@ -510,8 +510,8 @@ async fn test_btc_tx_id_format_validation() {
     // Invalid: wrong length (not 66)
     let short_txid = "0x".to_owned() + &"a".repeat(32); // only 34 chars
     let response = app
-        .clone()
-        .oneshot(
+        
+        .call(
             Request::builder()
                 .method("GET")
                 .uri(&format!("/v1/mmr-proof?tx_id={}", short_txid))
