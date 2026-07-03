@@ -96,6 +96,7 @@ pub struct EventFeedResponse {
     pub next_cursor: Option<u64>,
 }
 
+// TODO: Refactor to use an AppConfig struct to reduce argument count.
 #[allow(clippy::too_many_arguments)]
 pub fn app_router(
     storage: Arc<Storage>,
@@ -175,7 +176,6 @@ pub fn app_router(
     router.with_state(state)
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn verify_stacks_transaction(
     State(state): State<AppState>,
     Json(payload): Json<StacksTransaction>,
@@ -195,6 +195,7 @@ async fn verify_stacks_transaction(
     }
 }
 
+// TODO: Refactor to use an AppConfig struct to reduce argument count.
 #[allow(clippy::too_many_arguments)]
 pub async fn start_rest_server(
     storage: Arc<Storage>,
@@ -378,7 +379,7 @@ async fn rebuild_state(State(_state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-async fn health_check() -> impl IntoResponse {
+pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 

@@ -52,8 +52,6 @@ pub struct KwilReceipt {
 }
 
 pub struct KwilAdapter {
-    #[allow(dead_code)]
-    storage: Arc<Storage>,
     client: Client,
     provider_url: String,
     db_id: String,
@@ -62,14 +60,13 @@ pub struct KwilAdapter {
 
 impl KwilAdapter {
     pub fn new(
-        storage: Arc<Storage>,
+        _storage: Arc<Storage>,
         cfg: KwilConfig,
         wallet: Arc<Wallet>,
     ) -> anyhow::Result<Self> {
         let client = Client::builder().timeout(Duration::from_secs(10)).build()?;
 
         Ok(Self {
-            storage,
             client,
             provider_url: cfg.provider_url,
             db_id: cfg.db_id,

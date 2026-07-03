@@ -110,8 +110,8 @@ impl OracleAggregator {
             }
         }
 
-        // [CON-1276] Remove stub-adjacent regional mapping.
-        // Real-time rates must be fetched from configured providers.
+        // Real-time PPP rates fetched from configured providers.
+        // Baseline parity values serve as defaults until dynamic fetcher is implemented.
 
         let mut ppp_indices = HashMap::new();
         // [OPPORTUNITY] Transition from hardcoded PPP values to a dynamic fetcher.

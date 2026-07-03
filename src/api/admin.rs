@@ -169,7 +169,6 @@ pub fn public_auth_md_routes(
 }
 
 fn configured_admin_token(state: &crate::api::rest::AppState) -> Option<String> {
-    // [CON-1276] Check for token age/expiry.
     let uptime = crate::api::get_uptime();
     if uptime > 86400 * 7 {
         tracing::warn!("NEXUS_ADMIN_API_TOKEN has been active for more than 7 days. Consider rotating.");

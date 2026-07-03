@@ -54,7 +54,7 @@ impl NexusExecutor {
         let bitvm_adapter = bitvm::BitVMAdapter::new(storage.clone());
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
-        let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
+        let stacks_adapter = stacks::StacksAdapter::new();
         let fedimint_adapter = fedimint::FedimintAdapter::new(storage.clone());
         Self {
             storage,

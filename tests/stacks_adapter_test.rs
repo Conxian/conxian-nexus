@@ -1,13 +1,8 @@
-use conxian_nexus::config::Config;
 use conxian_nexus::executor::stacks::{StacksAdapter, StacksTransaction};
-use conxian_nexus::storage::Storage;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn test_stacks_adapter_structural_validation() {
-    let config = Config::default_test();
-    let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
-    let adapter = StacksAdapter::new(storage);
+    let adapter = StacksAdapter::new();
 
     // Test valid transaction ID and amount
     let valid_tx = StacksTransaction {
