@@ -9,7 +9,7 @@
 
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{Method, Request, StatusCode},
 };
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
