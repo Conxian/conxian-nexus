@@ -55,7 +55,6 @@ struct VerifiedErpAttestation {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 enum ErpAttestationError {
     Misconfigured,
     InvalidAttestationFormat,

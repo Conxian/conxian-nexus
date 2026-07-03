@@ -1,6 +1,4 @@
-use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// Stacks / sBTC Transaction model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,14 +18,11 @@ pub struct StacksVerificationResult {
 }
 
 /// Protocol Adapter for Stacks / sBTC family.
-pub struct StacksAdapter {
-    #[allow(dead_code)]
-    storage: Arc<Storage>,
-}
+pub struct StacksAdapter;
 
 impl StacksAdapter {
-    pub fn new(storage: Arc<Storage>) -> Self {
-        Self { storage }
+    pub fn new() -> Self {
+        Self
     }
 
     /// Verifies a Stacks transaction (Pilot implementation).
