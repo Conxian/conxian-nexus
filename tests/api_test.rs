@@ -31,7 +31,7 @@ async fn test_merkle_logic_edge_cases() {
 
 #[tokio::test]
 async fn test_health_check_returns_ok() {
-    let response = rest::health_check().into_response();
+    let response = rest::health_check().await.into_response();
     assert_eq!(response.status(), StatusCode::OK);
 
     let body_bytes = axum::body::to_bytes(response.into_body(), 16)
