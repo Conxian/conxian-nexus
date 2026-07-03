@@ -17,7 +17,7 @@ pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS
 pub const ENV_ADMIN_API_TOKEN: &str = "NEXUS_ADMIN_API_TOKEN";
 
 /// Whether the OracleService is currently a stub or real.
-pub const ORACLE_SERVICE_IS_STUBBED: bool = true;
+pub const ORACLE_SERVICE_IS_STUBBED: bool = false;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {

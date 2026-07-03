@@ -378,7 +378,7 @@ async fn rebuild_state(State(_state): State<AppState>) -> impl IntoResponse {
     )
 }
 
-async fn health_check() -> impl IntoResponse {
+pub(crate) async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
