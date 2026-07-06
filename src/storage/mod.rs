@@ -11,10 +11,22 @@ impl Storage {
     pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
         let pg_pool = PgPool::connect(database_url).await?;
 
-        if !cfg!(debug_assertions) && (redis_url.contains("@") || redis_url.starts_with("redis://127.0.0.1") || redis_url.starts_with("redis://localhost")) {
-             if !redis_url.contains(":") || !redis_url.contains("@") {
-                 tracing::warn!("Redis URL might be unauthenticated in a production-like build.");
-             }
+        if !cfg!(debug_assertions) {
+            let is_local = redis_url.contains("127.0.0.1") || redis_url.contains("localhost");
+            let is_unauthenticated = !redis_url.contains("@");
+
+            if is_local || is_unauthenticated {
+                if std::env::var("NEXUS_ALLOW_UNSAFE_REDIS").is_ok() {
+                    tracing::warn!("Unsafe Redis configuration allowed by NEXUS_ALLOW_UNSAFE_REDIS override.");
+                } else {
+                    anyhow::bail!(
+                        "Production boundary violation: Redis must be authenticated and remote in release builds. \
+                         (Local: {}, Unauthenticated: {}). Set NEXUS_ALLOW_UNSAFE_REDIS=1 to override.",
+                        is_local,
+                        is_unauthenticated
+                    );
+                }
+            }
         }
 
         let redis_client = RedisClient::open(redis_url)?;

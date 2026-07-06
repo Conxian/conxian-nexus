@@ -1,6 +1,6 @@
-# Conxian Nexus: Security Vulnerability & Gap Audit (v0.4.17)
+# Conxian Nexus: Security Vulnerability & Gap Audit (v0.4.18)
 
-This report summarizes critical security holes, protocol gaps, and implemented remediations as of June 2026.
+This report summarizes critical security holes, protocol gaps, and implemented remediations as of July 2026.
 
 ## 1. Administrative & Governance (High)
 
@@ -11,8 +11,8 @@ The Admin API previously accepted any valid-looking dual-signature without crypt
 
 ### Hole 1.2: Static Admin Bearer Token
 The system relies on a single environment-provided `NEXUS_ADMIN_API_TOKEN`.
-- **Vulnerability**: Leakage of this token compromises the entire administrative surface.
-- **Remediation**: Proposed NIP-006 for JWT/RBAC and hardware-backed session tokens.
+- **Status**: **Resolved v0.4.18 (NIP-006)**.
+- **Remediation**: Transitioned to a scoped credential pool (API Keys). Scoped keys are prioritized over the static fallback. The static fallback is flagged with a warning in production-like builds.
 
 ## 2. Multi-Chain Verification Gaps (High)
 
@@ -26,9 +26,9 @@ Protocol Adapters were previously stubs that returned success for any formatted 
 ## 3. Resilience & Failure Modes (Medium)
 
 ### Hole 3.1: Incomplete SRL-1 Action Logic
-Failure taxonomy implemented, but automatic recovery triggers are pending.
-- **Vulnerability**: Potential for inconsistent state during MPP failures.
-- **Remediation**: Scheduled for v0.4.18.
+Failure taxonomy implemented, but automatic recovery triggers were pending.
+- **Status**: **Resolved v0.4.18**.
+- **Remediation**: Automatic triggers for retries, split-recovery, and reconciliation implemented via the `AutonomousOrchestrator`.
 
 ## 4. Storage & Persistence (Medium)
 
@@ -36,3 +36,8 @@ Failure taxonomy implemented, but automatic recovery triggers are pending.
 Audit log previously captured only hashes.
 - **Status**: **Resolved v0.4.17**.
 - **Remediation**: Expanded schema and executor logic to capture full payload and sequencing priority.
+
+### Hole 1.2 (Storage): Unauthenticated Redis
+Redis could be unauthenticated in production environments.
+- **Status**: **Resolved v0.4.18**.
+- **Remediation**: Enforced authenticated and remote Redis in release builds. Added `NEXUS_ALLOW_UNSAFE_REDIS` override for exceptional cases.

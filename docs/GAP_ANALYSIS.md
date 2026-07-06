@@ -1,4 +1,4 @@
-# Conxian Nexus: Gap Analysis & Research Map (v0.4.17)
+# Conxian Nexus: Gap Analysis & Research Map (v0.4.18)
 
 This document maps identified security holes and protocol gaps to their research foundations and provides a prioritization score.
 
@@ -12,10 +12,10 @@ This document maps identified security holes and protocol gaps to their research
 | **NIP-005** | Real Multi-Chain Verification (Tier 1) | 9 | 9 | **P1** | **Initializing (BitVM2)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
 | **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
-| **NIP-006** | Admin Token Hardening (JWT/RBAC) | 8 | 6 | **P1** | Proposed |
+| **NIP-006** | Admin Token Hardening (JWT/RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | **Completed (v0.4.18)** |
+| **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
-| **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | Backlog |
 
 ## 2. Mapping & Research Context
 
@@ -35,11 +35,14 @@ This document maps identified security holes and protocol gaps to their research
 - **Status**: Real cryptographic verification implemented in `src/executor/bitvm.rs`.
 - **Next Step**: Integrate `trie_db` for EVM MPT and `ibc-rs` for Cosmos.
 
-### 2.4 ZKCP Implementation (G-50)
-- **Gap**: Trustless information-for-value exchange on Bitcoin.
-- **Status**: **Phase 1 Complete**. Scaffolding and tests implemented in dashboard/lib-core.
-- **Code**: `src/api/dlc.rs` (Nexus side intent anchors)
-
-### 2.5 SRL-1 Recovery (Hole 3.1)
+### 2.4 SRL-1 Recovery (Hole 3.1)
 - **Gap**: Failure taxonomy exists, but automatic recovery actions are not triggered.
 - **Status**: **Resolved v0.4.18**. Automatic triggers for retries, split-recovery, and reconciliation implemented.
+
+### 2.5 Admin Token Hardening (NIP-006)
+- **Gap**: Static bearer token was the only auth path.
+- **Status**: **Resolved v0.4.18**. Implemented scoped credential pool (API Keys) with prioritization over static fallback. Production warning for static token use.
+
+### 2.6 Authenticated Redis (Hole 1.2)
+- **Gap**: Redis could be unauthenticated in production builds.
+- **Status**: **Resolved v0.4.18**. Enforced authenticated and remote Redis in release builds with a safety override flag.

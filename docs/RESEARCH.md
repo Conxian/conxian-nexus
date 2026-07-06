@@ -1,86 +1,54 @@
-# Conxian Nexus Research & Improvement Proposals (Updated June 2026)
+# Conxian Nexus Research & Improvement Proposals (Updated July 2026)
 
 ## 1. Multi-Chain Interoperability (NIP-005)
 
 ### 1.1 Bitcoin & BitVM2
 - **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s.
-- **Protocol**: BitVM2 allows for arbitrary computation on Bitcoin via fraudulent proof challenges.
-- **Implementation Path**: Integrate `ark-groth16` for verifier logic in the `BitVMAdapter`.
-- **Verification Logic**:
-  ```rust
-  use ark_groth16::Groth16;
-  use ark_crypto_primitives::snark::SNARK;
-  use ark_bls12_381::Bls12_381;
-
-  // Single-call verification: prepare VK + verify atomically
-  let valid = Groth16::<Bls12_381>::verify(&vk, &[public_inputs], &proof)
-      .expect("Verification failed");
-  ```
-- **Resources**:
-  - [BitVM2: Bridging Bitcoin](https://bitvm.org/bitvm.pdf)
-  - [arkworks-rs](https://github.com/arkworks-rs)
+- **Status**: **Phase 1 Complete**. Integrated `ark-groth16` for real cryptographic verification in `BitVMAdapter`.
 
 ### 1.2 Cosmos & IBC
 - **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.
-- **Implementation Path**: Utilize `ibc-rs` (Informal Systems) for Tendermint light client verification. Transition from string-matching client IDs to verifying validator set signatures and Merkle proofs for cross-chain packets.
-- **Verification Logic**:
-  - Verify `AppHash` at height `h` using trusted header from light client.
-  - `VerifyMembership(header.AppHash, h, proof, path, data)`.
-- **Resources**:
-  - [IBC Protocol Specification](https://github.com/cosmos/ibc)
-  - [Hermes Relayer (informalsystems/hermes)](https://github.com/informalsystems/hermes)
+- **Implementation Path**: Utilize `ibc-rs` for Tendermint light client verification.
+- **Status**: Phase 1 (Structural Validation) active.
 
 ### 1.3 EVM Merkle Patricia Trie (MPT)
 - **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root.
-- **Implementation Path**: Use `trie_db` or `noir-trie-proofs` for MPT verification.
-- **Verification Logic**:
-  - Decode RLP receipt.
-  - Verify proof nodes against the `receipt_root`.
+- **Implementation Path**: Use `trie_db` for MPT verification.
+- **Status**: Phase 1 (Structural Validation) active.
 
-## 2. Smart Contract Language Evolution
-- **Clarity 4**: Transitioning to passkey-based auth (`secp256r1-verify`) and on-chain contract hashes (`contract-hash?`).
+## 2. Admin & Governance Hardening
+
+### 2.1 Cryptographic Dual-Signatures (NIP-004)
+- **Status**: **COMPLETED v0.4.17**. Secp256k1 verification active for all write/governance endpoints.
+
+### 2.2 Admin Token Hardening (NIP-006)
+- **Status**: **COMPLETED v0.4.18**.
+- **Implementation**: Replaced static bearer token with a scoped credential pool (API Keys) issued via Dual-Signature login (`/admin/v1/login`). Scoped keys are prioritized; static fallback is restricted and flagged.
+
+## 3. Resilience & Failure Modes
+
+### 3.1 SRL-1 Recovery Triggers (Hole 3.1)
+- **Status**: **COMPLETED v0.4.18**.
+- **Implementation**: Automatic recovery actions (Retry, Split-Recovery, Reconciliation) active via `AutonomousOrchestrator`.
+
+## 4. Smart Contract Language Evolution
+- **Clarity 4**: Transitioning to passkey-based auth and on-chain contract hashes.
   - *Reference*: [Stacks 2.5/3.0 SIPs](https://github.com/stacksgov/sips)
 
-## 3. Sovereign Persistence
-- **Tableland**: Decentralized relational storage for immutable audit trails.
-  - *SDK*: `@tableland/sdk`
-- **Kwil**: Sovereign SQL for high-performance off-chain state commitments.
-  - *SDK*: `kwil-js` / `kwil-rust`
-
-## 4. Improvement Proposals (Nexus-Specific)
-- **NIP-01**: Transition Admin API to dual-signature requirement for release approval.
-- **NIP-04**: Cryptographic Dual-Signature Verification for Admin actions (Implementation in progress).
-- **NIP-05**: Transition from Simulated to Real Multi-Chain Verification.
-- **NIP-07**: Safety Mode Enforcement in Submission Path (Implemented v0.4.17).
+## 5. Sovereign Persistence
+- **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated Redis in release builds.
+- **Tableland/Kwil**: Decentralized relational storage for audit trails and state commitments.
 
 ## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304)
 
 ### 6.1 FROST Threshold Signatures (CON-1302)
-- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures (FROST).
-- **Application**: Multi-sig vaults that are indistinguishable from single-sig on-chain.
-- **Implementation Path**: Use `frost-dalek` for Distributed Key Generation (DKG) and threshold signing. Standard Schnorr verification on-chain.
+- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures.
+- **Application**: Multi-sig vaults indistinguishable from single-sig on-chain.
 
 ### 6.2 OP_CAT Recursive Covenants (CON-1303)
 - **Concept**: BIP-347 proposes restoring `OP_CAT` to Bitcoin.
-- **Application**: Recursive covenants, CAT-SMT (Merkle Trees in Script), and vaults.
-- **Nexus Role**: Monitor OP_CAT-enabled spending conditions for advanced L2 scaling.
+- **Nexus Role**: Monitor OP_CAT-enabled spending conditions.
 
 ### 6.3 Fedimint Community Liquidity (CON-1304)
 - **Concept**: Federated blinded mints issuing e-cash.
-- **Application**: Community-governed liquidity pools with high privacy.
-- **Integration**: A "Federation Adapter" using `fedimint-client` to verify issuance/redemption proofs.
-
-## 7. Strategic Research Updates (June 2026)
-
-### 7.1 BitVM3: Recursive Verification & Prover Efficiency
-- **Focus**: Reducing the number of rounds in the challenge-response protocol.
-- **Nexus Role**: The `BitVMAdapter` is being prepared for BitVM3's more efficient prover-prover interaction. Recursive proofs will allow for smaller on-chain footprints during challenges.
-
-### 7.2 Adaptive Proofs (BitVMX)
-- **Concept**: Dynamic proof generation based on the complexity of the state transition.
-- **Application**: High-efficiency computation for complex L2 logic.
-- **Implementation**: Integrated into the `UniversalChainAdapter` framework (CXIP-21).
-
-### 7.3 Zero-Knowledge Contingent Payments (ZKCP)
-- **Concept**: Trustless exchange of information for value on Bitcoin using HTLCs and ZK proofs.
-- **Nexus Role**: Orchestrate the setup and verification of ZKCP intents. Initial scaffolding is present in the core protocol layers.
+- **Integration**: Federation Adapter using `fedimint-client` (Phase 1 Complete).
