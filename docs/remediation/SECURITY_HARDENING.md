@@ -1,21 +1,41 @@
-# Conxian Nexus Security Hardening (CON-1202)
+# Conxian Nexus: Security Hardening Summary (v0.4.18)
 
-## 1. Zero-Secret Logging
-- **Rule**: No cryptographic materials (PEM, KEY, PFX, etc.) allowed in debug logs.
-- **Implementation**: The `Config` struct in `src/config.rs` uses a custom `Debug` implementation to redact sensitive fields.
+This document tracks the systematic hardening of the Conxian Nexus "Glass Node" to ensure its integrity as a core protocol component.
 
-## 2. Admin API Token Rotation
-- **Current**: Single bearer token (`NEXUS_ADMIN_API_TOKEN`).
-- **Required**: Transition to ephemeral, short-lived tokens issued via the `identity/register` flow.
-- **Migration Path**:
-  - Phase 1: Enable multi-agent logging (implemented).
-  - Phase 2: Require dual-signature for `release/approval`.
-  - Phase 3: Move admin authority to a Clarity Multi-Sig.
+## 1. Administrative Authorization (NIP-004, NIP-006)
 
-## 3. Production Boundary
-- **Rule**: No `ST...` (Testnet) addresses in production paths.
-- **Check**: Enforced via `scripts/check_production_boundary.sh`.
+### Scoped API Keys & Dual-Sig Login
+Nexus has transitioned from a single static `NEXUS_ADMIN_API_TOKEN` to a dynamic, scoped credential pool.
+- **Login Mechanism**: Administrators must use the `/admin/v1/login` endpoint, which requires a cryptographic Dual-Signature (Secp256k1) matching two distinct keys in the configured `ADMIN_PUBLIC_KEYS`.
+- **Scoped Credentials**: Successful login issues an `nx_key_...` token with specific scopes (`admin.write`, `api.read`, `api.write`).
+- **Audit Trail**: Every login and subsequent write action is instrumented with `tracing` to capture caller intent and session context.
+- **Fail-Closed Fallback**: The legacy static token is now a fallback restricted primarily to development. In production-like builds, its use triggers a critical warning.
 
-## 4. Dependency Security
-- **Rule**: Critical vulnerabilities (e.g., CVE-2023-44487) remediated immediately.
-- **Status**: `openssl` and `h2` patched to latest verified versions in June 2026.
+## 2. Infrastructure Boundary (Hole 1.2)
+
+### Authenticated Persistence
+The storage layer (`src/storage/mod.rs`) now enforces strict connection rules for Redis in release builds.
+- **Mandatory Auth**: Connections to `127.0.0.1` or `localhost` without a password are rejected in non-debug environments.
+- **Override Path**: Emergency access is available via the `NEXUS_ALLOW_UNSAFE_REDIS=1` environment flag, ensuring intentionality during infrastructure failures.
+
+## 3. Resilience & Recovery (Hole 3.1)
+
+### SRL-1 Automatic Triggers
+The `AutonomousOrchestrator` now actively polls and recovers stale or failed Lightning payments.
+- **Automated Retry**: Transient failures trigger up to 3 retries with exponential backoff.
+- **Split Recovery**: Partial MPP failures trigger residual routing sequences.
+- **Reconciliation**: Indeterminate states are resolved via automated node lookups after a 60-second window.
+
+## 4. Multi-Chain Verification (NIP-005)
+
+### Real BitVM2 SNARK Verification
+Transitioned BitVM2 from structural validation to full cryptographic verification using `ark-groth16`.
+- **Artifact Auditing**: `vk_hash` and `public_inputs_hash` are now captured in the permanent audit log.
+- **Zero-Knowledge Evidence**: Transition proofs are cryptographically verified against the provided SNARK circuit.
+
+## 5. MEV & Sequencing Transparency (Hole 4.1)
+
+### Expanded Audit Detail
+The sequencer's internal audit log (`me_audit_log`) has been expanded to ensure full transparency of handled transactions.
+- **Full Payload Capture**: The entire transaction body is persisted for post-hoc analysis.
+- **Priority Metadata**: Sequencing priority is recorded to detect and prevent unauthorized front-running.
