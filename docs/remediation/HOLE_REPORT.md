@@ -37,7 +37,7 @@ Audit log previously captured only hashes.
 - **Status**: **Resolved v0.4.17**.
 - **Remediation**: Expanded schema and executor logic to capture full payload and sequencing priority.
 
-### Hole 1.2 (Storage): Unauthenticated Redis
-Redis could be unauthenticated in production environments.
+### Hole 1.2 (Storage): Unauthenticated Persistence
+Redis and PostgreSQL could be unauthenticated or local in production environments.
 - **Status**: **Resolved v0.4.18**.
-- **Remediation**: Enforced authenticated and remote Redis in release builds. Added `NEXUS_ALLOW_UNSAFE_REDIS` override for exceptional cases.
+- **Remediation**: Enforced authenticated and remote connections for both Redis and PostgreSQL in release builds. Added `NEXUS_ALLOW_UNSAFE_REDIS` and `NEXUS_ALLOW_UNSAFE_DB` overrides for exceptional cases.
