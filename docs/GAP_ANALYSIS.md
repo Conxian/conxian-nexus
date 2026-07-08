@@ -1,4 +1,4 @@
-# Conxian Nexus: Gap Analysis & Research Map (v0.4.18)
+# Conxian Nexus: Gap Analysis & Research Map (v0.4.19)
 
 This document maps identified security holes and protocol gaps to their research foundations and provides a prioritization score.
 
@@ -9,7 +9,7 @@ This document maps identified security holes and protocol gaps to their research
 | **NIP-007** | Safety Mode Enforcement in Submission Path | 9 | 1 | **P0** | **Completed** |
 | **NIP-004** | Cryptographic Dual-Signature Verification | 10 | 5 | **P0** | **Completed** |
 | **Hole 4.1** | MEV Audit Detail Expansion | 6 | 1 | **P1** | **Completed** |
-| **NIP-005** | Real Multi-Chain Verification (Tier 1) | 9 | 9 | **P1** | **Initializing (BitVM2)** |
+| **NIP-005** | Real Multi-Chain Verification (Tier 1) | 9 | 9 | **P1** | **Hardened (v0.4.19)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
 | **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
 | **NIP-006** | Admin Token Hardening (JWT/RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
@@ -31,6 +31,7 @@ This document maps identified security holes and protocol gaps to their research
 
 ### 2.3 Multi-Chain Verification (NIP-005)
 - **Gap**: Adapters for EVM and Cosmos remain Phase 1 (Structural).
+- **Remediation (v0.4.19)**: Hardened structural validation for all Tier 1 adapters (EVM, Cosmos, Fedimint, Stacks). Added MPT node count checks, address prefix validation, and base64 integrity checks.
 - **Best Candidate**: BitVM2 Groth16 verification via `ark-groth16`.
 - **Status**: Real cryptographic verification implemented in `src/executor/bitvm.rs`.
 - **Next Step**: Integrate `trie_db` for EVM MPT and `ibc-rs` for Cosmos.

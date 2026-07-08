@@ -223,3 +223,8 @@ pub async fn resolve_identity_handler(
             .into_response(),
     }
 }
+use axum::routing::get;
+use axum::Router;
+pub fn identity_routes() -> Router<AppState> {
+    Router::new().route("/resolve", get(resolve_identity_handler))
+}

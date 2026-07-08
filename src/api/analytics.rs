@@ -20,33 +20,27 @@ pub struct AnalyticsParams {
 }
 
 #[derive(Debug, Serialize)]
-pub struct AnalyticsResponse {
-    pub metric: String,
-    pub asset: String,
-    pub values: Vec<DataPoint>,
-}
-
-#[derive(Debug, Serialize)]
 pub struct DataPoint {
-    pub label: String,
+    pub timestamp: String,
     pub value: f64,
 }
 
-pub fn analytics_routes() -> Router<AppState> {
-    Router::new().route("/metrics", get(get_analytics_metrics))
+#[derive(Debug, Serialize)]
+pub struct AnalyticsResponse {
+    pub asset: String,
+    pub metric: String,
+    pub data: Vec<DataPoint>,
 }
 
-pub async fn get_analytics_metrics(
+pub fn analytics_routes() -> Router<AppState> {
+    Router::new().route("/metrics", get(get_metrics_handler))
+}
+
+pub async fn get_metrics_handler(
     State(state): State<AppState>,
     Query(params): Query<AnalyticsParams>,
 ) -> Result<Json<AnalyticsResponse>, StatusCode> {
-    let asset = params
-        .asset
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("STX")
-        .to_uppercase();
+    let asset = params.asset.unwrap_or_else(|| "STX".to_string());
 
     if asset != "STX" {
         return Err(StatusCode::BAD_REQUEST);
@@ -56,15 +50,15 @@ pub async fn get_analytics_metrics(
 
     let mut values = Vec::new();
 
-    let metric = match params.metric.as_str() {
+    match params.metric.as_str() {
         "tx_count" | "tx_volume" => {
-            let rows = sqlx::query(
+            let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(*) as count
                  FROM stacks_transactions
                  WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                  GROUP BY 1 ORDER BY 1 ASC",
             )
-            .bind(days)
+            .bind(days as i32)
             .fetch_all(&state.storage.pg_pool)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -73,21 +67,19 @@ pub async fn get_analytics_metrics(
                 let day: String = row.get("day");
                 let count: i64 = row.get("count");
                 values.push(DataPoint {
-                    label: day,
+                    timestamp: day,
                     value: count as f64,
                 });
             }
-
-            "tx_count"
         }
         "active_senders" => {
-            let rows = sqlx::query(
+            let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(
                 "SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') as day, COUNT(DISTINCT sender) as count
                  FROM stacks_transactions
                  WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                  GROUP BY 1 ORDER BY 1 ASC",
             )
-            .bind(days)
+            .bind(days as i32)
             .fetch_all(&state.storage.pg_pool)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -96,52 +88,46 @@ pub async fn get_analytics_metrics(
                 let day: String = row.get("day");
                 let count: i64 = row.get("count");
                 values.push(DataPoint {
-                    label: day,
+                    timestamp: day,
                     value: count as f64,
                 });
             }
-
-            "active_senders"
         }
         "whale_distribution" => {
-            let rows = sqlx::query(
+            let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(
                 "SELECT
                     CASE
                         WHEN count >= 100 THEN 'Whale'
-                        WHEN count >= 20 THEN 'Dolphin'
+                        WHEN count >= 10 THEN 'Shark'
                         ELSE 'Shrimp'
                     END as tier,
-                    COUNT(*) as entity_count
+                    COUNT(*) as count
                  FROM (
                     SELECT sender, COUNT(*) as count
                     FROM stacks_transactions
-                    WHERE created_at >= NOW() - INTERVAL '1 day' * $1::int
                     GROUP BY sender
-                 ) as entity_stats
-                 GROUP BY tier",
+                 ) as counts
+                 GROUP BY 1",
             )
-            .bind(days)
             .fetch_all(&state.storage.pg_pool)
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
             for row in rows {
                 let tier: String = row.get("tier");
-                let count: i64 = row.get("entity_count");
+                let count: i64 = row.get("count");
                 values.push(DataPoint {
-                    label: tier,
+                    timestamp: tier,
                     value: count as f64,
                 });
             }
-
-            "whale_distribution"
         }
         _ => return Err(StatusCode::BAD_REQUEST),
-    };
+    }
 
     Ok(Json(AnalyticsResponse {
-        metric: metric.to_string(),
         asset,
-        values,
+        metric: params.metric,
+        data: values,
     }))
 }

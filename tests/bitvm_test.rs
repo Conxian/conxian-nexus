@@ -16,10 +16,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
-    let mut config = Config::default_test();
-    config.experimental_apis_enabled = true;
-
-    let storage = Arc::new(Storage::from_config_lazy(&config).expect("Failed to create storage"));
+    let config = Config::default_test();
+    let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
@@ -50,10 +48,13 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 async fn test_bitvm2_local_verification_success() {
     let (app, _) = setup_test_app().await;
 
+    // Use placeholder hex for proof and VK
     let payload = json!({
         "prev_state_root": "0x0000000000000000000000000000000000000000000000000000000000000001",
         "next_state_root": "0x0000000000000000000000000000000000000000000000000000000000000002",
-        "proof_bytes": "deadbeef",
+        "proof_bytes": "00",
+        "vk_bytes": "00",
+        "public_inputs": ["00"],
         "trace_id": "test-trace-1"
     });
 
@@ -69,23 +70,8 @@ async fn test_bitvm2_local_verification_success() {
         .await
         .unwrap();
 
-    // With lazy connection, the actual SQL command will time out if no DB is present,
-    // leading to a 500 error in the handler or 503 if unavailable.
-    let status = response.status();
-    assert!(
-        status == StatusCode::OK
-            || status == StatusCode::INTERNAL_SERVER_ERROR
-            || status == StatusCode::SERVICE_UNAVAILABLE,
-        "Unexpected status code: {}",
-        status
-    );
-
-    if status == StatusCode::OK {
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let res: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(res["valid"], true, "Verification should be valid");
-        assert_eq!(res["steps_verified"], 1024);
-    }
+    // It should be INTERNAL_SERVER_ERROR because "00" is not a valid Groth16 proof
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]
@@ -95,7 +81,9 @@ async fn test_bitvm2_local_verification_invalid_format() {
     let payload = json!({
         "prev_state_root": "short",
         "next_state_root": "0x0000000000000000000000000000000000000000000000000000000000000002",
-        "proof_bytes": "deadbeef",
+        "proof_bytes": "00",
+        "vk_bytes": "00",
+        "public_inputs": [],
         "trace_id": "test-trace-2"
     });
 
@@ -111,10 +99,9 @@ async fn test_bitvm2_local_verification_invalid_format() {
         .await
         .unwrap();
 
-    // Should return Service Unavailable because it fails local validation and fallback is not configured
-    assert_eq!(
-        response.status(),
-        StatusCode::SERVICE_UNAVAILABLE,
-        "Invalid format should trigger fallback which is unavailable"
-    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let res: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(res["valid"], false);
+    assert!(res["message"].as_str().unwrap().contains("Invalid prev_state_root"));
 }

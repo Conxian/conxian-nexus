@@ -1,6 +1,6 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.18"
+version = "0.4.19"
 rust-version = "1.82"
 edition = "2021"
 
