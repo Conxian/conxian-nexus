@@ -14,9 +14,9 @@ Nexus has transitioned from a single static `NEXUS_ADMIN_API_TOKEN` to a dynamic
 ## 2. Infrastructure Boundary (Hole 1.2)
 
 ### Authenticated Persistence
-The storage layer (`src/storage/mod.rs`) now enforces strict connection rules for Redis in release builds.
-- **Mandatory Auth**: Connections to `127.0.0.1` or `localhost` without a password are rejected in non-debug environments.
-- **Override Path**: Emergency access is available via the `NEXUS_ALLOW_UNSAFE_REDIS=1` environment flag, ensuring intentionality during infrastructure failures.
+The storage layer (`src/storage/mod.rs`) now enforces strict connection rules for Redis and PostgreSQL in release builds.
+- **Mandatory Auth**: Connections to `127.0.0.1` or `localhost` without a password (or unauthenticated schemes) are rejected in non-debug environments for both Redis and PostgreSQL.
+- **Override Path**: Emergency access is available via the `NEXUS_ALLOW_UNSAFE_REDIS=1` and `NEXUS_ALLOW_UNSAFE_DB=1` environment flags, ensuring intentionality during infrastructure failures.
 
 ## 3. Resilience & Recovery (Hole 3.1)
 
