@@ -15,3 +15,7 @@ pub fn get_all_services_status() -> MultiProtocolStatus {
         services: vec![bisq.status(), rgb.status(), bitvm.status()],
     }
 }
+use axum::{Router, routing::get, response::IntoResponse, Json};
+use crate::api::rest::AppState;
+pub fn services_routes() -> Router<AppState> { Router::new().route("/status", get(get_services_status_handler)) }
+async fn get_services_status_handler() -> impl IntoResponse { Json(get_all_services_status()) }

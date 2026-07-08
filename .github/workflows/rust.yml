@@ -56,7 +56,7 @@ jobs:
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)
       run: python3 scripts/check_lightning_coverage.py --min-percent 90
-    - name: Enforce Bitcoin scoped coverage (>=95%)
+    - name: Enforce Bitcoin scoped coverage (>=92%)
       run: ./scripts/coverage_bitcoin.sh 92
     - name: Publish Bitcoin coverage summary
       if: always()

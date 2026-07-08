@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.19] - 2026-07-07
+
+### Added
+- **NIP-005 Hardening**: Enhanced structural validation for EVM, Cosmos, Fedimint, and Stacks adapters.
+- **API Refactoring**: Implemented `AppConfig` for REST server initialization to improve state isolation and testability.
+- **Route Synchronization**: Integrated missing DLC, Identity, and Services routes into the primary router.
+
+### Changed
+- Refactored `src/api/rest.rs` and `src/main.rs` to use centralized `AppConfig`.
+- Updated test suites for all protocol adapters to verify hardened structural checks.
+
+### Fixed
+- Removed unused code and dead variants in `admin.rs` and `erp.rs` to resolve compiler warnings.
+- Corrected type inference issues in `sqlx` and `reqwest` call sites across the API layer.
+
+# Changelog
+
 ## [0.4.18] - 2026-07-06
 
 ### Added

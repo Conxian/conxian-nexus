@@ -260,16 +260,6 @@ fn admin_token_not_configured_response() -> Response {
         .into_response()
 }
 
-fn forbidden_response() -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(json!({
-            "error": "insufficient_scope",
-            "error_description": "Credential does not satisfy required scope"
-        })),
-    )
-        .into_response()
-}
 
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     headers

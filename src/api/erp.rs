@@ -56,7 +56,6 @@ struct VerifiedErpAttestation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ErpAttestationError {
-    Misconfigured,
     InvalidAttestationFormat,
     InvalidSignature,
     ExpiredAttestation,
@@ -68,7 +67,7 @@ enum ErpAttestationError {
 impl ErpAttestationError {
     fn status_code(self) -> StatusCode {
         match self {
-            Self::Misconfigured | Self::ReplayStoreUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::ReplayStoreUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::ReplayDetected => StatusCode::CONFLICT,
             Self::InvalidAttestationFormat => StatusCode::BAD_REQUEST,
             Self::InvalidSignature | Self::ExpiredAttestation | Self::ContextMismatch => {
@@ -342,7 +341,7 @@ async fn claim_attestation_nonce(
     replay_key: &str,
     replay_ttl_seconds: u64,
 ) -> Result<(), ErpAttestationError> {
-    let mut conn = state
+    let mut conn: redis::aio::MultiplexedConnection = state
         .storage
         .redis_client
         .get_multiplexed_async_connection()

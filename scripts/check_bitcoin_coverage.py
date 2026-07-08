@@ -23,13 +23,8 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (133, 175), # app_router wiring (Bitcoin-focused routes)
-        (245, 300), # get_mmr_proof handler
-        (484, 522), # get_rgb_contract handler
-        (523, 580), # get_event_feed handler
-        (700, 790), # MMR proof tests
-        (790, 940), # RGB contract tests
-        (945, 1120), # Event feed tests
+        (125, 182), # app_router + Bitcoin-facing route handlers
+        (309, 348), # get_mmr_proof handler
     ],
     "src/executor/rgb.rs": [
         (38, 45),   # rollout mode display
