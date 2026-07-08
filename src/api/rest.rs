@@ -169,7 +169,12 @@ async fn get_rgb_contract(
     State(state): State<AppState>,
     Query(params): Query<RGBContractParams>,
 ) -> impl IntoResponse {
-    match state.executor.rgb_adapter.lookup_contract(&params.contract_id).await {
+    match state
+        .executor
+        .rgb_adapter
+        .lookup_contract(&params.contract_id)
+        .await
+    {
         Ok(Some(metadata)) => (StatusCode::OK, Json(metadata)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Contract not found").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
@@ -180,7 +185,12 @@ async fn verify_bitvm_transition(
     State(state): State<AppState>,
     Json(payload): Json<crate::executor::bitvm::BitVMTransition>,
 ) -> impl IntoResponse {
-    match state.executor.bitvm_adapter.verify_transition(&payload).await {
+    match state
+        .executor
+        .bitvm_adapter
+        .verify_transition(&payload)
+        .await
+    {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -194,7 +204,12 @@ async fn verify_evm_receipt(
     State(state): State<AppState>,
     Json(payload): Json<crate::executor::evm::EVMReceiptProof>,
 ) -> impl IntoResponse {
-    match state.executor.evm_adapter.verify_receipt_proof(&payload).await {
+    match state
+        .executor
+        .evm_adapter
+        .verify_receipt_proof(&payload)
+        .await
+    {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -208,7 +223,12 @@ async fn verify_cosmos_ibc(
     State(state): State<AppState>,
     Json(payload): Json<crate::executor::cosmos::IBCClientUpdate>,
 ) -> impl IntoResponse {
-    match state.executor.cosmos_adapter.verify_client_update(&payload).await {
+    match state
+        .executor
+        .cosmos_adapter
+        .verify_client_update(&payload)
+        .await
+    {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -222,7 +242,12 @@ async fn verify_stacks_tx(
     State(state): State<AppState>,
     Json(payload): Json<crate::executor::stacks::StacksTransaction>,
 ) -> impl IntoResponse {
-    match state.executor.stacks_adapter.verify_transaction(&payload).await {
+    match state
+        .executor
+        .stacks_adapter
+        .verify_transaction(&payload)
+        .await
+    {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -273,7 +298,11 @@ async fn get_proof(
     Query(params): Query<ProofParams>,
 ) -> impl IntoResponse {
     let (root, proof) = state.nexus_state.generate_proof(&params.key);
-    (StatusCode::OK, Json(serde_json::json!({ "root": root, "proof": proof }))).into_response()
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "root": root, "proof": proof })),
+    )
+        .into_response()
 }
 
 #[tracing::instrument(skip(state))]
@@ -285,7 +314,11 @@ async fn get_mmr_proof(
         Some(idx as usize)
     } else if let Some(tx_id) = params.tx_id {
         if !tx_id.starts_with("0x") || tx_id.len() != 66 {
-             return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"error": "Invalid tx_id format"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": "Invalid tx_id format"})),
+            )
+                .into_response();
         }
         state.nexus_state.get_leaf_index(&tx_id)
     } else {
@@ -300,9 +333,17 @@ async fn get_mmr_proof(
                     return (StatusCode::OK, Json(proof)).into_response();
                 }
             }
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Failed to generate MMR proof"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": "Failed to generate MMR proof"})),
+            )
+                .into_response()
         }
-        None => (StatusCode::NOT_FOUND, Json(serde_json::json!({"error": "Leaf not found"}))).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"error": "Leaf not found"})),
+        )
+            .into_response(),
     }
 }
 
@@ -314,7 +355,11 @@ async fn submit_transaction(
     match state.executor.submit(request).await {
         Ok(tx_id) => {
             TX_COUNT.inc();
-            (StatusCode::ACCEPTED, Json(serde_json::json!({ "tx_id": tx_id }))).into_response()
+            (
+                StatusCode::ACCEPTED,
+                Json(serde_json::json!({ "tx_id": tx_id })),
+            )
+                .into_response()
         }
         Err(e) => (
             StatusCode::BAD_REQUEST,
@@ -346,10 +391,11 @@ mod tests {
     use super::*;
     use crate::executor::rgb::RGBRolloutMode;
     use crate::storage::tableland::TablelandAdapter;
-    use http_body_util::BodyExt;
-    use tower::ServiceExt;
     use axum::body::Body;
     use axum::http::Request;
+    use http_body_util::BodyExt;
+    use serde_json::Value;
+    use tower::ServiceExt;
 
     async fn test_router_with_state(
         enabled: bool,
@@ -388,7 +434,12 @@ mod tests {
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
 
         let response = app
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
@@ -396,5 +447,150 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: HealthResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(res.status, "ok");
+    }
+
+    fn valid_rgb_contract_id() -> &'static str {
+        "rgb:test123456_nia_long_enough_id_for_validation"
+    }
+
+    fn valid_tx_id() -> String {
+        format!("0x{}", "a".repeat(64))
+    }
+
+    #[tokio::test]
+    async fn test_rgb_contract_lookup_shadow_mode_returns_ok() {
+        let app = test_router_with_state(true, RGBRolloutMode::Shadow, HashSet::new()).await;
+        let uri = format!("/v1/rgb/contract?contract_id={}", valid_rgb_contract_id());
+
+        let response = app
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload.get("contract_id").and_then(Value::as_str),
+            Some(valid_rgb_contract_id())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_rgb_contract_lookup_disabled_returns_internal_server_error() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let uri = format!("/v1/rgb/contract?contract_id={}", valid_rgb_contract_id());
+
+        let response = app
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body_text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_text.contains("RGB adapter is disabled"));
+    }
+
+    #[tokio::test]
+    async fn test_mmr_proof_rejects_invalid_tx_id_format() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof?tx_id=not_hex_prefixed")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_mmr_proof_returns_not_found_for_missing_tx_id() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/mmr-proof?tx_id={}", valid_tx_id()))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_mmr_proof_returns_internal_error_for_missing_leaf_index() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof?index=0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_mmr_proof_returns_ok_for_existing_leaf_index() {
+        let mut config = Config::default_test();
+        config.experimental_apis_enabled = true;
+        let config = Arc::new(config);
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let nexus_state = Arc::new(NexusState::new());
+        let tx_id = valid_tx_id();
+        nexus_state.update_state(&tx_id, 100);
+
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(
+            storage.clone(),
+            config.tableland_base_url.clone(),
+        ));
+
+        let app = app_router(
+            storage,
+            nexus_state,
+            executor,
+            None,
+            tableland,
+            None,
+            None,
+            config,
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/mmr-proof?index=0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload.get("leaf").and_then(Value::as_str),
+            Some(tx_id.as_str())
+        );
+        assert_eq!(payload.get("pos").and_then(Value::as_u64), Some(0));
     }
 }
