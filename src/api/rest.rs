@@ -86,18 +86,12 @@ pub struct HealthResponse {
 }
 
 /// Proof manifest for the narrow proof surface (Issue #149)
-/// Provides a consolidated view of Nexus proof capabilities for the first proof gate
 #[derive(Serialize)]
 pub struct ProofManifest {
-    /// Service health status
     pub health: HealthStatus,
-    /// Available proof routes
     pub proof_routes: ProofRoutes,
-    /// Current state root for verification
     pub state_root: Option<String>,
-    /// MMR tree information
     pub mmr_info: MmrInfo,
-    /// Service metadata
     pub service: ServiceMetadata,
 }
 
@@ -436,23 +430,19 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// Proof manifest handler for the narrow proof surface (Issue #149)
-/// Provides a consolidated view of Nexus proof capabilities for the first proof gate
 async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse {
     let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
         .await
         .unwrap_or(false);
 
-    // Get MMR information from nexus state
-    let (mmr_leaf_count, mmr_peaks, mmr_initialized) = {
-        let mmr = state.nexus_state.mmr();
-        (
-            Some(mmr.leaf_count()),
-            mmr.peaks().iter().map(|p| format!("{:x}", p)).collect::<Vec<_>>(),
-            true, // MMR is initialized when nexus_state is created
-        )
-    };
+    // Get MMR information from nexus state using the public get_mmr_state method
+    let (mmr_peaks_raw, mmr_leaf_count) = state.nexus_state.get_mmr_state();
+    let mmr_peaks = mmr_peaks_raw
+        .iter()
+        .map(|p| format!("{:x}", p))
+        .collect::<Vec<_>>();
 
-    // Get state root (first leaf proof key = "state_root")
+    // Get state root
     let state_root = {
         let (root, _) = state.nexus_state.generate_proof("state_root");
         if root.is_empty() { None } else { Some(root) }
@@ -463,7 +453,7 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
             status: "ok".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             safety_mode,
-            uptime_seconds: None, // Could be tracked via state if needed
+            uptime_seconds: None,
         },
         proof_routes: ProofRoutes {
             proof_endpoint: "/v1/proof?key=<key>".to_string(),
@@ -473,13 +463,13 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
         },
         state_root,
         mmr_info: MmrInfo {
-            leaf_count: mmr_leaf_count,
+            leaf_count: Some(mmr_leaf_count),
             peaks: mmr_peaks,
-            initialized: mmr_initialized,
+            initialized: true,
         },
         service: ServiceMetadata {
             version: env!("CARGO_PKG_VERSION").to_string(),
-            proof_surface_version: "1.0.0".to_string(), // First proof surface version
+            proof_surface_version: "1.0.0".to_string(),
             supported_chains: vec![
                 "stacks".to_string(),
                 "bitcoin".to_string(),
@@ -588,7 +578,8 @@ mod tests {
 
         // Verify MMR info is present
         assert!(manifest.mmr_info.initialized);
-        assert!(manifest.mmr_info.peaks.is_empty() || !manifest.mmr_info.peaks.is_empty());
+        // When no transactions have been processed, MMR should be empty
+        assert_eq!(manifest.mmr_info.leaf_count, Some(0));
 
         // Verify service metadata
         assert_eq!(manifest.service.proof_surface_version, "1.0.0");
