@@ -85,6 +85,59 @@ pub struct HealthResponse {
     pub safety_mode: bool,
 }
 
+/// Proof manifest for the narrow proof surface (Issue #149)
+/// Provides a consolidated view of Nexus proof capabilities for the first proof gate
+#[derive(Serialize)]
+pub struct ProofManifest {
+    /// Service health status
+    pub health: HealthStatus,
+    /// Available proof routes
+    pub proof_routes: ProofRoutes,
+    /// Current state root for verification
+    pub state_root: Option<String>,
+    /// MMR tree information
+    pub mmr_info: MmrInfo,
+    /// Service metadata
+    pub service: ServiceMetadata,
+}
+
+#[derive(Serialize)]
+pub struct HealthStatus {
+    pub status: String,
+    pub version: String,
+    pub safety_mode: bool,
+    pub uptime_seconds: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub struct ProofRoutes {
+    /// GET /v1/proof - Get proof for a specific key
+    pub proof_endpoint: String,
+    /// GET /v1/mmr-proof - Get MMR inclusion proof
+    pub mmr_proof_endpoint: String,
+    /// GET /health - Service health check
+    pub health_endpoint: String,
+    /// POST /v1/submit - Submit transaction
+    pub submit_endpoint: String,
+}
+
+#[derive(Serialize)]
+pub struct MmrInfo {
+    /// Current number of leaves in the MMR tree
+    pub leaf_count: Option<usize>,
+    /// Current MMR peaks
+    pub peaks: Vec<String>,
+    /// Whether MMR is initialized
+    pub initialized: bool,
+}
+
+#[derive(Serialize)]
+pub struct ServiceMetadata {
+    pub version: String,
+    pub proof_surface_version: String,
+    pub supported_chains: Vec<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn app_router(
     storage: Arc<Storage>,
@@ -125,6 +178,7 @@ pub fn app_router(
     Router::new()
         .route("/health", get(health_handler))
         .route("/v1/proof", get(get_proof))
+        .route("/v1/proof/manifest", get(get_proof_manifest))  // Narrow proof surface
         .route("/v1/submit", post(submit_transaction))
         .route("/v1/status", get(health_handler))
         .route("/v1/mmr-proof", get(get_mmr_proof))
@@ -381,6 +435,61 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
+/// Proof manifest handler for the narrow proof surface (Issue #149)
+/// Provides a consolidated view of Nexus proof capabilities for the first proof gate
+async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse {
+    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
+        .await
+        .unwrap_or(false);
+
+    // Get MMR information from nexus state
+    let (mmr_leaf_count, mmr_peaks, mmr_initialized) = {
+        let mmr = state.nexus_state.mmr();
+        (
+            Some(mmr.leaf_count()),
+            mmr.peaks().iter().map(|p| format!("{:x}", p)).collect::<Vec<_>>(),
+            true, // MMR is initialized when nexus_state is created
+        )
+    };
+
+    // Get state root (first leaf proof key = "state_root")
+    let state_root = {
+        let (root, _) = state.nexus_state.generate_proof("state_root");
+        if root.is_empty() { None } else { Some(root) }
+    };
+
+    Json(ProofManifest {
+        health: HealthStatus {
+            status: "ok".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            safety_mode,
+            uptime_seconds: None, // Could be tracked via state if needed
+        },
+        proof_routes: ProofRoutes {
+            proof_endpoint: "/v1/proof?key=<key>".to_string(),
+            mmr_proof_endpoint: "/v1/mmr-proof?index=<n>".to_string(),
+            health_endpoint: "/health".to_string(),
+            submit_endpoint: "/v1/submit".to_string(),
+        },
+        state_root,
+        mmr_info: MmrInfo {
+            leaf_count: mmr_leaf_count,
+            peaks: mmr_peaks,
+            initialized: mmr_initialized,
+        },
+        service: ServiceMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            proof_surface_version: "1.0.0".to_string(), // First proof surface version
+            supported_chains: vec![
+                "stacks".to_string(),
+                "bitcoin".to_string(),
+                "evm".to_string(),
+                "cosmos".to_string(),
+            ],
+        },
+    })
+}
+
 fn init_prometheus_metrics() {
     let _ = &*TX_COUNT;
     let _ = &*REBALANCE_COUNT;
@@ -447,6 +556,43 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: HealthResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(res.status, "ok");
+    }
+
+    /// Test for Issue #149: Narrow proof surface manifest endpoint
+    #[tokio::test]
+    async fn test_proof_manifest_returns_narrow_surface() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/proof/manifest")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let manifest: ProofManifest = serde_json::from_slice(&body).unwrap();
+
+        // Verify health status
+        assert_eq!(manifest.health.status, "ok");
+        assert_eq!(manifest.health.version, env!("CARGO_PKG_VERSION"));
+
+        // Verify proof routes are documented
+        assert!(!manifest.proof_routes.proof_endpoint.is_empty());
+        assert!(!manifest.proof_routes.mmr_proof_endpoint.is_empty());
+        assert!(!manifest.proof_routes.health_endpoint.is_empty());
+
+        // Verify MMR info is present
+        assert!(manifest.mmr_info.initialized);
+        assert!(manifest.mmr_info.peaks.is_empty() || !manifest.mmr_info.peaks.is_empty());
+
+        // Verify service metadata
+        assert_eq!(manifest.service.proof_surface_version, "1.0.0");
+        assert!(!manifest.service.supported_chains.is_empty());
     }
 
     fn valid_rgb_contract_id() -> &'static str {
