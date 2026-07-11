@@ -85,6 +85,53 @@ pub struct HealthResponse {
     pub safety_mode: bool,
 }
 
+/// Proof manifest for the narrow proof surface (Issue #149)
+#[derive(Serialize, Deserialize)]
+pub struct ProofManifest {
+    pub health: HealthStatus,
+    pub proof_routes: ProofRoutes,
+    pub state_root: Option<String>,
+    pub mmr_info: MmrInfo,
+    pub service: ServiceMetadata,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct HealthStatus {
+    pub status: String,
+    pub version: String,
+    pub safety_mode: bool,
+    pub uptime_seconds: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ProofRoutes {
+    /// GET /v1/proof - Get proof for a specific key
+    pub proof_endpoint: String,
+    /// GET /v1/mmr-proof - Get MMR inclusion proof
+    pub mmr_proof_endpoint: String,
+    /// GET /health - Service health check
+    pub health_endpoint: String,
+    /// POST /v1/submit - Submit transaction
+    pub submit_endpoint: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MmrInfo {
+    /// Current number of leaves in the MMR tree
+    pub leaf_count: Option<usize>,
+    /// Current MMR peaks
+    pub peaks: Vec<String>,
+    /// Whether MMR is initialized
+    pub initialized: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ServiceMetadata {
+    pub version: String,
+    pub proof_surface_version: String,
+    pub supported_chains: Vec<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn app_router(
     storage: Arc<Storage>,
@@ -125,6 +172,7 @@ pub fn app_router(
     Router::new()
         .route("/health", get(health_handler))
         .route("/v1/proof", get(get_proof))
+        .route("/v1/proof/manifest", get(get_proof_manifest))  // Narrow proof surface
         .route("/v1/submit", post(submit_transaction))
         .route("/v1/status", get(health_handler))
         .route("/v1/mmr-proof", get(get_mmr_proof))
@@ -381,6 +429,54 @@ async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     })
 }
 
+/// Proof manifest handler for the narrow proof surface (Issue #149)
+async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse {
+    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
+        .await
+        .unwrap_or(false);
+
+    // Get MMR information from nexus state using the public get_mmr_state method
+    let (mmr_peaks_raw, mmr_leaf_count) = state.nexus_state.get_mmr_state();
+    let mmr_peaks = mmr_peaks_raw.iter().map(hex::encode).collect::<Vec<_>>();
+
+    // Get state root
+    let state_root = {
+        let (root, _) = state.nexus_state.generate_proof("state_root");
+        if root.is_empty() { None } else { Some(root) }
+    };
+
+    Json(ProofManifest {
+        health: HealthStatus {
+            status: "ok".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            safety_mode,
+            uptime_seconds: None,
+        },
+        proof_routes: ProofRoutes {
+            proof_endpoint: "/v1/proof?key=<key>".to_string(),
+            mmr_proof_endpoint: "/v1/mmr-proof?index=<n>".to_string(),
+            health_endpoint: "/health".to_string(),
+            submit_endpoint: "/v1/submit".to_string(),
+        },
+        state_root,
+        mmr_info: MmrInfo {
+            leaf_count: Some(mmr_leaf_count),
+            peaks: mmr_peaks,
+            initialized: true,
+        },
+        service: ServiceMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            proof_surface_version: "1.0.0".to_string(),
+            supported_chains: vec![
+                "stacks".to_string(),
+                "bitcoin".to_string(),
+                "evm".to_string(),
+                "cosmos".to_string(),
+            ],
+        },
+    })
+}
+
 fn init_prometheus_metrics() {
     let _ = &*TX_COUNT;
     let _ = &*REBALANCE_COUNT;
@@ -449,6 +545,44 @@ mod tests {
         assert_eq!(res.status, "ok");
     }
 
+    /// Test for Issue #149: Narrow proof surface manifest endpoint
+    #[tokio::test]
+    async fn test_proof_manifest_returns_narrow_surface() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/v1/proof/manifest")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let manifest: ProofManifest = serde_json::from_slice(&body).unwrap();
+
+        // Verify health status
+        assert_eq!(manifest.health.status, "ok");
+        assert_eq!(manifest.health.version, env!("CARGO_PKG_VERSION"));
+
+        // Verify proof routes are documented
+        assert!(!manifest.proof_routes.proof_endpoint.is_empty());
+        assert!(!manifest.proof_routes.mmr_proof_endpoint.is_empty());
+        assert!(!manifest.proof_routes.health_endpoint.is_empty());
+
+        // Verify MMR info is present
+        assert!(manifest.mmr_info.initialized);
+        // When no transactions have been processed, MMR should be empty
+        assert_eq!(manifest.mmr_info.leaf_count, Some(0));
+
+        // Verify service metadata
+        assert_eq!(manifest.service.proof_surface_version, "1.0.0");
+        assert!(!manifest.service.supported_chains.is_empty());
+    }
+
     fn valid_rgb_contract_id() -> &'static str {
         "rgb:test123456_nia_long_enough_id_for_validation"
     }
@@ -474,6 +608,21 @@ mod tests {
             payload.get("contract_id").and_then(Value::as_str),
             Some(valid_rgb_contract_id())
         );
+    }
+
+    #[tokio::test]
+    async fn test_rgb_contract_lookup_missing_returns_not_found() {
+        let app = test_router_with_state(true, RGBRolloutMode::Active, HashSet::new()).await;
+        let uri = format!("/v1/rgb/contract?contract_id={}", valid_rgb_contract_id());
+
+        let response = app
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body.as_ref(), b"Contract not found");
     }
 
     #[tokio::test]

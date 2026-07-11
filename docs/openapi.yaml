@@ -376,6 +376,24 @@ paths:
                       type: string
                   root:
                     type: string
+  /v1/proof/manifest:
+    get:
+      summary: Get proof manifest (Narrow Proof Surface - Issue #149)
+      description: |
+        Returns a consolidated view of Nexus proof capabilities for the first proof gate.
+        This endpoint provides the minimal verifiable surface for demonstrating Nexus proof integrity.
+        
+        **Scope for the first proof gate:**
+        - Prove Nexus health and service boot integrity
+        - Document available proof routes
+        - Provide MMR tree information for verification
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofManifest"
   /v1/verify-state:
     post:
       summary: Verify a state root
@@ -643,7 +661,6 @@ components:
           type: boolean
         error:
           type: string
-
     EventEnvelope:
       type: object
       properties:
@@ -663,39 +680,64 @@ components:
           type: string
         payload:
           type: object
-  /v1/evm/verify-receipt:
-    post:
-      summary: Verify EVM receipt proof
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/EVMReceiptProof"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EVMVerificationResult"
-  /v1/cosmos/verify-ibc:
-    post:
-      summary: Verify Cosmos IBC light client update
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/IBCClientUpdate"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IBCVerificationResult"
-
+    ProofManifest:
+      type: object
+      properties:
+        health:
+          type: object
+          properties:
+            status:
+              type: string
+              example: "ok"
+            version:
+              type: string
+              example: "0.4.19"
+            safety_mode:
+              type: boolean
+            uptime_seconds:
+              type: integer
+              nullable: true
+        proof_routes:
+          type: object
+          properties:
+            proof_endpoint:
+              type: string
+              example: "/v1/proof?key=<key>"
+            mmr_proof_endpoint:
+              type: string
+              example: "/v1/mmr-proof?index=<n>"
+            health_endpoint:
+              type: string
+              example: "/health"
+            submit_endpoint:
+              type: string
+              example: "/v1/submit"
+        state_root:
+          type: string
+          nullable: true
+        mmr_info:
+          type: object
+          properties:
+            leaf_count:
+              type: integer
+              nullable: true
+            peaks:
+              type: array
+              items:
+                type: string
+            initialized:
+              type: boolean
+        service:
+          type: object
+          properties:
+            version:
+              type: string
+            proof_surface_version:
+              type: string
+            supported_chains:
+              type: array
+              items:
+                type: string
     EVMReceiptProof:
       type: object
       required: [block_hash, transaction_index, proof_nodes, receipt_root]
