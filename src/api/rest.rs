@@ -611,6 +611,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_rgb_contract_lookup_missing_returns_not_found() {
+        let app = test_router_with_state(true, RGBRolloutMode::Active, HashSet::new()).await;
+        let uri = format!("/v1/rgb/contract?contract_id={}", valid_rgb_contract_id());
+
+        let response = app
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body.as_ref(), b"Contract not found");
+    }
+
+    #[tokio::test]
     async fn test_rgb_contract_lookup_disabled_returns_internal_server_error() {
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
         let uri = format!("/v1/rgb/contract?contract_id={}", valid_rgb_contract_id());

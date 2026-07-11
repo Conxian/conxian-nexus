@@ -23,8 +23,8 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (125, 182), # app_router + Bitcoin-facing route handlers
-        (309, 348), # get_mmr_proof handler
+        (172, 229),  # app_router through get_rgb_contract
+        (356, 395),  # get_mmr_proof handler
     ],
     "src/executor/rgb.rs": [
         (38, 45),   # rollout mode display
