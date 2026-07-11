@@ -86,7 +86,7 @@ pub struct HealthResponse {
 }
 
 /// Proof manifest for the narrow proof surface (Issue #149)
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ProofManifest {
     pub health: HealthStatus,
     pub proof_routes: ProofRoutes,
@@ -95,7 +95,7 @@ pub struct ProofManifest {
     pub service: ServiceMetadata,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct HealthStatus {
     pub status: String,
     pub version: String,
@@ -103,7 +103,7 @@ pub struct HealthStatus {
     pub uptime_seconds: Option<u64>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ProofRoutes {
     /// GET /v1/proof - Get proof for a specific key
     pub proof_endpoint: String,
@@ -115,7 +115,7 @@ pub struct ProofRoutes {
     pub submit_endpoint: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct MmrInfo {
     /// Current number of leaves in the MMR tree
     pub leaf_count: Option<usize>,
@@ -125,7 +125,7 @@ pub struct MmrInfo {
     pub initialized: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct ServiceMetadata {
     pub version: String,
     pub proof_surface_version: String,
@@ -437,10 +437,7 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
 
     // Get MMR information from nexus state using the public get_mmr_state method
     let (mmr_peaks_raw, mmr_leaf_count) = state.nexus_state.get_mmr_state();
-    let mmr_peaks = mmr_peaks_raw
-        .iter()
-        .map(|p| format!("{:x}", p))
-        .collect::<Vec<_>>();
+    let mmr_peaks = mmr_peaks_raw.iter().map(hex::encode).collect::<Vec<_>>();
 
     // Get state root
     let state_root = {
