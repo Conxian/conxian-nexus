@@ -15,8 +15,6 @@
 - Removed unused code and dead variants in `admin.rs` and `erp.rs` to resolve compiler warnings.
 - Corrected type inference issues in `sqlx` and `reqwest` call sites across the API layer.
 
-# Changelog
-
 ## [0.4.18] - 2026-07-06
 
 ### Added

@@ -31,6 +31,14 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 - **Libraries:** `lib-conxian-core` (Shared Primitives)
 - **Clients:** `conxius-wallet`, `conxian_ui`
 
+## Architecture
+
+Nexus is designed as a modular "Glass Node" that provides a verifiable synchronization layer between Layer 1 blockchains and the Conxian ecosystem.
+
+- **Verifiable Proofs**: Generates MMR state root commitments for off-chain state.
+- **Multi-Chain Adapters**: Standardized normalization for UTXO, EVM, and Cosmos families (see [ADR-006](./docs/ADR-006_Tier1_Chain_Families.md)).
+- **Resilience**: Integrated SRL-1 recovery layer for Lightning Network reliability.
+
 ## Modules
 
 - `nexus-sync`: multi-chain ingestion and reorg handling (Bitcoin, EVM, Cosmos).
@@ -43,7 +51,6 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 
 Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https://docs.conxian-labs.com/nexus) (GitHub Pages route).
 
-- [Architecture & ADRs](./docs/ADR-006_Tier1_Chain_Families.md)
 - [Operator Guide](./docs/PRD.md)
 - [API Reference](./docs/openapi.yaml)
 - [Security Model](./SECURITY.md)
@@ -56,16 +63,37 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 - Docker and Docker Compose
 - Rust 1.82+, PostgreSQL 15, and Redis 7
 
-### Quick Start
+### Setup
+
+1.  **Environment Configuration**:
+    Copy the example environment file and configure your secrets:
+    ```bash
+    cp .env.example .env
+    ```
+    *Note: Ensure `DATABASE_URL` and `REDIS_URL` are correctly set for your local or docker environment.*
+
+2.  **Database Migrations**:
+    Nexus requires a PostgreSQL database. Apply migrations using `sqlx`:
+    ```bash
+    cargo install sqlx-cli --no-default-features --features postgres
+    sqlx migrate run
+    ```
+
+### Quick Start (Docker)
+
+If you prefer using Docker, you can start the entire stack (including Postgres and Redis) with:
 
 ```bash
 docker-compose up --build
 ```
 
+For more detailed setup instructions, including production hardening, see the [Operator Guide](./docs/PRD.md).
+
 ## Policies
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)
+- [SUPPORT.md](./SUPPORT.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 - [CODEOWNERS](./.github/CODEOWNERS)
 - [REPO_OWNERSHIP.md](./docs/REPO_OWNERSHIP.md)
@@ -73,8 +101,8 @@ docker-compose up --build
 
 ## Contact
 
-- Support: [support@conxian-labs.com](mailto:support@conxian-labs.com)
-- Security: [security@conxian-labs.com](mailto:security@conxian-labs.com)
+- Support: [support@conxian-labs.com](mailto:support@conxian-labs.com) (See [SUPPORT.md](./SUPPORT.md) for details)
+- Security: [security@conxian-labs.com](mailto:security@conxian-labs.com) (See [SECURITY.md](./SECURITY.md) for details)
 
 ## License
 

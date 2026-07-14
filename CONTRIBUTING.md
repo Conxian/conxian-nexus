@@ -8,6 +8,17 @@ Thank you for your interest in contributing!
 2. Create a new branch for your feature or bugfix.
 3. Ensure all tests pass.
 4. Submit a Pull Request with a detailed description of changes.
+5. **Auto-merge**: When all CI checks pass and required reviewers approve, your PR may be auto-merged.
+
+## Auto-Merge
+
+This repository has auto-merge enabled. Pull requests that meet the following conditions will be automatically merged:
+
+- All required CI checks pass
+- All required reviewers have approved
+- No blocking reviews or unresolved threads
+
+For Dependabot PRs, dependencies are grouped and auto-merged weekly when checks pass.
 
 ## Local Development
 
@@ -27,7 +38,7 @@ To set up your local environment for development:
 
 ## Governance Support Routing
 
-- For support and issue-routing guidance, use [SUPPORT.md](docs/SUPPORT.md).
+- For support and issue-routing guidance, use [SUPPORT.md](SUPPORT.md).
 - For vulnerability handling, follow [SECURITY.md](SECURITY.md) and avoid public disclosure.
 
 ## Sensitive File Changes
