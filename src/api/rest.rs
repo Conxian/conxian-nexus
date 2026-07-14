@@ -8,7 +8,6 @@ use crate::api::services::services_routes;
 use crate::api::settlement::settlement_routes;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
-use crate::executor::rgb::RGBRolloutMode;
 use crate::executor::{ExecutionRequest, NexusExecutor};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
@@ -18,7 +17,7 @@ use crate::storage::Storage;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };

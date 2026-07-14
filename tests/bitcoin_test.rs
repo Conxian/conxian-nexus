@@ -207,7 +207,7 @@ async fn test_dlc_bond_creation_success_path() {
             json["oracle_announcement"].as_str().unwrap().len() > 20,
             "Oracle announcement must be a valid signature string"
         );
-        assert_eq!(json["next_coupon_height"], 100);
+        assert_eq!(json["next_coupon_height"], 10); // expiry_height / 10 = 100 / 10
     }
 }
 

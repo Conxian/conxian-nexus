@@ -32,7 +32,7 @@ fn is_telemetry_kind(kind: Kind) -> bool {
 }
 
 fn is_event_fresh(created_at: Timestamp, now: u64) -> bool {
-    created_at.as_u64().saturating_add(MAX_EVENT_AGE_SECONDS) >= now
+    created_at.as_secs().saturating_add(MAX_EVENT_AGE_SECONDS) >= now
 }
 
 fn parse_api_key_from_content(content: &str) -> anyhow::Result<String> {
@@ -122,7 +122,7 @@ impl NostrTelemetry {
             "status": status,
             "processed_height": processed_height,
             "state_root": state_root,
-            "timestamp": Timestamp::now().as_u64(),
+            "timestamp": Timestamp::now().as_secs(),
             "kind": "nexus_health_v1"
         })
         .to_string();
@@ -189,7 +189,7 @@ impl NostrCollector {
         let event_id = event.id.to_hex();
 
         // 1. Verify freshness (e.g., not older than 1 hour)
-        let now = Timestamp::now().as_u64();
+        let now = Timestamp::now().as_secs();
         if !is_event_fresh(event.created_at, now) {
             tracing::warn!("Nostr Collector: ignoring stale event: {}", event_id);
             return Ok(());

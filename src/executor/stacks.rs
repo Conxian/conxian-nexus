@@ -20,6 +20,12 @@ pub struct StacksVerificationResult {
 /// Protocol Adapter for Stacks / sBTC family.
 pub struct StacksAdapter;
 
+impl Default for StacksAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StacksAdapter {
     pub fn new() -> Self {
         Self
