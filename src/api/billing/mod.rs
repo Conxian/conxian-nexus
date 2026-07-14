@@ -104,11 +104,20 @@ fn validate_telemetry_auth(
     }
 
     let secret = data.get("secret").cloned().unwrap_or_default();
-    let expected_hmac = compute_expected_hmac(&secret, &payload.signature_hash, payload.timestamp);
-
-    if expected_hmac != payload.hmac {
-        return Err(TelemetryAuthError::InvalidHmac);
-    }
+    
+    // Compute expected HMAC
+    let message = format!("{}:{}", payload.signature_hash, payload.timestamp);
+    let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
+        .map_err(|_| TelemetryAuthError::InvalidApiKey)?;
+    mac.update(message.as_bytes());
+    
+    // Decode the provided HMAC hex
+    let received_hmac = hex::decode(&payload.hmac)
+        .map_err(|_| TelemetryAuthError::InvalidHmac)?;
+    
+    // Use constant-time verification to prevent timing attacks
+    mac.verify_slice(&received_hmac)
+        .map_err(|_| TelemetryAuthError::InvalidHmac)?;
 
     Ok(())
 }
