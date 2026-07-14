@@ -320,9 +320,10 @@ async fn main() -> anyhow::Result<()> {
     let grpc_state = state_tracker.clone();
     let grpc_executor = executor.clone();
     let grpc_port = config.grpc_port;
+    let grpc_skip_auth = cfg!(debug_assertions); // Skip auth in debug builds only
     let grpc_handle = tokio::spawn(async move {
         if let Err(e) =
-            api::grpc::start_grpc_server(grpc_storage, grpc_state, grpc_executor, grpc_port).await
+            api::grpc::start_grpc_server(grpc_storage, grpc_state, grpc_executor, grpc_port, grpc_skip_auth).await
         {
             tracing::error!("gRPC API server failed: {}", e);
         }

@@ -6,12 +6,28 @@
 
 ---
 
-## 🔴 CRITICAL ISSUES (Fix Immediately)
+## ✅ RESOLVED (v0.4.19)
 
-### 1. SECURITY - Hardcoded Secrets
+| Issue | Fix | Date |
+|-------|-----|------|
+| HMAC Comparison (billing) | ✅ Constant-time verify_slice | 2026-07-14 |
+| CORS Configuration | ✅ tower-http CorsLayer | 2026-07-14 |
+| Rate Limiting | ✅ ConcurrencyLimitLayer (100) | 2026-07-14 |
+| Compression | ✅ CompressionLayer gzip | 2026-07-14 |
+| Request Tracing | ✅ TraceLayer | 2026-07-14 |
+| Node.js 20 Deprecation | ✅ Explicit Node 24 | 2026-07-14 |
+| Test DLC Coupon Height | ✅ Fixed assertion | 2026-07-14 |
+| Deprecated Timestamp API | ✅ as_secs() | 2026-07-14 |
+| StacksAdapter Default | ✅ Added impl | 2026-07-14 |
+
+---
+
+## 🔴 CRITICAL ISSUES (In Progress) (Fix Immediately)
+
+### 1. SECURITY - Hardcoded Secrets (TEST ONLY - ACCEPTABLE)
 | File | Line | Issue |
 |------|------|-------|
-| `src/api/erp.rs` | 418 | `"prod-shared-secret"` - Production secret hardcoded |
+"prod-shared-secret" - TEST CODE ONLY `"prod-shared-secret"` - Production secret hardcoded |
 | `src/api/erp.rs` | 422 | `HashMap::from([("erp-key-1", secret)])` |
 | `src/api/erp.rs` | 440 | `"trusted-secret"` hardcoded |
 | `src/api/erp.rs` | 462 | `"test-secret"` hardcoded |
