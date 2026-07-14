@@ -15,10 +15,49 @@ pub mod proto {
 use proto::nexus_service_server::NexusService;
 use proto::*;
 
+/// gRPC interceptor for authentication
+/// Checks for valid API key in metadata
+pub async fn grpc_auth_interceptor(
+    req: tonic::Request<()>,
+) -> Result<(), Status> {
+    let metadata = req.metadata();
+    
+    // Check for API key in metadata
+    let api_key = metadata
+        .get("x-api-key")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| {
+            tracing::warn!("gRPC request missing API key");
+            Status::unauthenticated("Missing API key")
+        })?;
+
+    // Validate API key format (should be UUID or hex string)
+    if api_key.len() < 16 {
+        tracing::warn!("gRPC request with invalid API key format");
+        return Err(Status::unauthenticated("Invalid API key format"));
+    }
+
+    // TODO: Validate against credential store
+    // For now, accept any non-empty key for development
+    if api_key == "dev-mode" {
+        tracing::debug!("gRPC dev-mode authentication bypassed");
+        return Ok(());
+    }
+
+    // TODO: Check against persistent credential store (Redis/PostgreSQL)
+    // For production, validate against stored credentials
+    
+    tracing::debug!("gRPC request authenticated");
+    Ok(())
+}
+
+/// GrpcService with authentication
 pub struct NexusGrpcService {
     pub storage: Arc<Storage>,
     pub nexus_state: Arc<NexusState>,
     pub executor: Arc<NexusExecutor>,
+    /// Whether to skip authentication (development only)
+    pub skip_auth: bool,
     metrics_counts_cache: MetricsCountsCache,
     redis_conn: Mutex<Option<redis::aio::MultiplexedConnection>>,
 }
@@ -355,12 +394,14 @@ pub async fn start_grpc_server(
     nexus_state: Arc<NexusState>,
     executor: Arc<NexusExecutor>,
     port: u16,
+    skip_auth: bool,
 ) -> anyhow::Result<()> {
     let addr = format!("0.0.0.0:{}", port).parse()?;
     let nexus_service = NexusGrpcService {
         storage,
         nexus_state,
         executor,
+        skip_auth,
         metrics_counts_cache: MetricsCountsCache::new(),
         redis_conn: Mutex::new(None),
     };
