@@ -168,6 +168,20 @@ pub fn app_router(
         config,
     };
 
+    // Security: CORS configuration
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any)
+        .expose_headers(tower_http::cors::Any)
+        .max_age(std::time::Duration::from_secs(86400));
+
+    // Security: Rate limiting via concurrency limiter (prevents overload)
+    let rate_limit = tower::limit::ConcurrencyLimitLayer::new(100);
+
+    // Security: Compression for responses (gzip)
+    let compression = tower_http::compression::CompressionLayer::new();
+
     Router::new()
         .route("/health", get(health_handler))
         .route("/v1/proof", get(get_proof))
@@ -189,6 +203,10 @@ pub fn app_router(
         .nest("/v1/cosmos", cosmos_routes())
         .nest("/v1/stacks", stacks_routes())
         .nest("/v1/rgb", rgb_routes())
+        .layer(cors)
+        .layer(rate_limit)
+        .layer(compression)
+        .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }
 

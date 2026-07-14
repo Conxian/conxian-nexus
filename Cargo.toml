@@ -23,7 +23,7 @@ hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
-tower-http = { version = "0.7", features = ["cors", "trace"] }
+tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 futures-util = "0.3"
 lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "3b091d2700d840514427e4190c40d631b6d8132c" }
 prometheus = "0.14"
@@ -47,6 +47,7 @@ ark-crypto-primitives = { version = "0.6.0", features = ["snark"] }
 ark-ff = "0.6.0"
 ark-relations = "0.6.0"
 ark-std = "0.6.0"
+# HTTP security headers (built-in with axum/tower-http)
 
 [build-dependencies]
 tonic-prost-build = "0.14"

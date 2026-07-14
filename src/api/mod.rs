@@ -6,6 +6,7 @@ pub mod erp;
 pub mod grpc;
 pub mod identity;
 pub mod rest;
+pub mod security;
 pub mod services;
 pub mod settlement;
 pub mod zkml;
