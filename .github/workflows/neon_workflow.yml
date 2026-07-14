@@ -35,6 +35,10 @@ jobs:
       || github.event.action == 'reopened')
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Get branch expiration date as an env variable (2 weeks from now)
         id: get_expiration_date
         run: echo "EXPIRES_AT=$(date -u --date '+14 days' +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
@@ -89,6 +93,10 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - name: Delete Neon Branch
         uses: neondatabase/delete-branch-action@v3
         with:
