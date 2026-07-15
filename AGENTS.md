@@ -376,11 +376,23 @@ gh release list
 **Required Actions**:
 1. [x] Fix dry-run issue in workflow
 2. [x] Re-push v0.4.18 and v0.4.19 tags
-3. [ ] Verify new workflow runs succeed
-4. [ ] Confirm GitHub releases created
-5. [ ] Confirm crates.io publish (if token configured)
-6. [ ] Verify `CARGO_REGISTRY_TOKEN` is configured in `release` environment
-7. [ ] Check crates.io for conxian-nexus crate existence
+3. [x] Update GitHub issues (#150, #151, #152, #163)
+4. [ ] Verify new workflow runs succeed
+5. [ ] Confirm GitHub releases created
+6. [ ] Confirm crates.io publish (if token configured)
+7. [ ] Verify `CARGO_REGISTRY_TOKEN` is configured in `release` environment
+
+**GitHub Issues Updated**:
+- #150: Posted sprint update with release workflow progress
+- #151: Noted branch protection remains open, related work documented
+- #152: Noted auto-merge remains open, dependency on #151
+- #163: Noted BIP-110 implementation not started this sprint
+
+**Current Workflow Status**:
+| Version | Hygiene | Build/Test | Status |
+|---------|---------|------------|--------|
+| v0.4.18 | ✅ success | running | in_progress |
+| v0.4.19 | ✅ success | running | in_progress |
 
 **Decisions**:
 - Keep 6-stage pipeline with hygiene from `rust.yml`
