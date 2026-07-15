@@ -108,8 +108,8 @@ Fedimint ─ Federation adapter
 | 0.4.0  | ✅ | ❌ | ❌ | Historical |
 | 0.4.10 | ✅ | ❌ | ❌ | Historical |
 | 0.4.17 | ✅ | ✅ | ❌ | 2026-07-10 |
-| 0.4.18 | ✅ | ⚡ Processing | ⚡ Processing | 2026-07-15 |
-| 0.4.19 | ✅ | ⚡ Processing | ⚡ Processing | 2026-07-15 |
+| 0.4.18 | ✅ | ✅ | ❌ | 2026-07-15 |
+| 0.4.19 | ✅ | ✅ | ⏳ Pending | 2026-07-15 |
 
 ### Dimension 3: Dependency Graph
 
@@ -291,6 +291,9 @@ validate-release
 - [x] Workflow dependency chain fixed (stages run independently)
 - [ ] `CARGO_REGISTRY_TOKEN` configured in GitHub secrets
 - [ ] `release` environment configured (recommended)
+- [ ] Crate published to crates.io
+
+**Status**: Workflow is ready. Need to configure `CARGO_REGISTRY_TOKEN` secret.
 
 ---
 
