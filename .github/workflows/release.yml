@@ -196,7 +196,7 @@ jobs:
   # ============================================================
   publish-crates-io:
     name: Publish crate to crates.io
-    needs: [validate-release, create-github-release]
+    needs: validate-release
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -228,7 +228,7 @@ jobs:
   # ============================================================
   attest-build:
     name: Generate SLSA attestation
-    needs: [validate-release, publish-crates-io]
+    needs: validate-release
     runs-on: ubuntu-latest
     permissions:
       attestations: write
