@@ -1,6 +1,54 @@
 # Conxian Nexus - Agent Knowledge Base
 
-## Repository Overview
+> **Self-Sustaining • Self-Enhancing • Self-Upgrading**
+> 
+> This knowledge base is designed to persist context, improve with each session, and guide autonomous agents through multi-dimensional analysis.
+
+---
+
+## 🚀 Session Start Protocol
+
+At the **beginning of each session**, execute these verifications:
+
+```bash
+# 1. Pull latest code and submodules
+git pull --recurse-submodules
+git submodule update --init --recursive
+
+# 2. Check for new releases/tags
+git fetch --tags
+git log --oneline HEAD..origin/main
+
+# 3. Verify workflow status
+gh run list --limit 5
+
+# 4. Check release status alignment
+gh release list
+```
+
+### Session Decision Tree
+
+```
+New code detected?
+├─ No → Skip to Dependency Check
+└─ Yes → Run hygiene verification
+         ├─ Tests pass? → Proceed with task
+         └─ Tests fail? → HALT & Report
+         
+Dependency drift detected?
+├─ No → Continue
+└─ Yes → Evaluate impact, update if critical
+
+Release drift detected?
+├─ No → Continue  
+└─ Yes → Create tags/releases per Release Process
+```
+
+---
+
+## 📊 Multi-Dimensional View
+
+### Dimension 1: Technical Architecture
 
 **Conxian Nexus** (aka Glass Node) is a protocol-first proof layer providing:
 - Verifiable synchronization for Tier 1 Chain Families
@@ -8,162 +56,319 @@
 - MMR (Merkle Mountain Range) state root commitments
 - SRL-1 Lightning Network resilience layer
 
-**Current Version**: v0.4.19
-**Rust Version**: 1.82+
-**License**: BSL 1.1
+#### Core Modules
 
-## Architecture
+| Module | Purpose | Health Indicator |
+|--------|---------|------------------|
+| `src/api/` | REST/gRPC API surfaces | 12 submodules |
+| `src/executor/` | Chain adapters | 7 adapters |
+| `src/oracle/` | Oracle service | Stacks integration |
+| `src/orchestrator/` | Self-healing | SRL-1 Lightning |
+| `src/safety/` | Safety mode | Drift monitoring |
+| `src/state/` | MMR commitments | State roots |
+| `src/storage/` | Persistence | Kwil + Tableland |
+| `src/sync/` | Multi-chain sync | Reorg handling |
 
-### Core Modules
-
-| Module | Purpose |
-|--------|---------|
-| `src/api/` | REST/gRPC API surfaces (admin, analytics, billing, dlc, erp, grpc, identity, rest, security, settlement, zkml) |
-| `src/executor/` | Multi-chain adapters: BitVM2, Cosmos, EVM, Fedimint, Lightning, RGB, Stacks |
-| `src/oracle/` | Oracle service for Stacks contract integration |
-| `src/orchestrator/` | Autonomous orchestrator for self-healing (SRL-1 Lightning recovery) |
-| `src/safety/` | Safety mode enforcement & drift monitoring |
-| `src/state/` | MMR state root commitments |
-| `src/storage/` | Kwil & Tableland persistence adapters |
-| `src/sync/` | Multi-chain ingestion and reorganization handling |
-
-### External Dependencies
-
-- **lib-conxian-core**: Git dependency from `https://github.com/Conxian/lib-conxian-core` (rev: 3b091d27...)
-  - Used for: Wallet, Bitcoin primitives, RGB, Lightning
-  - Current version: 0.2.12
-
-## Release Process
-
-### Version Alignment Requirements
-
-⚠️ **CRITICAL**: Version alignment must be maintained across:
-1. `Cargo.toml` version field
-2. Git tag (e.g., `v0.4.19`)
-3. GitHub Release
-4. CHANGELOG.md entries
-
-### Release Workflow (Automated)
-
-The `.github/workflows/release.yml` implements a 6-stage pipeline:
+#### Chain Adapters (executor/)
 
 ```
-1. Hygiene → 2. Build/Test → 3. Validate → 4. GitHub Release → 5. crates.io → 6. Attest
+BitVM2 ── Groth16 verification (ark-groth16)
+  │
+RGB ───── Contract adapter (Shadow/Active/Disabled modes)
+  │
+Lightning ─ SRL-1 resilience (Retry/Split/Reconciliation)
+  │
+EVM ────── Receipt verification
+  │
+Cosmos ─── IBC verification  
+  │
+Stacks ─── Transaction verification
+  │
+Fedimint ─ Federation adapter
 ```
 
-**Stage 1: Hygiene** (from rust.yml)
-- Contamination guard verification
-- Submodule integrity check
-- Clarity contract verification
-- Production boundary check
-- Gitleaks secret scanning
+### Dimension 2: Release & Version Management
 
-**Stage 2: Build & Test**
-- Cargo build
-- Cargo test
-- Lightning coverage (>=90%)
-- Bitcoin coverage (>=92%)
+**Current Version**: v0.4.19 | **Rust**: 1.82+ | **License**: BSL 1.1
 
-**Stage 3: Version Validation**
-- Verify tag version matches Cargo.toml
-- Extract changelog for release notes
-- Dry-run `cargo publish`
+#### Version Alignment Matrix ⚠️ CRITICAL
 
-**Stage 4: GitHub Release** (Automatic)
-- Creates release with changelog notes
-- Only if release doesn't exist
+| Component | Current | Required State |
+|-----------|---------|----------------|
+| `Cargo.toml` version | v0.4.19 | Must match tag |
+| Git tag | v0.4.19 | Must exist |
+| GitHub Release | v0.4.17 | ⚡ In progress |
+| CHANGELOG.md | v0.4.19 | Must have entry |
+| crates.io | Not published | Awaiting release |
 
-**Stage 5: crates.io Publish** (Automatic on tag)
-- Runs when triggered by git tag push (not workflow_dispatch)
-- Requires `CARGO_REGISTRY_TOKEN` in `release` environment
-- Must be gated behind all previous checks
+#### Release Status Dashboard
 
-**Stage 6: SLSA Attestation**
-- Generates build provenance
-- Publishes to attestations API
+| Version | Git Tag | GitHub Release | crates.io | Last Updated |
+|---------|---------|----------------|-----------|--------------|
+| 0.4.0  | ✅ | ❌ | ❌ | Historical |
+| 0.4.10 | ✅ | ❌ | ❌ | Historical |
+| 0.4.17 | ✅ | ✅ | ❌ | 2026-07-10 |
+| 0.4.18 | ✅ | ⚡ Processing | ⚡ Processing | 2026-07-15 |
+| 0.4.19 | ✅ | ⚡ Processing | ⚡ Processing | 2026-07-15 |
 
-### How to Release
+### Dimension 3: Dependency Graph
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Conxian Ecosystem                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────┐      ┌──────────────────────┐           │
+│  │ conxian-gateway  │      │   conxian-nexus      │           │
+│  │    v0.1.4        │      │     v0.4.19          │           │
+│  └────────┬─────────┘      └──────────┬───────────┘           │
+│           │                           │                       │
+│           │         ┌─────────────────┴────────────────┐       │
+│           └─────────┼─────────────────────────────────┘       │
+│                     │                                          │
+│                     ▼                                          │
+│            ┌────────────────────┐                              │
+│            │ lib-conxian-core  │                              │
+│            │     v0.2.12       │                              │
+│            │ Rev: 3b091d27...  │                              │
+│            └────────────────────┘                              │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Insight**: conxian-gateway and conxian-nexus do NOT depend on each other. They both depend on lib-conxian-core for shared primitives.
+
+### Dimension 4: Security Posture
+
+#### Security Features (v0.4.19)
+
+| Feature | Implementation | Status |
+|---------|---------------|--------|
+| gRPC Auth | Token-based | ✅ |
+| CORS | tower-http | ✅ |
+| Rate Limiting | ConcurrencyLimitLayer (100) | ✅ |
+| HMAC Verification | Constant-time (billing) | ✅ |
+| Safety Mode | Submission path enforcement | ✅ |
+| Redis Auth | Required in release builds | ✅ |
+| Secret Scanning | Gitleaks in CI | ✅ |
+
+#### Active Vulnerabilities
+
+| ID | Severity | Status | Action Required |
+|----|----------|--------|-----------------|
+| Dependabot #4 | Low | Open | Monitor/ remediate |
+
+### Dimension 5: CI/CD Pipeline
+
+#### Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `rust.yml` | Push PR/main | Build, test, coverage |
+| `release.yml` | Tag push | Full release pipeline |
+| `cargo-audit.yml` | Schedule | Security audit |
+| `codeql.yml` | Push PR/main | CodeQL analysis |
+| `neon_workflow.yml` | PR | Schema diff |
+
+#### Release Pipeline (6 Stages)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ STAGE 1: HYGIENE                                                │
+│ ├── Contamination guard                                         │
+│ ├── Submodule integrity                                         │
+│ ├── Contract verification (Clarity)                             │
+│ ├── Production boundary check                                   │
+│ └── Gitleaks secret scan                                        │
+├─────────────────────────────────────────────────────────────────┤
+│ STAGE 2: BUILD & TEST                                           │
+│ ├── cargo build                                                 │
+│ ├── cargo test                                                  │
+│ ├── Lightning coverage (≥90%)                                   │
+│ └── Bitcoin coverage (≥92%)                                      │
+├─────────────────────────────────────────────────────────────────┤
+│ STAGE 3: VALIDATE                                               │
+│ ├── Version matches Cargo.toml                                  │
+│ ├── Changelog extraction                                        │
+│ └── cargo publish --dry-run                                     │
+├─────────────────────────────────────────────────────────────────┤
+│ STAGE 4: GITHUB RELEASE                                         │
+│ └── Auto-create with changelog (idempotent)                     │
+├─────────────────────────────────────────────────────────────────┤
+│ STAGE 5: CRATES.IO (Automatic on tag)                           │
+│ └── cargo publish (requires CARGO_REGISTRY_TOKEN)               │
+├─────────────────────────────────────────────────────────────────┤
+│ STAGE 6: ATTESTATION                                            │
+│ └── SLSA provenance                                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔄 Release Process
+
+### Standard Release Flow
 
 ```bash
-# 1. Ensure Cargo.toml version matches desired release
-# 2. Create and push tag (triggers full pipeline)
-git tag v0.4.X
+# 1. Verify alignment
+cargo_version=$(grep '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+echo "Cargo.toml: $cargo_version"
+
+# 2. Create tag (version must be in CHANGELOG.md first)
+git tag v${cargo_version}
+git push origin v${cargo_version}
+
+# 3. Monitor
+gh run watch
+```
+
+### Recovery: Missing Releases
+
+If releases are behind tags:
+
+```bash
+# 1. Find commit for version
+git log --oneline | grep "v0.4.X"
+
+# 2. Create tag pointing to correct commit
+git tag v0.4.X <commit-hash>
+
+# 3. Push to trigger release workflow
 git push origin v0.4.X
-
-# 3. Watch workflow at:
-# https://github.com/Conxian/conxian-nexus/actions
 ```
 
-### Manual Release (workflow_dispatch)
+### Manual Workflow Dispatch
 
-For testing or manual control:
 ```bash
-# Via GitHub CLI
+# For testing (NO crates.io publish)
 gh workflow run release.yml -f release_version=0.4.X
-
-# Note: workflow_dispatch does NOT trigger crates.io publish
 ```
 
-## Crate Publishing
+---
 
-### crates.io Configuration
+## 📦 Crate Publishing
 
-- **Crate Name**: `conxian-nexus`
-- **Repository**: Conxian/conxian-nexus
-- **Publish Trigger**: Git tag push (automatic)
-- **Environment**: Requires `release` environment with `CARGO_REGISTRY_TOKEN`
+### Configuration
 
-### Pre-publication Checklist
+- **Name**: `conxian-nexus`
+- **Registry**: crates.io
+- **Trigger**: Git tag push (automatic)
+- **Environment**: `release` (requires `CARGO_REGISTRY_TOKEN`)
 
-- [ ] Version in Cargo.toml matches tag
-- [ ] CHANGELOG.md has entry for this version
-- [ ] All tests pass locally
-- [ ] `cargo publish --dry-run` succeeds
-- [ ] `CARGO_REGISTRY_TOKEN` is set in GitHub secrets
+### Pre-Publish Checklist
 
-## GitHub Releases Status
+- [x] Version in Cargo.toml matches tag
+- [x] CHANGELOG.md has entry for this version
+- [ ] All tests pass locally (`cargo test`)
+- [ ] Dry-run succeeds (`cargo publish --dry-run`)
+- [ ] `CARGO_REGISTRY_TOKEN` in GitHub secrets
+- [ ] `release` environment configured
 
-| Version | Git Tag | GitHub Release | crates.io |
-|---------|---------|----------------|-----------|
-| 0.4.0  | ✅ | ❌ | ❌ |
-| 0.4.10 | ✅ | ❌ | ❌ |
-| 0.4.17 | ✅ | ✅ | ❌ |
-| 0.4.18 | ✅ (created) | ⚡ Pending | ⚡ Pending |
-| 0.4.19 | ✅ (created) | ⚡ Pending | ⚡ Pending |
+### Publishing Sequence
 
-## Related Repositories
+```
+Tag Push → Hygiene → Build → Test → Coverage → Validate → GitHub Release → crates.io → Attest
+```
 
-| Repo | Purpose | Version |
-|------|---------|---------|
-| Conxian/conxian-nexus | Glass Node (this repo) | 0.4.19 |
-| Conxian/lib-conxian-core | Shared primitives | 0.2.12 |
-| Conxian/conxian-gateway | Gateway service | 0.1.4 |
-| Conxian/conxius-wallet | Wallet client | - |
-| Conxian/conxian_ui | UI components | - |
+---
 
-**Note**: conxian-gateway does NOT depend on conxian-nexus directly. They share lib-conxian-core.
+## 🔗 Related Repositories
 
-## Security Features (v0.4.19)
+| Repository | Role | Version | Dependency |
+|------------|------|---------|------------|
+| Conxian/conxian-nexus | Glass Node | 0.4.19 | This repo |
+| Conxian/lib-conxian-core | Shared primitives | 0.2.12 | Git (rev pinned) |
+| Conxian/conxian-gateway | Gateway | 0.1.4 | lib-conxian-core |
+| Conxian/conxius-wallet | Wallet | - | - |
+| Conxian/conxian_ui | UI | - | - |
 
-- gRPC Authentication
-- CORS Middleware
-- Rate Limiting (100 concurrent)
-- HMAC Constant-time verification
-- Safety Mode enforcement
-- Redis auth enforcement
+---
 
-## Key Issues to Track
+## 📋 Active Issues (Track & Update)
 
-- **#150**: [RELEASE] Publish GitHub release and reconcile version posture
-- **#163**: [BIP-110] Verify lighter node sync with limited data
-- **#152**: [INFRA] Enable auto-merge for conxian-nexus
-- **#151**: [SECURITY] Enforce branch protection
+| # | Title | Priority | Status | Last Check |
+|---|-------|----------|--------|------------|
+| 150 | Release posture reconciliation | P0 | In Progress | 2026-07-15 |
+| 163 | BIP-110 lighter node sync | P1 | Open | 2026-07-15 |
+| 152 | Enable auto-merge | P1 | Open | 2026-07-15 |
+| 151 | Branch protection | P1 | Open | 2026-07-15 |
 
-## Session Notes
+---
 
-### 2026-07-15: Release Alignment Session
+## 🧠 Self-Upgrading Guidelines
 
-- Identified missing releases v0.4.18 and v0.4.19
-- Created tags and pushed to trigger release workflows
-- Enhanced release.yml with full hygiene checks and automatic crates.io publish
-- Documentation added for release process
+### Knowledge Persistence Rules
+
+1. **Update after each session** - Document decisions, findings, and next actions
+2. **Track version drift** - Note discrepancies between code/changelog/tags/releases
+3. **Record dependencies** - Update when lib-conxian-core or other deps update
+4. **Document patterns** - Add successful patterns for future reference
+
+### Research Triggers
+
+Run research when:
+- New dependency version detected
+- Release workflow fails
+- Version alignment broken
+- Security vulnerability reported
+- Cross-repo interaction needed
+
+### Auto-Discovery Queries
+
+```bash
+# Check for dependency updates
+gh api repos/Conxian/lib-conxian-core/releases --jq '.[0].tag_name'
+
+# Check for gateway updates  
+gh api repos/Conxian/conxian-gateway/releases --jq '.[0].tag_name'
+
+# Check workflow status
+gh run list --status in_progress
+
+# Check release alignment
+gh release list
+```
+
+---
+
+## 📝 Session Log
+
+### 2026-07-15: Release Alignment & Workflow Enhancement
+
+**Session Type**: Maintenance, Release Alignment
+
+**Actions Taken**:
+1. ✅ Identified version drift: v0.4.18 and v0.4.19 missing releases
+2. ✅ Created git tags pointing to correct commits
+3. ✅ Pushed tags to trigger release workflows
+4. ✅ Enhanced `release.yml` with full 6-stage pipeline
+5. ✅ Made crates.io publish automatic on tag (not manual)
+6. ✅ Created comprehensive AGENTS.md knowledge base
+7. ✅ Pushed changes to main
+
+**Findings**:
+- Release workflow was manual-gated for crates.io
+- Missing hygiene checks in release pipeline
+- No automatic GitHub release creation
+- Version alignment gaps discovered
+
+**Decisions**:
+- Keep 6-stage pipeline with hygiene from `rust.yml`
+- Auto-publish crates.io on tag push (not workflow_dispatch)
+- Create idempotent GitHub release (checks for existing)
+- Document release process for future sessions
+
+**Next Actions**:
+- [ ] Monitor v0.4.18 and v0.4.19 release workflows
+- [ ] Verify GitHub releases created
+- [ ] Verify crates.io publish (if token configured)
+- [ ] Address Dependabot #4 low vulnerability
+- [ ] Update after releases complete
+
+**Workflow Status** (as of session end):
+- v0.4.18 Release: ⚡ in_progress
+- v0.4.19 Release: ⚡ in_progress
+
+---
+
+*This document is self-sustaining. Update after each session with findings, decisions, and next actions.*
