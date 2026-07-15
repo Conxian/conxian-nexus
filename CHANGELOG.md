@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.4.22] - 2026-07-15
+
+### Changed
+- Updated release workflow: stages now run independently for better reliability
+
+## [0.4.21] - 2026-07-15
+
+### Changed
+- Enhanced AGENTS.md with comprehensive release documentation
+- Added crates.io setup requirements to documentation
+- Updated pre-publish checklist
+
+### Fixed
+- Release workflow: publish and attest now independent of create-github-release stage
+
+## [0.4.20] - 2026-07-15
+
+### Changed
+- Enhanced AGENTS.md with version alignment matrix and release process documentation
+- Updated AGENTS.md with multi-dimensional knowledge base structure
+
 ## [0.4.19] - 2026-07-07
 
 ### Added

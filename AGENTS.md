@@ -446,5 +446,68 @@ gh release list
 
 ---
 
+## 📝 Session 2026-07-15-W29-PM: Repository Maintenance & Remediation
+
+**Session ID**: 2026-07-15-W29-PM  
+**Duration**: Full maintenance sprint  
+**Agent**: OpenHands AI Agent
+
+### Actions Taken
+
+1. **Repository State Analysis**
+   - Pulled latest code (already up to date at 478d930)
+   - Identified version drift: Cargo.toml has 0.4.19 but v0.4.21 tag exists
+   - No open PRs to main or dev
+   - Two open issues: #151 (security), #163 (BIP-110 research)
+   - Auto-merge: Already enabled ✅
+
+2. **Version Alignment Fix**
+   - Updated Cargo.toml from 0.4.19 → 0.4.22
+   - Added changelog entries for 0.4.20, 0.4.21, 0.4.22
+   - Version bump to 0.4.22 (since 0.4.21 tag exists at different commit)
+
+3. **Branch Protection Investigation**
+   - Verified: No branch protection currently configured
+   - GitHub-native CodeQL: Enabled ✅
+   - GitHub-native Dependabot: Enabled ✅
+   - Dependency Review workflow: Enabled ✅
+   - Cannot set via API (403 - token permission limitation)
+   - Added verification report to Issue #151
+
+4. **Issue Management**
+   - Updated Issue #151: Added verification report with manual action recommendations
+   - Closed Issue #152: Auto-merge confirmed enabled
+   - Issue #163: BIP-110 research - status unchanged (P1)
+
+5. **Crates.io Status**
+   - v0.4.19 release workflow succeeded but publish was skipped
+   - Need to verify if crate was actually published
+
+### Decisions Made
+
+| Decision | Rationale | Authority |
+|----------|-----------|-----------|
+| Bump to 0.4.22 | 0.4.21 tag exists at da482fe, HEAD at 478d930 | Agent |
+| Cannot set branch protection | Token lacks admin:repo_hook or repo settings write | API Response |
+| Close Issue #152 | Auto-merge already enabled | Verified fact |
+
+### Current Status (2026-07-15T21:XX UTC)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Cargo.toml version | ✅ Updated to 0.4.22 | Ready for new release |
+| CHANGELOG.md | ✅ Updated | Added 0.4.20-0.4.22 entries |
+| Branch protection | ⚠️ Pending manual | Requires repo owner action |
+| Issue #151 | 🔄 Updated | Awaiting manual verification |
+| Issue #152 | ✅ Closed | Auto-merge enabled |
+| Issue #163 | 📋 Open | BIP-110 research pending |
+
+### Next Steps
+
+1. **Push changes** and create v0.4.22 tag to trigger release workflow
+2. **Manual branch protection setup**: Go to Settings → Branches → Add rule
+3. **Verify crates.io publish** for v0.4.22
+4. **BIP-110 research** (Issue #163) - can be started as P1
+
 ---
 *See Immutable Session Log above for complete record of this sprint's actions, findings, and decisions.*
