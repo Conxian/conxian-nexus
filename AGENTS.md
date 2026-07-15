@@ -255,20 +255,42 @@ gh workflow run release.yml -f release_version=0.4.X
 - **Trigger**: Git tag push (automatic)
 - **Environment**: `release` (requires `CARGO_REGISTRY_TOKEN`)
 
+### crates.io Setup Required
+
+For automatic publishing to crates.io, the following must be configured:
+
+#### 1. Create crates.io API Token
+1. Login to https://crates.io
+2. Go to Account Settings → API Key
+3. Generate new token
+
+#### 2. Add GitHub Secret
+1. Go to repo Settings → Secrets and variables → Actions
+2. Add `CARGO_REGISTRY_TOKEN` with the crates.io token value
+
+#### 3. Configure Release Environment (Optional but recommended)
+1. Go to repo Settings → Environments
+2. Create `release` environment
+3. Add `CARGO_REGISTRY_TOKEN` to that environment
+4. This adds approval gate for production publishes
+
+### Publishing Sequence (Parallel Stages)
+
+```
+validate-release
+    ├── create-github-release (if not exists)
+    ├── publish-crates-io (requires CARGO_REGISTRY_TOKEN)
+    └── attest-build
+```
+
 ### Pre-Publish Checklist
 
 - [x] Version in Cargo.toml matches tag
 - [x] CHANGELOG.md has entry for this version
-- [ ] All tests pass locally (`cargo test`)
-- [ ] Dry-run succeeds (`cargo publish --dry-run`)
-- [ ] `CARGO_REGISTRY_TOKEN` in GitHub secrets
-- [ ] `release` environment configured
-
-### Publishing Sequence
-
-```
-Tag Push → Hygiene → Build → Test → Coverage → Validate → GitHub Release → crates.io → Attest
-```
+- [x] Workflow validates compilation (Build & Test)
+- [x] Workflow dependency chain fixed (stages run independently)
+- [ ] `CARGO_REGISTRY_TOKEN` configured in GitHub secrets
+- [ ] `release` environment configured (recommended)
 
 ---
 
@@ -360,17 +382,20 @@ gh release list
 | v0.4.18 | 29405732854 | cargo publish --dry-run |
 | v0.4.19 | 29405733634 | cargo publish --dry-run |
 
-**ROOT CAUSE**: Both `cargo publish --dry-run` and `cargo package --list` require network access for git dependencies
+**ROOT CAUSE**: Multiple issues with release workflow
 
-**Failure Sequence**:
-1. ❌ `cargo publish --dry-run` - requires crates.io auth (fixed)
-2. ❌ `cargo package --list` - requires git dependency network access (fixed)
+**Issues Fixed**:
+1. ❌ `cargo publish --dry-run` - requires crates.io auth (removed)
+2. ❌ `cargo package --list` - requires git dependency network (removed)
+3. ❌ Dependency chain - publish depended on create-github-release (fixed)
 
 **Workflow Fix Applied**:
-✅ Removed package validation step entirely
-- Build & Test stage already validates compilation
-- Package validation redundant and blocked by git dependency network requirements
-- Tags re-pushed to trigger new workflow runs
+✅ All stages (4,5,6) now only depend on validate-release:
+- `create-github-release`: needs: validate-release
+- `publish-crates-io`: needs: validate-release
+- `attest-build`: needs: validate-release
+
+This allows publish and attest to run independently of create-github-release.
 
 **Required Actions**:
 1. [x] Fix dry-run issue (removed package validation)
