@@ -351,6 +351,26 @@ gh release list
 - Missing hygiene checks in release pipeline
 - No automatic GitHub release creation
 - Version alignment gaps discovered
+- ⚠️ **v0.4.18 and v0.4.19 releases FAILED** at `cargo publish --dry-run` step
+- Tags pushed BEFORE new workflow merged - old workflow ran
+
+**Failure Analysis**:
+| Version | Workflow Run | Failure Point |
+|---------|--------------|---------------|
+| v0.4.18 | 29405732854 | cargo publish --dry-run |
+| v0.4.19 | 29405733634 | cargo publish --dry-run |
+
+**Possible Causes**:
+1. Network/auth issue in CI environment
+2. Crate name validation failure
+3. Version conflict on crates.io
+4. Registry token not configured for dry-run
+
+**Required Actions**:
+1. [ ] Re-run v0.4.18 release with new workflow
+2. [ ] Re-run v0.4.19 release with new workflow
+3. [ ] Verify `CARGO_REGISTRY_TOKEN` is configured in `release` environment
+4. [ ] Check crates.io for conxian-nexus crate existence
 
 **Decisions**:
 - Keep 6-stage pipeline with hygiene from `rust.yml`
@@ -359,15 +379,17 @@ gh release list
 - Document release process for future sessions
 
 **Next Actions**:
-- [ ] Monitor v0.4.18 and v0.4.19 release workflows
-- [ ] Verify GitHub releases created
+- [x] Monitor v0.4.18 and v0.4.19 release workflows - COMPLETED (failed)
+- [ ] Rerun releases with new workflow (push empty commit or recreate tags)
+- [ ] Verify GitHub releases created after fix
 - [ ] Verify crates.io publish (if token configured)
 - [ ] Address Dependabot #4 low vulnerability
-- [ ] Update after releases complete
+- [ ] Update version matrix after releases complete
 
-**Workflow Status** (as of session end):
-- v0.4.18 Release: ⚡ in_progress
-- v0.4.19 Release: ⚡ in_progress
+**Workflow Status** (latest check):
+- v0.4.18 Release: ❌ FAILED (cargo publish --dry-run)
+- v0.4.19 Release: ❌ FAILED (cargo publish --dry-run)
+- Main push: ✅ SUCCESS (37aa6c7 with new workflow)
 
 ---
 
