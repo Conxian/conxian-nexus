@@ -491,23 +491,45 @@ gh release list
 | Cannot set branch protection | Token lacks admin:repo_hook or repo settings write | API Response |
 | Close Issue #152 | Auto-merge already enabled | Verified fact |
 
-### Current Status (2026-07-15T21:XX UTC)
+### Current Status (2026-07-15T22:XX UTC)
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Cargo.toml version | ✅ Updated to 0.4.22 | Ready for new release |
+| Cargo.toml version | ✅ Updated to 0.4.22 | Committed and pushed |
 | CHANGELOG.md | ✅ Updated | Added 0.4.20-0.4.22 entries |
+| GitHub Release v0.4.22 | ✅ Created | Manually via API |
 | Branch protection | ⚠️ Pending manual | Requires repo owner action |
 | Issue #151 | 🔄 Updated | Awaiting manual verification |
-| Issue #152 | ✅ Closed | Auto-merge enabled |
+| Issue #152 | ✅ Closed | Auto-merge verified and closed |
 | Issue #163 | 📋 Open | BIP-110 research pending |
+| crates.io publish | ❌ Failed | Token/environment issue |
 
-### Next Steps
+### Completed Actions
 
-1. **Push changes** and create v0.4.22 tag to trigger release workflow
-2. **Manual branch protection setup**: Go to Settings → Branches → Add rule
-3. **Verify crates.io publish** for v0.4.22
-4. **BIP-110 research** (Issue #163) - can be started as P1
+1. ✅ Pushed changes to main branch
+2. ✅ Created v0.4.22 tag
+3. ✅ All CI workflows passing
+4. ✅ GitHub release v0.4.22 created
+5. ⚠️ crates.io publish failed - manual intervention needed
+6. ✅ Issue #152 closed (auto-merge enabled)
+7. ✅ Issue #151 updated with verification report
+
+### Manual Actions Required
+
+1. **Branch Protection Setup**: Go to Settings → Branches → Add rule
+   - Required checks: Rust, CodeQL, Cargo Audit
+   - Required PR reviews: 1 approval
+   - Enforce admins: Enabled
+   - Push protection: Enable
+
+2. **Secret Scanning**: Settings → Security → Secret scanning
+   - Enable "Automatically detect and scan..."
+   - Enable "Enforce on push"
+
+3. **crates.io Publish**: Verify CARGO_REGISTRY_TOKEN in release environment
+   - Check environment: https://github.com/Conxian/conxian-nexus/settings/environments
+
+4. **BIP-110 research** (Issue #163) - Can be started as P1
 
 ---
 *See Immutable Session Log above for complete record of this sprint's actions, findings, and decisions.*
