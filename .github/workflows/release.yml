@@ -10,100 +10,239 @@ on:
         description: 'Release version to publish (X.Y.Z or vX.Y.Z)'
         required: true
         type: string
-      publish_to_crates_io:
-        description: 'Publish to crates.io after validation (manual only)'
-        required: true
-        default: false
-        type: boolean
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
+  # ============================================================
+  # Stage 1: Hygiene & Contamination Guard
+  # ============================================================
+  hygiene:
+    name: Repo Hygiene & Contamination Guard
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      with:
+        fetch-depth: 0
+        submodules: recursive
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.x'
+    - name: Run Contamination Guard
+      run: python3 scripts/verify_contamination_guard.py
+    - name: Verify Submodule Integrity
+      run: python3 scripts/verify_submodule_integrity.py
+    - name: Clarity 4 Contract Verification
+      run: ./scripts/verify_contracts.sh
+    - name: BOS Production Boundary Check
+      run: ./scripts/check_production_boundary.sh
+    - name: Install Gitleaks
+      run: |
+        VERSION="8.18.2"
+        curl -L https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz -o gitleaks.tar.gz
+        tar -xzf gitleaks.tar.gz
+        sudo mv gitleaks /usr/local/bin/
+    - name: Secret Scanning (Gitleaks)
+      run: gitleaks detect --source . -v
+
+  # ============================================================
+  # Stage 2: Build, Test & Coverage
+  # ============================================================
+  build-and-test:
+    name: Build & Test
+    needs: hygiene
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      with:
+        submodules: recursive
+    - name: Build
+      run: cargo build --verbose
+    - name: Run tests
+      run: cargo test --verbose
+    - name: Install cargo-llvm-cov
+      run: cargo install cargo-llvm-cov --locked
+    - name: Enforce Lightning scoped coverage (>=90%)
+      run: python3 scripts/check_lightning_coverage.py --min-percent 90
+    - name: Enforce Bitcoin scoped coverage (>=92%)
+      run: ./scripts/coverage_bitcoin.sh 92
+    - name: Upload coverage artifacts
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: coverage-artifacts
+        path: |
+          target/coverage/**/*.json
+          target/coverage/**/*.md
+        if-no-files-found: warn
+
+  # ============================================================
+  # Stage 3: Version Validation & Dry-Run
+  # ============================================================
   validate-release:
-    name: Validate release metadata and package
+    name: Validate release metadata
+    needs: build-and-test
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      changelog: ${{ steps.changelog.outputs.body }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          fetch-depth: 0
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      with:
+        fetch-depth: 0
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: stable
+    - name: Determine version
+      id: version
+      shell: bash
+      run: |
+        if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        else
+          echo "value=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Validate version matches Cargo.toml
+      shell: bash
+      run: |
+        version="${{ steps.version.outputs.value }}"
+        version="${version#v}"
+        cargo_version=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        if [[ "${version}" != "${cargo_version}" ]]; then
+          echo "error: tag version ${version} != Cargo.toml version ${cargo_version}" >&2
+          exit 1
+        fi
+        echo "Version ${version} matches Cargo.toml"
+    - name: Extract changelog for this version
+      id: changelog
+      shell: bash
+      run: |
+        version="${{ steps.version.outputs.value }}"
+        version="${version#v}"
+        # Extract changelog section for this version
+        awk -v ver="## [${version}]" '
+          $0 ~ ver { found=1; next }
+          found && /^## \[/ { exit }
+          found { print }
+        ' CHANGELOG.md > changelog_body.txt
+        body=$(cat changelog_body.txt)
+        echo "body<<EOF" >> $GITHUB_OUTPUT
+        echo "$body" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+    - name: Verify crates.io package (dry-run)
+      run: cargo publish --dry-run
+    - name: Check for existing release
+      id: existing
+      shell: bash
+      run: |
+        version="${{ steps.version.outputs.value }}"
+        version="${version#v}"
+        if gh release view "v${version}" &>/dev/null; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
-        with:
-          toolchain: stable
-
-      - name: Determine version
-        id: version
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Validate version matches Cargo.toml
-        shell: bash
-        run: |
-          version="${{ steps.version.outputs.value }}"
-          version="${version#v}"
-          cargo_version=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          if [[ "${version}" != "${cargo_version}" ]]; then
-            echo "error: tag version ${version} != Cargo.toml version ${cargo_version}" >&2
-            exit 1
-          fi
-          echo "Version ${version} matches Cargo.toml"
-
-      - name: Run tests
-        run: cargo test --locked
-
-      - name: Verify crates.io package (dry-run)
-        run: cargo publish --dry-run
-
-  publish-crates-io:
-    name: Publish crate to crates.io (manual gate)
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_to_crates_io }}
+  # ============================================================
+  # Stage 4: Create GitHub Release (Automatic)
+  # ============================================================
+  create-github-release:
+    name: Create GitHub Release
     needs: validate-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: needs.validate-release.outputs.existing == 'false'
+    steps:
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      with:
+        fetch-depth: 0
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VERSION: ${{ needs.validate-release.outputs.version }}
+        BODY: ${{ needs.validate-release.outputs.changelog }}
+      shell: bash
+      run: |
+        # Determine if prerelease (alpha/beta/rc)
+        if [[ "${VERSION}" =~ (alpha|beta|rc) ]]; then
+          PRERELEASE="--prerelease"
+        else
+          PRERELEASE=""
+        fi
+        gh release create "v${VERSION#v}" \
+          --title "Release ${VERSION}" \
+          --notes "${BODY}" \
+          ${PRERELEASE}
+
+  # ============================================================
+  # Stage 5: Publish to crates.io (Automatic on tag)
+  # ============================================================
+  publish-crates-io:
+    name: Publish crate to crates.io
+    needs: [validate-release, create-github-release]
     runs-on: ubuntu-latest
     environment: release
     permissions:
       contents: read
+    # Auto-publish when triggered by a git tag (not workflow_dispatch)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
-      - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: stable
+    - name: Verify CARGO_REGISTRY_TOKEN
+      env:
+        TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: |
+        if [[ -z "${TOKEN}" ]]; then
+          echo "error: CARGO_REGISTRY_TOKEN not set in release environment" >&2
+          exit 1
+        fi
+        echo "CARGO_REGISTRY_TOKEN is configured"
+    - name: Publish to crates.io
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
-        with:
-          toolchain: stable
-
-      - name: Enforce publish from tag
-        shell: bash
-        run: |
-          if [[ "${GITHUB_REF_TYPE}" != "tag" ]]; then
-            echo "error: publishing allowed only from a release tag" >&2
-            exit 1
-          fi
-
-      - name: Verify CARGO_REGISTRY_TOKEN
-        shell: bash
-        env:
-          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [[ -z "${TOKEN}" ]]; then
-            echo "error: CARGO_REGISTRY_TOKEN not set in release environment" >&2
-            exit 1
-          fi
-
-      - name: Publish to crates.io
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
+  # ============================================================
+  # Stage 6: Publish Package Attestation (SBOM/SLSA)
+  # ============================================================
+  attest-build:
+    name: Generate SLSA attestation
+    needs: [validate-release, publish-crates-io]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    steps:
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: stable
+    - name: Build to generate provenance
+      run: cargo build --release
+    - name: Attest build
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-path: './target/release/conxian-nexus'
