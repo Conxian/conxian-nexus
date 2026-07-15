@@ -376,9 +376,18 @@ gh release list
 1. [x] Fix dry-run issue (removed package validation)
 2. [x] Re-push v0.4.18 and v0.4.19 tags
 3. [x] Update GitHub issues (#150, #151, #152, #163)
-4. [ ] Verify new workflow runs succeed
-5. [ ] Confirm GitHub releases created
-6. [ ] Confirm crates.io publish (if token configured)
+4. [x] Verify workflow runs (v0.4.19 passed, v0.4.18 version mismatch)
+5. [x] Create GitHub releases manually (v0.4.18, v0.4.19 created)
+6. [ ] Confirm crates.io publish (CARGO_REGISTRY_TOKEN not configured)
+
+**Release Status (Final)**:
+| Version | GitHub Release | Status |
+|---------|---------------|--------|
+| v0.4.17 | ✅ 2026-07-10 | Complete |
+| v0.4.18 | ✅ 2026-07-15 | Complete |
+| v0.4.19 | ✅ 2026-07-15 | Complete |
+
+**v0.4.18 Note**: Failed automated release due to version mismatch (tag pointed to HEAD which had v0.4.19 in Cargo.toml). Release was manually created via API.
 
 **GitHub Issues Updated**:
 - #150: Posted sprint update with release workflow progress
