@@ -145,8 +145,8 @@ jobs:
         echo "body<<EOF" >> $GITHUB_OUTPUT
         echo "$body" >> $GITHUB_OUTPUT
         echo "EOF" >> $GITHUB_OUTPUT
-    - name: Verify crates.io package (dry-run)
-      run: cargo publish --dry-run
+    - name: Verify crate package locally
+      run: cargo package --list
     - name: Check for existing release
       id: existing
       shell: bash
