@@ -289,11 +289,11 @@ validate-release
 - [x] CHANGELOG.md has entry for this version
 - [x] Workflow validates compilation (Build & Test)
 - [x] Workflow dependency chain fixed (stages run independently)
-- [ ] `CARGO_REGISTRY_TOKEN` configured in GitHub secrets
+- [x] `CARGO_REGISTRY_TOKEN` configured in GitHub secrets
 - [ ] `release` environment configured (recommended)
-- [ ] Crate published to crates.io
+- [ ] Crate published to crates.io (pending tag push)
 
-**Status**: Workflow is ready. Need to configure `CARGO_REGISTRY_TOKEN` secret.
+**Status**: Secret configured. Push new tag to trigger publish.
 
 ---
 
