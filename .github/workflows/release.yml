@@ -243,6 +243,6 @@ jobs:
     - name: Build to generate provenance
       run: cargo build --release
     - name: Attest build
-      uses: actions/attest-build-provenance@v1
+      uses: actions/attest-build-provenance@v4
       with:
         subject-path: './target/release/conxian-nexus'
