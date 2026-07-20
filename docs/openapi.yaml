@@ -286,35 +286,15 @@ paths:
                     type: boolean
                   drift:
                     type: integer
-  /v1/metrics:
-    get:
-      summary: Get system metrics (JSON)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  total_transactions:
-                    type: integer
-                  total_blocks:
-                    type: integer
-                  safety_mode:
-                    type: boolean
-                  drift:
-                    type: integer
-                  uptime_seconds:
-                    type: integer
   /metrics:
     get:
-      summary: Get Prometheus metrics (Text)
+      summary: Get Prometheus metrics (text exposition)
+      description: Read-only scrape of the default Prometheus registry, including fixed-cardinality BIP-110 Phase 1 assessment metrics.
       responses:
         '200':
-          description: OK
+          description: Prometheus text exposition
           content:
-            text/plain:
+            'text/plain; version=0.0.4; charset=utf-8':
               schema:
                 type: string
   /v1/proof:
@@ -611,7 +591,8 @@ paths:
           description: OK
   /v1/analytics/metrics:
     get:
-      summary: Get analytics metrics
+      summary: Get STX/Postgres analytics metrics
+      description: Query analytics derived from STX transaction data stored in Postgres. This is separate from the Prometheus scrape at /metrics.
       parameters:
         - name: metric
           in: query

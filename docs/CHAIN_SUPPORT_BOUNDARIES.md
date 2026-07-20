@@ -14,6 +14,7 @@ This document defines the architectural boundaries for multi-chain support acros
     *   **Focus**: Tier 1 Chain Families (Bitcoin, EVM, Cosmos).
     *   **Responsibilities**: Cross-chain state monitoring, proof verification, and event normalization.
     *   **Boundary**: Nexus uses family-specific adapters to monitor state without modifying the target chain.
+    *   **Bitcoin limitation**: Nexus does not currently provide a native Bitcoin full-node, SPV, compact-filter, or UTXO observation backend. Bitcoin references in this repository must not be read as live Bitcoin synchronization. The Phase 1 BIP-110 alignment is a pure assessment of caller-supplied size metadata only.
 
 3.  **Fusion Gateway**
     *   **Focus**: Universal connectivity.
