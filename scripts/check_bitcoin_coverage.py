@@ -20,6 +20,7 @@ from pathlib import Path
 # Keep mixed-module ranges in sync with source edits that move logic blocks.
 SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]] | None] = {
     "src/sync/bip110.rs": None,
+    "src/metrics.rs": None,
     "src/api/dlc.rs": [
         (25, 54),  # request validation + announcement/signing helpers
         (65, 76),  # deterministic invalid-request branch
@@ -27,6 +28,7 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]] | None] = {
     "src/api/rest.rs": [
         (174, 251),  # app_router through get_rgb_contract
         (397, 436),  # get_mmr_proof handler
+        (365, 394),  # aggregate BIP-110-only metrics response + handler
     ],
     "src/executor/rgb.rs": [
         (38, 45),   # rollout mode display

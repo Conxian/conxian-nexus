@@ -9,7 +9,7 @@ use crate::api::settlement::settlement_routes;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
 use crate::executor::{ExecutionRequest, NexusExecutor};
-use crate::metrics::init_bip110_metrics;
+use crate::metrics::{gather_bip110_metrics, init_bip110_metrics};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::kwil::KwilAdapter;
@@ -25,6 +25,7 @@ use axum::{
 };
 use prometheus::{opts, register_int_gauge, Encoder, IntGauge, TextEncoder};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -361,13 +362,13 @@ pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
 }
 
-/// Returns the default Prometheus registry in the text exposition format.
-async fn prometheus_metrics_handler() -> Response {
-    let encoder = TextEncoder::new();
-    let metric_families = prometheus::gather();
+fn encode_bip110_metrics<E: Encoder>(
+    encoder: &E,
+    metric_families: &[prometheus::proto::MetricFamily],
+) -> Response {
     let mut buffer = Vec::new();
 
-    match encoder.encode(&metric_families, &mut buffer) {
+    match encoder.encode(metric_families, &mut buffer) {
         Ok(()) => Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, encoder.format_type())
@@ -378,6 +379,18 @@ async fn prometheus_metrics_handler() -> Response {
             (StatusCode::INTERNAL_SERVER_ERROR, "metrics encoding failed").into_response()
         }
     }
+}
+
+/// Returns aggregate BIP-110-only metrics in the text exposition format.
+///
+/// This endpoint is intentionally unauthenticated and must be restricted to
+/// an internal or otherwise trusted network boundary by operators. The
+/// dedicated registry contains no transaction IDs, hashes, addresses, peers,
+/// payloads, or unbounded labels.
+async fn prometheus_metrics_handler() -> Response {
+    let encoder = TextEncoder::new();
+    let metric_families = gather_bip110_metrics();
+    encode_bip110_metrics(&encoder, &metric_families)
 }
 
 #[tracing::instrument(skip(state))]
@@ -533,6 +546,22 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
+    struct FailingEncoder;
+
+    impl Encoder for FailingEncoder {
+        fn encode<W: std::io::Write>(
+            &self,
+            _metric_families: &[prometheus::proto::MetricFamily],
+            _writer: &mut W,
+        ) -> prometheus::Result<()> {
+            Err(prometheus::Error::Msg("test encoding failure".to_string()))
+        }
+
+        fn format_type(&self) -> &str {
+            "text/plain"
+        }
+    }
+
     async fn test_router_with_state(
         enabled: bool,
         rgb_mode: RGBRolloutMode,
@@ -612,6 +641,14 @@ mod tests {
         assert!(body.contains("nexus_bip110_observations_assessed_total"));
         assert!(body.contains("nexus_bip110_observed_size_violations_total"));
         assert!(body.contains("nexus_bip110_observation_backend_available"));
+        assert!(!body.contains("nexus_transactions_total"));
+        assert!(!body.contains("nexus_rebalances_total"));
+    }
+
+    #[test]
+    fn metrics_encoding_failure_returns_internal_server_error() {
+        let response = encode_bip110_metrics(&FailingEncoder, &[]);
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     /// Test for Issue #149: Narrow proof surface manifest endpoint

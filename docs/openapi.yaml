@@ -289,12 +289,19 @@ paths:
   /metrics:
     get:
       summary: Get Prometheus metrics (text exposition)
-      description: Read-only scrape of the default Prometheus registry, including fixed-cardinality BIP-110 Phase 1 assessment metrics.
+      description: Read-only, aggregate-only scrape of the dedicated BIP-110 Prometheus registry. The endpoint is unauthenticated by design and operators must restrict it to an internal or otherwise trusted network boundary; it exposes no transaction IDs, hashes, addresses, peers, payloads, or unbounded labels.
+      security: []
       responses:
         '200':
           description: Prometheus text exposition
           content:
             'text/plain; version=0.0.4; charset=utf-8':
+              schema:
+                type: string
+        '500':
+          description: Prometheus text exposition encoding failed
+          content:
+            text/plain:
               schema:
                 type: string
   /v1/proof:
