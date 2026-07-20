@@ -88,15 +88,10 @@ pub fn init_bip110_metrics() {
     });
 }
 
-/// Returns the private registry used for the intentionally exposed BIP-110 metrics.
-pub fn bip110_registry() -> &'static Registry {
-    init_bip110_metrics();
-    &BIP110_REGISTRY
-}
-
 /// Gathers only the dedicated BIP-110 metric families.
 pub fn gather_bip110_metrics() -> Vec<prometheus::proto::MetricFamily> {
-    bip110_registry().gather()
+    init_bip110_metrics();
+    BIP110_REGISTRY.gather()
 }
 
 /// Records a pure observed-size assessment without changing the assessment.
