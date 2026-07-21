@@ -1,3 +1,5 @@
+pub mod bip110;
+
 use crate::state::NexusState;
 use crate::storage::kwil::{KwilAdapter, KwilMmrNodeCommitment};
 use crate::storage::tableland::TablelandAdapter;
