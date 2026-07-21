@@ -53,6 +53,7 @@ jobs:
       run: |
         VERSION="8.18.2"
         curl -L https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz -o gitleaks.tar.gz
+        echo "6298c9235dfc9278c14b28afd9b7fa4e6f4a289cb1974bd27949fc1e9122bdee  gitleaks.tar.gz" | sha256sum --check
         tar -xzf gitleaks.tar.gz
         sudo mv gitleaks /usr/local/bin/
     - name: Secret Scanning (Gitleaks)
@@ -69,6 +70,12 @@ jobs:
     - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         submodules: recursive
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: stable
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -209,6 +216,8 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -240,6 +249,8 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
     - name: Build to generate provenance
       run: cargo build --release
     - name: Attest build

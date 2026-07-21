@@ -468,11 +468,10 @@ async fn test_btc_tx_id_format_validation() {
 
     // Valid BTC tx_id should work
     let response = app
-        
         .call(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/v1/mmr-proof?tx_id={}", valid_txid))
+                .uri(format!("/v1/mmr-proof?tx_id={}", valid_txid))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -490,11 +489,10 @@ async fn test_btc_tx_id_format_validation() {
     // Invalid: not 0x-prefixed
     let invalid_txid = "a".repeat(64); // no 0x prefix
     let response = app
-        
         .call(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/v1/mmr-proof?tx_id={}", invalid_txid))
+                .uri(format!("/v1/mmr-proof?tx_id={}", invalid_txid))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -510,11 +508,10 @@ async fn test_btc_tx_id_format_validation() {
     // Invalid: wrong length (not 66)
     let short_txid = "0x".to_owned() + &"a".repeat(32); // only 34 chars
     let response = app
-        
         .call(
             Request::builder()
                 .method("GET")
-                .uri(&format!("/v1/mmr-proof?tx_id={}", short_txid))
+                .uri(format!("/v1/mmr-proof?tx_id={}", short_txid))
                 .body(Body::empty())
                 .unwrap(),
         )

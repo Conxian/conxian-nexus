@@ -73,7 +73,10 @@ impl fmt::Debug for Config {
                 &self.admin_api_token.as_ref().map(|_| "<redacted>"),
             )
             .field("admin_public_keys", &self.admin_public_keys)
-            .field("otel_exporter_otlp_endpoint", &self.otel_exporter_otlp_endpoint)
+            .field(
+                "otel_exporter_otlp_endpoint",
+                &self.otel_exporter_otlp_endpoint,
+            )
             .field("otel_service_name", &self.otel_service_name)
             .finish()
     }

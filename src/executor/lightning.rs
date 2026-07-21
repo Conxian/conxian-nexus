@@ -132,8 +132,8 @@ impl LightningResilienceAdapter {
 
     /// Determines if a payment intent should trigger recovery based on its current state.
     pub fn should_recover(&self, intent: &PaymentIntent) -> bool {
-        use LightningPaymentStatus::*;
         use LightningFailureType::*;
+        use LightningPaymentStatus::*;
 
         match (intent.status, intent.failure_type) {
             (Recovering, _) => true,

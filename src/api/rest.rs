@@ -23,7 +23,6 @@ use axum::{
 };
 use prometheus::{opts, register_int_gauge, IntGauge};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -185,7 +184,7 @@ pub fn app_router(
     Router::new()
         .route("/health", get(health_handler))
         .route("/v1/proof", get(get_proof))
-        .route("/v1/proof/manifest", get(get_proof_manifest))  // Narrow proof surface
+        .route("/v1/proof/manifest", get(get_proof_manifest)) // Narrow proof surface
         .route("/v1/submit", post(submit_transaction))
         .route("/v1/status", get(health_handler))
         .route("/v1/mmr-proof", get(get_mmr_proof))
@@ -459,7 +458,11 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
     // Get state root
     let state_root = {
         let (root, _) = state.nexus_state.generate_proof("state_root");
-        if root.is_empty() { None } else { Some(root) }
+        if root.is_empty() {
+            None
+        } else {
+            Some(root)
+        }
     };
 
     Json(ProofManifest {
@@ -508,6 +511,7 @@ mod tests {
     use axum::http::Request;
     use http_body_util::BodyExt;
     use serde_json::Value;
+    use std::collections::HashSet;
     use tower::ServiceExt;
 
     async fn test_router_with_state(

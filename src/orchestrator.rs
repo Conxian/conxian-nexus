@@ -106,7 +106,9 @@ impl AutonomousOrchestrator {
         .await?;
 
         for row in rows {
-            use crate::executor::lightning::{LightningFailureType, LightningPaymentStatus, PaymentIntent};
+            use crate::executor::lightning::{
+                LightningFailureType, LightningPaymentStatus, PaymentIntent,
+            };
             use sqlx::Row;
 
             let status_str: String = row.try_get("status")?;
@@ -147,7 +149,7 @@ impl AutonomousOrchestrator {
                 sqlx::query(
                     "UPDATE lightning_payment_intents
                      SET status = $1, retry_count = $2, last_updated_at = $3
-                     WHERE payment_id = $4"
+                     WHERE payment_id = $4",
                 )
                 .bind(intent.status.to_string())
                 .bind(intent.retry_count)
@@ -159,7 +161,7 @@ impl AutonomousOrchestrator {
                 // Audit the recovery event
                 sqlx::query(
                     "INSERT INTO lightning_payment_events (event_id, payment_id, status, metadata)
-                     VALUES ($1, $2, $3, $4)"
+                     VALUES ($1, $2, $3, $4)",
                 )
                 .bind(format!("rec_{}", uuid::Uuid::new_v4()))
                 .bind(&intent.payment_id)
