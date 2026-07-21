@@ -88,6 +88,7 @@ fn determine_grace_status(now: i64, grace_start: i64, roll: f32) -> GraceStatus 
     }
 }
 
+#[cfg(test)]
 fn compute_expected_hmac(secret: &str, signature_hash: &str, timestamp: i64) -> String {
     let message = format!("{}:{}", signature_hash, timestamp);
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC error");
@@ -104,17 +105,16 @@ fn validate_telemetry_auth(
     }
 
     let secret = data.get("secret").cloned().unwrap_or_default();
-    
+
     // Compute expected HMAC
     let message = format!("{}:{}", payload.signature_hash, payload.timestamp);
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
         .map_err(|_| TelemetryAuthError::InvalidApiKey)?;
     mac.update(message.as_bytes());
-    
+
     // Decode the provided HMAC hex
-    let received_hmac = hex::decode(&payload.hmac)
-        .map_err(|_| TelemetryAuthError::InvalidHmac)?;
-    
+    let received_hmac = hex::decode(&payload.hmac).map_err(|_| TelemetryAuthError::InvalidHmac)?;
+
     // Use constant-time verification to prevent timing attacks
     mac.verify_slice(&received_hmac)
         .map_err(|_| TelemetryAuthError::InvalidHmac)?;

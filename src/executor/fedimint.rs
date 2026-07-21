@@ -1,6 +1,6 @@
 use crate::storage::Storage;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FedimintConfig {

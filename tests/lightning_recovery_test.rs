@@ -1,5 +1,7 @@
-use conxian_nexus::executor::lightning::{LightningFailureType, LightningPaymentStatus, PaymentIntent};
 use chrono::Utc;
+use conxian_nexus::executor::lightning::{
+    LightningFailureType, LightningPaymentStatus, PaymentIntent,
+};
 
 #[test]
 fn test_lightning_recovery_logic_transient() {

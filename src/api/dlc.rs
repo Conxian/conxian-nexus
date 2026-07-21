@@ -126,6 +126,12 @@ pub async fn create_dlc_bond_handler(
         .into_response()
 }
 
+use axum::routing::post;
+use axum::Router;
+pub fn dlc_routes() -> Router<AppState> {
+    Router::new().route("/bond", post(create_dlc_bond_handler))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,9 +309,4 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
-}
-use axum::routing::post;
-use axum::Router;
-pub fn dlc_routes() -> Router<AppState> {
-    Router::new().route("/bond", post(create_dlc_bond_handler))
 }

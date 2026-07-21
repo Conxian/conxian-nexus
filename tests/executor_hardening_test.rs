@@ -1,5 +1,5 @@
-use conxian_nexus::executor::{ExecutionRequest};
 use chrono::Utc;
+use conxian_nexus::executor::ExecutionRequest;
 
 #[tokio::test]
 async fn test_execution_request_priority_serialization() {

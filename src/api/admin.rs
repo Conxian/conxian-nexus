@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
@@ -5,10 +7,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
-use k256::ecdsa::{VerifyingKey, Signature, signature::Verifier};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use uuid::Uuid;
@@ -260,7 +262,6 @@ fn admin_token_not_configured_response() -> Response {
         .into_response()
 }
 
-
 fn bearer_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get(header::AUTHORIZATION)
@@ -297,7 +298,9 @@ fn authorize_admin_write(
 
     if token == expected_token {
         if !cfg!(debug_assertions) {
-             tracing::warn!("REMEDIATION NEEDED: Static admin token used in production-like build (Hole 1.2).");
+            tracing::warn!(
+                "REMEDIATION NEEDED: Static admin token used in production-like build (Hole 1.2)."
+            );
         }
         return Ok(());
     }
@@ -358,12 +361,17 @@ pub trait DualSignatureRequest {
 
     fn approval_message(&self) -> String;
 
-    fn validate_dual_signature(&self, config: &crate::config::Config) -> Result<(), (StatusCode, Json<Value>)> {
+    fn validate_dual_signature(
+        &self,
+        config: &crate::config::Config,
+    ) -> Result<(), (StatusCode, Json<Value>)> {
         // [NIP-004] Cryptographic Dual-Signature Verification
         // In test environments, if admin_public_keys is empty, we allow structural signatures.
 
         let signatures = self.signatures().as_ref();
-        let sig_strings = signatures.map(|s| s.iter().collect::<HashSet<_>>()).unwrap_or_default();
+        let sig_strings = signatures
+            .map(|s| s.iter().collect::<HashSet<_>>())
+            .unwrap_or_default();
         let unique_sigs_count = sig_strings.len();
 
         if unique_sigs_count < 2 {
@@ -377,14 +385,16 @@ pub trait DualSignatureRequest {
         }
 
         if config.admin_public_keys.is_empty() {
-             if cfg!(debug_assertions) {
-                 return Ok(());
-             } else {
-                 return Err((
-                     StatusCode::INTERNAL_SERVER_ERROR,
-                     Json(json!({"error": "misconfigured", "message": "ADMIN_PUBLIC_KEYS not configured."}))
-                 ));
-             }
+            if cfg!(debug_assertions) {
+                return Ok(());
+            } else {
+                return Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(
+                        json!({"error": "misconfigured", "message": "ADMIN_PUBLIC_KEYS not configured."}),
+                    ),
+                ));
+            }
         }
 
         let mut verified_count = 0;
@@ -447,7 +457,10 @@ impl DualSignatureRequest for ReleaseApprovalRequest {
 
 impl DualSignatureRequest for ReleaseDecisionRequest {
     fn approval_message(&self) -> String {
-        format!("release_decision:{}:{}:{}", self.artifact_id, self.decision, self.actor_id)
+        format!(
+            "release_decision:{}:{}:{}",
+            self.artifact_id, self.decision, self.actor_id
+        )
     }
     fn second_approver(&self) -> &Option<String> {
         &self.second_approver
@@ -459,7 +472,10 @@ impl DualSignatureRequest for ReleaseDecisionRequest {
 
 impl DualSignatureRequest for GovernanceDecisionRequest {
     fn approval_message(&self) -> String {
-        format!("governance_decision:{}:{}:{}", self.action_id, self.decision, self.actor_id)
+        format!(
+            "governance_decision:{}:{}:{}",
+            self.action_id, self.decision, self.actor_id
+        )
     }
     fn second_approver(&self) -> &Option<String> {
         &self.second_approver
@@ -486,7 +502,9 @@ async fn login_handler(
     State(state): State<crate::api::rest::AppState>,
     Json(payload): Json<AdminLoginRequest>,
 ) -> Result<Json<Value>, Response> {
-    payload.validate_dual_signature(&state.config).map_err(|(code, json)| (code, json).into_response())?;
+    payload
+        .validate_dual_signature(&state.config)
+        .map_err(|(code, json)| (code, json).into_response())?;
 
     let credential = issue_api_key();
     let scopes = vec![
@@ -504,7 +522,10 @@ async fn login_handler(
         },
     );
 
-    tracing::info!("Admin login successful for session: {}", payload.session_name);
+    tracing::info!(
+        "Admin login successful for session: {}",
+        payload.session_name
+    );
 
     Ok(Json(json!({
         "status": "success",
@@ -519,7 +540,9 @@ async fn request_release_approval(
     Json(payload): Json<ReleaseApprovalRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
-    payload.validate_dual_signature(&state.config).map_err(|(code, json)| (code, json).into_response())?;
+    payload
+        .validate_dual_signature(&state.config)
+        .map_err(|(code, json)| (code, json).into_response())?;
 
     let request_id = format!("req_{}", Uuid::new_v4().simple());
     let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
@@ -544,7 +567,9 @@ async fn submit_release_decision(
     Json(payload): Json<ReleaseDecisionRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
-    payload.validate_dual_signature(&state.config).map_err(|(code, json)| (code, json).into_response())?;
+    payload
+        .validate_dual_signature(&state.config)
+        .map_err(|(code, json)| (code, json).into_response())?;
 
     let request_id = format!("req_{}", Uuid::new_v4().simple());
     let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
@@ -570,7 +595,9 @@ async fn submit_governance_decision(
     Json(payload): Json<GovernanceDecisionRequest>,
 ) -> Result<Json<ReleaseApprovalResponse>, Response> {
     authorize_admin_write(&state, &headers)?;
-    payload.validate_dual_signature(&state.config).map_err(|(code, json)| (code, json).into_response())?;
+    payload
+        .validate_dual_signature(&state.config)
+        .map_err(|(code, json)| (code, json).into_response())?;
 
     let request_id = format!("req_{}", Uuid::new_v4().simple());
     let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
@@ -702,7 +729,9 @@ async fn get_safety_mode(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    let active = crate::safety::is_safety_mode_active(&state.storage).await.unwrap_or(false);
+    let active = crate::safety::is_safety_mode_active(&state.storage)
+        .await
+        .unwrap_or(false);
     Ok(Json(json!({
         "active": active,
         "triggered_at": Value::Null
@@ -799,9 +828,9 @@ async fn start_registration(
             };
 
             let credential = if payload.registration_type == "anonymous" {
-                 Some(issue_api_key())
+                Some(issue_api_key())
             } else {
-                 None
+                None
             };
 
             let record = RegistrationRecord {
@@ -824,11 +853,14 @@ async fn start_registration(
             };
 
             if let Some(cred) = &credential {
-                 CREDENTIALS.lock().unwrap().insert(cred.clone(), CredentialRecord {
-                     registration_id: registration_id.clone(),
-                     scopes: vec!["api.read".to_string(), "api.write".to_string()],
-                     revoked: false,
-                 });
+                CREDENTIALS.lock().unwrap().insert(
+                    cred.clone(),
+                    CredentialRecord {
+                        registration_id: registration_id.clone(),
+                        scopes: vec!["api.read".to_string(), "api.write".to_string()],
+                        revoked: false,
+                    },
+                );
             }
 
             REGISTRATIONS
@@ -920,9 +952,7 @@ async fn complete_claim(
     record.claimed = true;
 
     if let Some(existing_credential) = &record.credential {
-        if let Some(credential_record) =
-            CREDENTIALS.lock().unwrap().get_mut(existing_credential)
-        {
+        if let Some(credential_record) = CREDENTIALS.lock().unwrap().get_mut(existing_credential) {
             credential_record.scopes = record.post_claim_scopes.clone();
         }
 
@@ -989,8 +1019,8 @@ mod tests {
 #[cfg(test)]
 mod cryptographic_hardening_tests {
     use super::*;
-    use k256::ecdsa::{SigningKey, Signature, signature::Signer};
     use hex;
+    use k256::ecdsa::{signature::Signer, Signature, SigningKey};
 
     #[tokio::test]
     async fn test_dual_signature_rejection_of_identical_signatures() {
@@ -1067,7 +1097,8 @@ mod cryptographic_hardening_tests {
         let msg = req.approval_message();
 
         let sig1 = hex::encode(Signer::<Signature>::sign(&sk1, msg.as_bytes()).to_der());
-        let sig_untrusted = hex::encode(Signer::<Signature>::sign(&sk_untrusted, msg.as_bytes()).to_der());
+        let sig_untrusted =
+            hex::encode(Signer::<Signature>::sign(&sk_untrusted, msg.as_bytes()).to_der());
 
         let req_with_sigs = ReleaseApprovalRequest {
             signatures: Some(vec![sig1, sig_untrusted]),

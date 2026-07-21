@@ -15,20 +15,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Bitcoin-focused ranges (inclusive line numbers). A value of None means the
-# file is a pure, Bitcoin-focused module and all instrumented lines are scoped.
-# Keep mixed-module ranges in sync with source edits that move logic blocks.
-SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]] | None] = {
-    "src/sync/bip110.rs": None,
-    "src/metrics.rs": None,
+# Bitcoin-focused ranges (inclusive line numbers).
+# Keep these in sync with source edits that move logic blocks.
+SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
     "src/api/dlc.rs": [
         (25, 54),  # request validation + announcement/signing helpers
         (65, 76),  # deterministic invalid-request branch
     ],
     "src/api/rest.rs": [
-        (174, 251),  # app_router through get_rgb_contract
-        (397, 436),  # get_mmr_proof handler
-        (365, 394),  # aggregate BIP-110-only metrics response + handler
+        (172, 229),  # app_router through get_rgb_contract
+        (356, 395),  # get_mmr_proof handler
     ],
     "src/executor/rgb.rs": [
         (38, 45),   # rollout mode display
@@ -117,21 +113,13 @@ def compute_scoped_coverage(
         covered = 0
         instrumented = 0
 
-        if ranges is None:
-            selected_lines = line_map.keys()
-        else:
-            selected_lines = (
-                line_no
-                for start, end in ranges
-                for line_no in range(start, end + 1)
-            )
-
-        for line_no in selected_lines:
-            inst, cov = line_map.get(line_no, (False, False))
-            if inst:
-                instrumented += 1
-                if cov:
-                    covered += 1
+        for start, end in ranges:
+            for line_no in range(start, end + 1):
+                inst, cov = line_map.get(line_no, (False, False))
+                if inst:
+                    instrumented += 1
+                    if cov:
+                        covered += 1
 
         if instrumented == 0:
             raise RuntimeError(

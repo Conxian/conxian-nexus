@@ -15,10 +15,15 @@ mod tests {
             if error_msg.contains("Production boundary violation") {
                 println!("Confirmed: Production boundary violation triggered for PostgreSQL.");
             } else {
-                println!("Error was NOT boundary violation (expected in debug mode): {}", error_msg);
+                println!(
+                    "Error was NOT boundary violation (expected in debug mode): {}",
+                    error_msg
+                );
             }
         } else {
-             println!("Storage::new unexpectedly succeeded (expected failure due to no DB/boundary)");
+            println!(
+                "Storage::new unexpectedly succeeded (expected failure due to no DB/boundary)"
+            );
         }
     }
 
@@ -29,7 +34,7 @@ mod tests {
 
         if let Err(e) = res {
             let error_msg = e.to_string();
-             if error_msg.contains("Production boundary violation") {
+            if error_msg.contains("Production boundary violation") {
                 println!("Confirmed: Production boundary violation triggered for unauthenticated PostgreSQL.");
             }
         }
@@ -42,7 +47,10 @@ mod tests {
 
         if let Err(e) = res {
             let error_msg = e.to_string();
-            assert!(!error_msg.contains("Production boundary violation"), "Override should have prevented boundary violation error");
+            assert!(
+                !error_msg.contains("Production boundary violation"),
+                "Override should have prevented boundary violation error"
+            );
         }
         env::remove_var("NEXUS_ALLOW_UNSAFE_DB");
     }
