@@ -63,8 +63,10 @@ impl BitVMAdapter {
         }
 
         // 2. Decode Cryptographic Primitives
-        let proof_bytes = hex::decode(&transition.proof_bytes).map_err(|e| anyhow::anyhow!("Invalid proof hex: {}", e))?;
-        let vk_bytes = hex::decode(&transition.vk_bytes).map_err(|e| anyhow::anyhow!("Invalid VK hex: {}", e))?;
+        let proof_bytes = hex::decode(&transition.proof_bytes)
+            .map_err(|e| anyhow::anyhow!("Invalid proof hex: {}", e))?;
+        let vk_bytes = hex::decode(&transition.vk_bytes)
+            .map_err(|e| anyhow::anyhow!("Invalid VK hex: {}", e))?;
 
         let proof = ark_groth16::Proof::<Bls12_381>::deserialize_compressed(&proof_bytes[..])
             .map_err(|e| anyhow::anyhow!("Failed to deserialize proof: {}", e))?;
@@ -75,7 +77,8 @@ impl BitVMAdapter {
         let mut public_inputs = Vec::new();
         let mut public_inputs_concatenated = Vec::new();
         for input_hex in &transition.public_inputs {
-            let input_bytes = hex::decode(input_hex).map_err(|e| anyhow::anyhow!("Invalid input hex: {}", e))?;
+            let input_bytes =
+                hex::decode(input_hex).map_err(|e| anyhow::anyhow!("Invalid input hex: {}", e))?;
             public_inputs_concatenated.extend_from_slice(&input_bytes);
             let input_fr = Fr::deserialize_compressed(&input_bytes[..])
                 .map_err(|e| anyhow::anyhow!("Failed to deserialize public input: {}", e))?;
@@ -120,7 +123,8 @@ impl BitVMAdapter {
 
         Ok(BitVMVerificationResult {
             valid: true,
-            message: "Transition cryptographically verified and audited successfully (NIP-005)".to_string(),
+            message: "Transition cryptographically verified and audited successfully (NIP-005)"
+                .to_string(),
             steps_verified: steps,
             confidence,
         })

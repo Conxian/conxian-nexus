@@ -1,16 +1,16 @@
-use conxian_nexus::executor::bitvm::{BitVMAdapter, BitVMTransition};
-use conxian_nexus::storage::Storage;
-use conxian_nexus::config::Config;
 use ark_bls12_381::{Bls12_381, Fr};
-use ark_crypto_primitives::snark::{SNARK, CircuitSpecificSetupSNARK};
-use ark_groth16::Groth16;
-use ark_serialize::CanonicalSerialize;
+use ark_crypto_primitives::snark::{CircuitSpecificSetupSNARK, SNARK};
 use ark_ff::UniformRand;
+use ark_groth16::Groth16;
 use ark_relations::{
     gr1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError, Variable},
     lc,
 };
+use ark_serialize::CanonicalSerialize;
 use ark_std::rand::SeedableRng;
+use conxian_nexus::config::Config;
+use conxian_nexus::executor::bitvm::{BitVMAdapter, BitVMTransition};
+use conxian_nexus::storage::Storage;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -21,7 +21,9 @@ async fn test_cryptographic_bitvm_verification() {
 
     let mut rng = ark_std::rand::rngs::StdRng::seed_from_u64(42);
 
-    struct DummyCircuit { x: Option<Fr> }
+    struct DummyCircuit {
+        x: Option<Fr>,
+    }
     impl ConstraintSynthesizer<Fr> for DummyCircuit {
         fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
             let x = cs.new_witness_variable(|| self.x.ok_or(SynthesisError::AssignmentMissing))?;
@@ -48,8 +50,10 @@ async fn test_cryptographic_bitvm_verification() {
     public_input.serialize_compressed(&mut input_bytes).unwrap();
 
     let transition = BitVMTransition {
-        prev_state_root: "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000001".to_string(),
+        prev_state_root: "0x0000000000000000000000000000000000000000000000000000000000000000"
+            .to_string(),
+        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000001"
+            .to_string(),
         proof_bytes: hex::encode(proof_bytes),
         vk_bytes: hex::encode(vk_bytes),
         public_inputs: vec![hex::encode(input_bytes)],

@@ -103,5 +103,8 @@ async fn test_bitvm2_local_verification_invalid_format() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], false);
-    assert!(res["message"].as_str().unwrap().contains("Invalid prev_state_root"));
+    assert!(res["message"]
+        .as_str()
+        .unwrap()
+        .contains("Invalid prev_state_root"));
 }

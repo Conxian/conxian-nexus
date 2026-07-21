@@ -16,7 +16,9 @@ impl Storage {
 
             if redis_local || redis_unauthenticated {
                 if std::env::var("NEXUS_ALLOW_UNSAFE_REDIS").is_ok() {
-                    tracing::warn!("Unsafe Redis configuration allowed by NEXUS_ALLOW_UNSAFE_REDIS override.");
+                    tracing::warn!(
+                        "Unsafe Redis configuration allowed by NEXUS_ALLOW_UNSAFE_REDIS override."
+                    );
                 } else {
                     anyhow::bail!(
                         "Production boundary violation: Redis must be authenticated and remote in release builds. \
@@ -30,8 +32,9 @@ impl Storage {
             // PostgreSQL Boundary Check (Hole 1.2 Alignment)
             let pg_local = database_url.contains("127.0.0.1") || database_url.contains("localhost");
             // Check for authentication by looking for : before @ (simple heuristic for postgres://user:pass@host)
-            let pg_unauthenticated = !database_url.contains(":") || !database_url.contains("@") ||
-                database_url.find(':') > database_url.find('@');
+            let pg_unauthenticated = !database_url.contains(":")
+                || !database_url.contains("@")
+                || database_url.find(':') > database_url.find('@');
 
             if pg_local || pg_unauthenticated {
                 if std::env::var("NEXUS_ALLOW_UNSAFE_DB").is_ok() {

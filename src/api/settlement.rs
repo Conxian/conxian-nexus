@@ -482,7 +482,8 @@ pub async fn settlement_trigger_handler(
 
     // 3. Oracle Verification
     if let Some(oracle) = &state.oracle {
-        match oracle.as_ref()
+        match oracle
+            .as_ref()
             .verify_external_signal(&payload.source, &payload.payload)
             .await
         {
@@ -554,9 +555,10 @@ pub async fn settlement_trigger_handler(
     }
 
     // 5. Get current block height to calculate time-lock
-    let row_res: Result<Option<sqlx::postgres::PgRow>, sqlx::Error> = sqlx::query::<sqlx::Postgres>("SELECT MAX(height) as max_height FROM stacks_blocks")
-        .fetch_optional(&state.storage.pg_pool)
-        .await;
+    let row_res: Result<Option<sqlx::postgres::PgRow>, sqlx::Error> =
+        sqlx::query::<sqlx::Postgres>("SELECT MAX(height) as max_height FROM stacks_blocks")
+            .fetch_optional(&state.storage.pg_pool)
+            .await;
 
     let current_height: i64 = match row_res {
         Ok(Some(row)) => row.get::<Option<i64>, _>("max_height").unwrap_or(0),

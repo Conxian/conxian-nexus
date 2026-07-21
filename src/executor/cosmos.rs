@@ -53,7 +53,7 @@ impl CosmosAdapter {
         let _ = sqlx::query(
             "INSERT INTO cosmos_verified_client_updates (client_id, latest_height, trust_level)
              VALUES ($1, $2, $3)
-             ON CONFLICT (client_id) DO UPDATE SET latest_height = EXCLUDED.latest_height"
+             ON CONFLICT (client_id) DO UPDATE SET latest_height = EXCLUDED.latest_height",
         )
         .bind(&update.client_id)
         .bind(latest_height as i64)

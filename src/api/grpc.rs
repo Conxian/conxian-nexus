@@ -17,11 +17,9 @@ use proto::*;
 
 /// gRPC interceptor for authentication
 /// Checks for valid API key in metadata
-pub async fn grpc_auth_interceptor(
-    req: tonic::Request<()>,
-) -> Result<(), Status> {
+pub async fn grpc_auth_interceptor(req: tonic::Request<()>) -> Result<(), Status> {
     let metadata = req.metadata();
-    
+
     // Check for API key in metadata
     let api_key = metadata
         .get("x-api-key")
@@ -46,7 +44,7 @@ pub async fn grpc_auth_interceptor(
 
     // TODO: Check against persistent credential store (Redis/PostgreSQL)
     // For production, validate against stored credentials
-    
+
     tracing::debug!("gRPC request authenticated");
     Ok(())
 }
