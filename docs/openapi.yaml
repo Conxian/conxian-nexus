@@ -286,33 +286,20 @@ paths:
                     type: boolean
                   drift:
                     type: integer
-  /v1/metrics:
-    get:
-      summary: Get system metrics (JSON)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  total_transactions:
-                    type: integer
-                  total_blocks:
-                    type: integer
-                  safety_mode:
-                    type: boolean
-                  drift:
-                    type: integer
-                  uptime_seconds:
-                    type: integer
   /metrics:
     get:
-      summary: Get Prometheus metrics (Text)
+      summary: Get Prometheus metrics (text exposition)
+      description: Read-only, aggregate-only scrape of the dedicated BIP-110 Prometheus registry. The endpoint is unauthenticated by design and operators must restrict it to an internal or otherwise trusted network boundary; it exposes no transaction IDs, hashes, addresses, peers, payloads, or unbounded labels.
+      security: []
       responses:
         '200':
-          description: OK
+          description: Prometheus text exposition
+          content:
+            'text/plain; version=0.0.4; charset=utf-8':
+              schema:
+                type: string
+        '500':
+          description: Prometheus text exposition encoding failed
           content:
             text/plain:
               schema:
@@ -611,7 +598,8 @@ paths:
           description: OK
   /v1/analytics/metrics:
     get:
-      summary: Get analytics metrics
+      summary: Get STX/Postgres analytics metrics
+      description: Query analytics derived from STX transaction data stored in Postgres. This is separate from the Prometheus scrape at /metrics.
       parameters:
         - name: metric
           in: query
