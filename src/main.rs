@@ -1,7 +1,9 @@
 use anyhow::Context;
 use conxian_nexus::api;
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
-use conxian_nexus::compat::core_bridge::Wallet;
+use conxian_nexus::compat::core_bridge::{
+    Wallet, ENV_CONXIAN_PRIVATE_KEY_HEX, ENV_NEXUS_PRIVATE_KEY,
+};
 use conxian_nexus::config::{
     Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
 };
@@ -152,11 +154,17 @@ async fn main() -> anyhow::Result<()> {
         let contract_principal = config.oracle_contract_principal.clone().with_context(|| {
             format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}")
         })?;
+        let wallet = Wallet::new().with_context(|| {
+            format!(
+                "{ENV_ORACLE_ENABLED}=1 requires {ENV_CONXIAN_PRIVATE_KEY_HEX} or legacy {ENV_NEXUS_PRIVATE_KEY}"
+            )
+        })?;
 
         Some(Arc::new(OracleService::new(
             storage.clone(),
             endpoint_url,
             contract_principal,
+            wallet,
         )))
     } else {
         None

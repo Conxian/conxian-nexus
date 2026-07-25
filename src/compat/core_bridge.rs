@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn environment_lookup_uses_legacy_key_and_preserves_missing_key_contract() {
+    fn environment_lookup_uses_legacy_key_without_mutating_process_env() {
         let legacy = private_key_two_hex();
         let wallet = Wallet::from_env_with(|name| {
             if name == ENV_NEXUS_PRIVATE_KEY {
@@ -262,7 +262,10 @@ mod tests {
                 .expect("valid key")
                 .public_key()
         );
+    }
 
+    #[test]
+    fn missing_environment_keys_fail_closed_without_mutating_process_env() {
         let error = Wallet::from_env_with(|_| Err(std::env::VarError::NotPresent))
             .err()
             .expect("missing key rejected");
