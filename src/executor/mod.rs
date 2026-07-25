@@ -1,4 +1,5 @@
 pub mod bitvm;
+pub mod bitvm_groth16;
 pub mod cosmos;
 pub mod evm;
 pub mod fedimint;
