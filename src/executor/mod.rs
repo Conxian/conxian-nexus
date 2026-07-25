@@ -51,7 +51,7 @@ impl NexusExecutor {
     ) -> Self {
         let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
         let lightning_adapter = lightning::LightningResilienceAdapter::new();
-        let bitvm_adapter = bitvm::BitVMAdapter::new(storage.clone());
+        let bitvm_adapter = bitvm::BitVMAdapter::unavailable();
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
         let stacks_adapter = stacks::StacksAdapter::new();
@@ -67,6 +67,17 @@ impl NexusExecutor {
             stacks_adapter,
             fedimint_adapter,
         }
+    }
+
+    pub fn new_with_bitvm_adapter(
+        storage: Arc<Storage>,
+        rgb_mode: rgb::RGBRolloutMode,
+        known_contracts: std::collections::HashSet<String>,
+        bitvm_adapter: bitvm::BitVMAdapter,
+    ) -> Self {
+        let mut executor = Self::new(storage, rgb_mode, known_contracts);
+        executor.bitvm_adapter = bitvm_adapter;
+        executor
     }
 
     /// Checks if the system is in safety mode and blocks submission if so.

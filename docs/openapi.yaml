@@ -420,44 +420,48 @@ paths:
                     type: string
   /v1/bitvm2/verify-state-root:
     post:
-      summary: Verify a BitVM2 state root SNARK proof
+      summary: Verify the canonical BN254 BitVM state-transition profile
+      description: |
+        Verifies the fixed Gateway-v1-compatible Nexus profile. This authenticates
+        the supplied state transition and Bitcoin anchor context but does not
+        establish Bitcoin inclusion/finality, disputes, complete BitVM, or mainnet readiness.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - state_root
-                - proof
-              properties:
-                state_root:
-                  type: string
-                proof:
-                  type: string
-                public_inputs:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/BitvmGroth16V1Request'
       responses:
         '200':
-          description: OK
+          description: Cryptographically verified and durably audited
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
-        '502':
-          description: Bad Gateway
+                $ref: '#/components/schemas/BitvmGroth16V1Response'
+        '400':
+          description: Malformed envelope, binding mismatch, or statement-hash mismatch
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+                $ref: '#/components/schemas/VerifierError'
+        '422':
+          description: Well-formed proof rejected by the registered verifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifierError'
         '503':
-          description: Service Unavailable
+          description: Registry key or verifier unavailable
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+                $ref: '#/components/schemas/VerifierError'
+        '500':
+          description: Required audit persistence or verifier operation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifierError'
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
@@ -646,20 +650,113 @@ paths:
                 model_id:
                   type: string
       responses:
-        '200':
-          description: OK
+        '503':
+          description: Verifier unavailable until a ZKML-specific circuit contract is configured
 
 components:
   schemas:
-    Bitvm2StateRootVerificationResponse:
+    BitvmGroth16V1Request:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      required:
+        - schema_version
+        - curve
+        - circuit_id
+        - verification_key_id
+        - prev_state_root
+        - next_state_root
+        - steps_verified
+        - witness_commitment
+        - public_inputs
+        - block_context
+        - proof
+        - statement_hash
       properties:
-        state_root:
+        schema_version:
+          type: integer
+          enum: [1]
+        curve:
           type: string
-        verified:
+          enum: [bn254]
+        circuit_id:
+          type: string
+          enum: [conxian-nexus-bitvm-state-transition-v1]
+        verification_key_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        prev_state_root:
+          type: string
+          pattern: '^0x[0-9a-f]{64}$'
+        next_state_root:
+          type: string
+          pattern: '^0x[0-9a-f]{64}$'
+        steps_verified:
+          type: integer
+          format: int64
+          minimum: 0
+        witness_commitment:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        public_inputs:
+          type: array
+          minItems: 7
+          maxItems: 7
+          items:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+        block_context:
+          type: object
+          additionalProperties: false
+          required: [network, block_height, block_hash]
+          properties:
+            network:
+              type: string
+              enum: [mainnet, testnet, signet, regtest]
+            block_height:
+              type: integer
+              format: int64
+              minimum: 1
+            block_hash:
+              type: string
+              pattern: '^[0-9a-f]{64}$'
+            max_valid_height:
+              type: integer
+              format: int64
+              minimum: 1
+              nullable: true
+        proof:
+          type: string
+          pattern: '^[0-9a-f]{256}$'
+        statement_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        trace_id:
+          type: string
+          nullable: true
+    BitvmGroth16V1Response:
+      type: object
+      additionalProperties: false
+      required: [valid, statement_hash, circuit_id, verification_key_id, steps_verified]
+      properties:
+        valid:
           type: boolean
-        error:
+          enum: [true]
+        statement_hash:
+          type: string
+        circuit_id:
+          type: string
+        verification_key_id:
+          type: string
+        steps_verified:
+          type: integer
+          format: int64
+    VerifierError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
           type: string
     EventEnvelope:
       type: object

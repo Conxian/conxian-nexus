@@ -67,18 +67,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
 
 [[package]]
-name = "ark-bls12-381"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be2ede2c0c96fa37d5d3484e8a59fec566c4a52b8c84bf993eaa6c67d7225a4c"
-dependencies = [
- "ark-ec 0.6.0",
- "ark-ff 0.6.0",
- "ark-serialize 0.6.0",
- "ark-std 0.6.0",
-]
-
-[[package]]
 name = "ark-bn254"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,6 +75,17 @@ dependencies = [
  "ark-ec 0.4.2",
  "ark-ff 0.4.2",
  "ark-std 0.4.0",
+]
+
+[[package]]
+name = "ark-bn254"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bc66f96ebe2a17a499475b4f94791d379817592ef494171586967ffdc6f95db"
+dependencies = [
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -1000,14 +999,16 @@ name = "conxian-nexus"
 version = "0.4.22"
 dependencies = [
  "anyhow",
- "ark-bls12-381",
+ "ark-bn254 0.6.0",
  "ark-crypto-primitives 0.6.0",
  "ark-ff 0.6.0",
  "ark-groth16 0.6.0",
  "ark-relations 0.6.0",
  "ark-serialize 0.6.0",
  "ark-std 0.6.0",
+ "async-trait",
  "axum",
+ "base64",
  "chrono",
  "dotenvy",
  "futures-util",
@@ -1031,6 +1032,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sqlx",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite 0.30.0",
  "tonic",
@@ -2333,7 +2335,7 @@ version = "0.2.0"
 source = "git+https://github.com/Conxian/lib-conxian-core?rev=3b091d2700d840514427e4190c40d631b6d8132c#3b091d2700d840514427e4190c40d631b6d8132c"
 dependencies = [
  "anyhow",
- "ark-bn254",
+ "ark-bn254 0.4.0",
  "ark-ff 0.4.2",
  "ark-groth16 0.4.0",
  "ark-serialize 0.4.2",

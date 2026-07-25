@@ -15,7 +15,7 @@ use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::storage::Storage;
 use axum::{
-    extract::{Query, State},
+    extract::{rejection::JsonRejection, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
@@ -247,8 +247,21 @@ async fn get_rgb_contract(
 
 async fn verify_bitvm_transition(
     State(state): State<AppState>,
-    Json(payload): Json<crate::executor::bitvm::BitVMTransition>,
+    payload: Result<Json<crate::executor::bitvm::BitVMTransition>, JsonRejection>,
 ) -> impl IntoResponse {
+    let Json(payload) = match payload {
+        Ok(payload) => payload,
+        Err(error) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(crate::executor::bitvm::BitVMErrorResponse {
+                    code: "malformed_request",
+                    message: format!("malformed request: {error}"),
+                }),
+            )
+                .into_response();
+        }
+    };
     match state
         .executor
         .bitvm_adapter
@@ -256,11 +269,7 @@ async fn verify_bitvm_transition(
         .await
     {
         Ok(res) => (StatusCode::OK, Json(res)).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
+        Err(error) => (error.status_code(), Json(error.response())).into_response(),
     }
 }
 

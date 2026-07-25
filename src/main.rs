@@ -88,10 +88,16 @@ async fn main() -> anyhow::Result<()> {
     } else {
         conxian_nexus::executor::rgb::RGBRolloutMode::Disabled
     };
-    let executor = Arc::new(NexusExecutor::new(
+    let bitvm_adapter = conxian_nexus::executor::bitvm::BitVMAdapter::from_config(
+        storage.clone(),
+        &config.bitvm_groth16_registry,
+    )
+    .context("Invalid BitVM Groth16 v1 verification-key registry")?;
+    let executor = Arc::new(NexusExecutor::new_with_bitvm_adapter(
         storage.clone(),
         rgb_mode,
         std::collections::HashSet::new(),
+        bitvm_adapter,
     ));
 
     // Initialize Tableland Adapter [CON-69]

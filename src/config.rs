@@ -15,6 +15,7 @@ pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
 pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 pub const ENV_ADMIN_API_TOKEN: &str = "NEXUS_ADMIN_API_TOKEN";
+pub const ENV_BITVM_GROTH16_REGISTRY: &str = "BITVM_GROTH16_V1_REGISTRY_JSON";
 
 /// Whether the OracleService is currently a stub or real.
 pub const ORACLE_SERVICE_IS_STUBBED: bool = false;
@@ -42,11 +43,22 @@ pub struct Config {
     pub erp_attestation_trusted_keys: HashMap<String, String>,
     pub rust_log: String,
     pub worldid_app_id: String,
-    pub zkml_vks: HashMap<String, String>,
+    pub bitvm_groth16_registry: Vec<BitVmVerificationKeyConfig>,
     pub admin_api_token: Option<String>,
     pub admin_public_keys: Vec<String>,
     pub otel_exporter_otlp_endpoint: Option<String>,
     pub otel_service_name: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct BitVmVerificationKeyConfig {
+    pub schema_version: u16,
+    pub curve: String,
+    pub circuit_id: String,
+    pub verification_key_id: String,
+    pub verification_key_base64: String,
+    pub enabled: bool,
 }
 
 impl fmt::Debug for Config {
@@ -67,7 +79,10 @@ impl fmt::Debug for Config {
             .field("erp_attestation_trusted_keys", &"<redacted>")
             .field("rust_log", &self.rust_log)
             .field("worldid_app_id", &self.worldid_app_id)
-            .field("zkml_vks", &"<redacted>")
+            .field(
+                "bitvm_groth16_registry",
+                &format_args!("<{} redacted entries>", self.bitvm_groth16_registry.len()),
+            )
             .field(
                 "admin_api_token",
                 &self.admin_api_token.as_ref().map(|_| "<redacted>"),
@@ -106,7 +121,7 @@ impl Config {
             erp_attestation_trusted_keys: HashMap::new(),
             rust_log: "info".to_string(),
             worldid_app_id: "".to_string(),
-            zkml_vks: HashMap::new(),
+            bitvm_groth16_registry: Vec::new(),
             admin_api_token: None,
             admin_public_keys: vec![],
             otel_exporter_otlp_endpoint: None,
@@ -249,12 +264,14 @@ impl Config {
             .filter(|s| !s.is_empty())
             .collect();
 
-        let mut zkml_vks = HashMap::new();
-        for (key, value) in env::vars() {
-            if key.starts_with("ZKML_VK_B64_") {
-                zkml_vks.insert(key, value);
+        let bitvm_groth16_registry = match env::var(ENV_BITVM_GROTH16_REGISTRY) {
+            Ok(raw) => serde_json::from_str(&raw)
+                .context("Failed to parse BITVM_GROTH16_V1_REGISTRY_JSON")?,
+            Err(env::VarError::NotPresent) => Vec::new(),
+            Err(env::VarError::NotUnicode(_)) => {
+                bail!("BITVM_GROTH16_V1_REGISTRY_JSON must be valid unicode")
             }
-        }
+        };
 
         Ok(Self {
             nostr_secret_key,
@@ -287,7 +304,7 @@ impl Config {
             erp_attestation_trusted_keys,
             rust_log,
             worldid_app_id,
-            zkml_vks,
+            bitvm_groth16_registry,
             admin_api_token,
             admin_public_keys,
             otel_exporter_otlp_endpoint,
@@ -316,7 +333,10 @@ mod tests {
         env::set_var("RUST_LOG", "debug");
         env::set_var(ENV_ERP_ATTESTATION_TRUSTED_KEYS, r#"{"key1": "secret1"}"#);
         env::set_var("WORLDID_APP_ID", "app123");
-        env::set_var("ZKML_VK_B64_MODEL1", "vk123");
+        env::set_var(
+            ENV_BITVM_GROTH16_REGISTRY,
+            r#"[{"schema_version":1,"curve":"bn254","circuit_id":"conxian-nexus-bitvm-state-transition-v1","verification_key_id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","verification_key_base64":"dmsta2V5","enabled":false}]"#,
+        );
 
         let config = Config::from_env().unwrap();
         assert_eq!(
@@ -330,6 +350,7 @@ mod tests {
             "secret1"
         );
         assert_eq!(config.worldid_app_id, "app123");
-        assert_eq!(config.zkml_vks.get("ZKML_VK_B64_MODEL1").unwrap(), "vk123");
+        assert_eq!(config.bitvm_groth16_registry.len(), 1);
+        assert!(!config.bitvm_groth16_registry[0].enabled);
     }
 }

@@ -1,0 +1,48 @@
+{
+  "adversarial_wrong_proof": "a620c97d7840f3e307dce4134e0978a0442ea1f7dc74aa4a0b49e50c4ec52aae78106f3622869e7191a682089dbb8e767d4e0f271fa235b7d78583484aa662038d5294e5a6967f5da17371f95c09c26e992d7fb2e1ff8ecf324aac0321e52311d553a9c8b55151d4fbbe86ed72fbf334fb6def0731da9f2ffcf73f2f51ba8da0",
+  "generation": {
+    "generator": "examples/generate_bitvm_groth16_fixture.rs",
+    "proof_seed_hex": "9191919191919191919191919191919191919191919191919191919191919191",
+    "rejected_proof_seed_hex": "9292929292929292929292929292929292929292929292929292929292929292",
+    "setup_seed_hex": "5353535353535353535353535353535353535353535353535353535353535353"
+  },
+  "registry": [
+    {
+      "circuit_id": "conxian-nexus-bitvm-state-transition-v1",
+      "curve": "bn254",
+      "enabled": true,
+      "schema_version": 1,
+      "verification_key_base64": "Ah3dtwEf/Z0TwXL0KWicPH3tWq2pBEHZxhmsTYxg4QUzuJHVGnDMFPS9lLECm2OWfXsMWZPoKHxBEdWhpbUtKbJ5w8P4c4Cx9do11otgT6ZoPFpv+x5fs1jUvJ1AP5eGw2tEU0TQckKLllvdDDRCy6wR8g+Oxoq/tO/l0yhUTArgbQijl+2pT3U8l3ofw1iW+ZWGzckYOYaTZGKyOOL9K9j3fziOEcD5LA/WRzA8sMgLGiTbMLLrf3uTd78xEPAVnfG6gDn1jmWZ0w2bnRqXo2FZOW3A9irwbMJOUPNaDIgIAAAAAAAAAJTL7ktsjyDCvLCsoIu2v5Lf5J2TtdBgn9bmsjz+gaAf0eWy1CHX01Xt5c/Xxv6zKEcnJHwhDyRE/kYAljFS84LG25EjZpI1l7JtuZ2SdCqeflLxY9fab1Tnki4QL8/iEvytts9b4xu/bhbfeAhkBikcYMpYR2qSdiGt/87g7RIRYUDBl1kmnU3KEEXLASrsIeB+ejgHESPxWuSzkL4KrJOyalUoYk6sYWY6rhZ+SvQ2/4J7QL4+CuZEGuAEJefVJUmoOELJz7+XM6YCSgurH13IE42qpFBqDBdB4AMdv/uDDaF+YIL1qM7DHfEL1Mx7tu1gVsbGic4KPLrgj+gIYBE=",
+      "verification_key_id": "24ec0adf5c2843f5f255c7f7ded7a6f91f37c23d10c8fb1e5613d438fa895b55"
+    }
+  ],
+  "request": {
+    "block_context": {
+      "block_hash": "1112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f30",
+      "block_height": 840001,
+      "max_valid_height": 840100,
+      "network": "regtest"
+    },
+    "circuit_id": "conxian-nexus-bitvm-state-transition-v1",
+    "curve": "bn254",
+    "next_state_root": "0xffeeddccbbaa998877665544332211000102030405060708090a0b0c0d0e0f10",
+    "prev_state_root": "0x00112233445566778899aabbccddeeff102132435465768798a9babcbddcedfe",
+    "proof": "96e5a39baa4237f80506d837d810c75021a15a98056d286c20f456828cbf8119e4f97b02beba8984924b0bc9a48fe90988273c91d5903108274803f559f5a907a89292ed55a46b5f3392fd98d96b590d18947f72875aa41e647c8f1726297411d50fc371e3f273262986cc02ed58a8a668b86097499ee7ca9b788fc4ba029489",
+    "public_inputs": [
+      "0000000000000000000000000000000000112233445566778899aabbccddeeff",
+      "00000000000000000000000000000000102132435465768798a9babcbddcedfe",
+      "00000000000000000000000000000000ffeeddccbbaa99887766554433221100",
+      "000000000000000000000000000000000102030405060708090a0b0c0d0e0f10",
+      "0000000000000000000000000000000000000000000000000000000000001092",
+      "000000000000000000000000000000001234567890abcdef1234567890abcdef",
+      "000000000000000000000000000000000fedcba0987654320fedcba098765432"
+    ],
+    "schema_version": 1,
+    "statement_hash": "17777f3c24cc745553b5d1a4fcbdf502a91246ff110f2ad283197d18a7a832ff",
+    "steps_verified": 4242,
+    "trace_id": "fixture-con-1533",
+    "verification_key_id": "24ec0adf5c2843f5f255c7f7ded7a6f91f37c23d10c8fb1e5613d438fa895b55",
+    "witness_commitment": "1234567890abcdef1234567890abcdef0fedcba0987654320fedcba098765432"
+  },
+  "test_only": true
+}
