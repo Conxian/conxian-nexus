@@ -11,7 +11,11 @@ Status: implemented for `CON-1533` as a narrow Nexus verification profile.
   execution and required audit persistence** for
   `conxian-nexus-bitvm-state-transition-v1`.
 - **Core is not currently the verifier owner or import path** for this profile.
-  Nexus does not use Core's historical modulo-reducing Groth16 helper here.
+  Nexus removed the historical Core Groth16 verifier from this profile and does
+  not use Core's modulo-reducing helper here. The repository-level Core
+  dependency remains required by separate identity, wallet, contract-bridge,
+  service-status, Kwil-signing, and DLC-signing callers; it is not part of this
+  profile's verification path.
 - Circuit and verification-key approval/governance is separate from this byte
   contract. A key being syntactically registrable does not approve its circuit.
 
