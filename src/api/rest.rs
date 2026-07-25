@@ -528,11 +528,25 @@ mod tests {
         rgb_mode: RGBRolloutMode,
         known_contracts: HashSet<String>,
     ) -> axum::Router {
+        test_router_with_nexus_state(
+            enabled,
+            rgb_mode,
+            known_contracts,
+            Arc::new(NexusState::new()),
+        )
+        .await
+    }
+
+    async fn test_router_with_nexus_state(
+        enabled: bool,
+        rgb_mode: RGBRolloutMode,
+        known_contracts: HashSet<String>,
+        nexus_state: Arc<NexusState>,
+    ) -> axum::Router {
         let mut config = Config::default_test();
         config.experimental_apis_enabled = enabled;
         let config = Arc::new(config);
         let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
-        let nexus_state = Arc::new(NexusState::new());
         let executor = Arc::new(NexusExecutor::new(
             storage.clone(),
             rgb_mode,
@@ -556,6 +570,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_health_check_returns_exact_ok_body() {
+        let response = health_check().await.into_response();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body.as_ref(), b"OK");
+    }
+
+    #[tokio::test]
     async fn test_health_check() {
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
 
@@ -573,6 +596,55 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: HealthResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(res.status, "ok");
+    }
+
+    #[tokio::test]
+    async fn test_get_proof_returns_serialized_proof_for_existing_leaf() {
+        let nexus_state = Arc::new(NexusState::new());
+        let tx_id = valid_tx_id();
+        nexus_state.update_state(&tx_id, 100);
+        let expected_root = nexus_state.get_state_root();
+        let app = test_router_with_nexus_state(
+            true,
+            RGBRolloutMode::Disabled,
+            HashSet::new(),
+            nexus_state,
+        )
+        .await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/v1/proof?key={tx_id}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload.get("root").and_then(Value::as_str),
+            Some(expected_root.as_str())
+        );
+
+        let proof: Value = serde_json::from_str(
+            payload
+                .get("proof")
+                .and_then(Value::as_str)
+                .expect("proof should be serialized JSON"),
+        )
+        .unwrap();
+        assert_eq!(
+            proof.get("leaf").and_then(Value::as_str),
+            Some(tx_id.as_str())
+        );
+        assert_eq!(
+            proof.get("root").and_then(Value::as_str),
+            Some(expected_root.as_str())
+        );
     }
 
     /// Test for Issue #149: Narrow proof surface manifest endpoint
@@ -724,34 +796,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_mmr_proof_returns_ok_for_existing_leaf_index() {
-        let mut config = Config::default_test();
-        config.experimental_apis_enabled = true;
-        let config = Arc::new(config);
-        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
         let nexus_state = Arc::new(NexusState::new());
         let tx_id = valid_tx_id();
         nexus_state.update_state(&tx_id, 100);
-
-        let executor = Arc::new(NexusExecutor::new(
-            storage.clone(),
+        let app = test_router_with_nexus_state(
+            true,
             RGBRolloutMode::Disabled,
             HashSet::new(),
-        ));
-        let tableland = Arc::new(TablelandAdapter::new(
-            storage.clone(),
-            config.tableland_base_url.clone(),
-        ));
-
-        let app = app_router(
-            storage,
             nexus_state,
-            executor,
-            None,
-            tableland,
-            None,
-            None,
-            config,
-        );
+        )
+        .await;
 
         let response = app
             .oneshot(
