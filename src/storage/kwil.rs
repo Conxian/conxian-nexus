@@ -1,10 +1,10 @@
 //! [CON-330] Sovereign Transactional SQL (Kwil Pilot).
 //! Bridges application state to Kwil's decentralized relational database.
 
+use crate::compat::core_bridge::Wallet;
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
 use chrono::Utc;
-use lib_conxian_core::Wallet;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

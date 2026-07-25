@@ -1,10 +1,10 @@
+use conxian_nexus::compat::core_bridge::Wallet;
 use conxian_nexus::config::Config;
 use conxian_nexus::storage::kwil::{
     KwilAdapter, KwilBlockCommitment, KwilConfig, KwilMmrNodeCommitment,
     KwilSettlementLogCommitment, KwilSettlementProposalCommitment, KwilStateRootCommitment,
 };
 use conxian_nexus::storage::Storage;
-use lib_conxian_core::Wallet;
 use std::sync::Arc;
 
 #[tokio::test]

@@ -10,14 +10,13 @@ Status: implemented for `CON-1533` as a narrow Nexus verification profile.
 - **Nexus owns canonical pre/post state materialization plus local pairing
   execution and required audit persistence** for
   `conxian-nexus-bitvm-state-transition-v1`.
-- **Core is not currently the verifier owner or import path** for this profile.
-  Nexus removed the historical Core Groth16 verifier from this profile and does
-  not use Core's modulo-reducing helper here. Core is pinned to exact revision
-  `4bcdbc72a3676377043e9d95e0f8930828882b8b`, the newest compatible bridge that
-  retains the active unrelated Wallet, ContractBridge, DLC-signing, and gateway
-  status APIs while moving those consumers onto Arkworks 0.6. It is not part of
-  this profile's verification path. Removing Core completely is a separate
-  future migration after those consumers are replaced or relocated.
+- **Core is fully decoupled from Nexus in this change.** Nexus owns the verifier
+  and does not import Core's historical Groth16 verifier or modulo-reducing
+  helper. The narrow Nexus-owned compatibility module preserves only the legacy
+  deterministic signing, Clarity-call construction, and static service-status
+  behavior still consumed by Nexus. That module is not a BitVM verifier and
+  does not include Core protocol, wallet persistence, BDK, RGB, BitVM, or
+  networking behavior.
 - Circuit and verification-key approval/governance is separate from this byte
   contract. A key being syntactically registrable does not approve its circuit.
 

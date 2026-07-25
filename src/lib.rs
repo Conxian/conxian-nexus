@@ -1,4 +1,5 @@
 pub mod api;
+pub mod compat;
 pub mod config;
 pub mod executor;
 pub mod oracle;

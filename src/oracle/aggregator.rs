@@ -1,4 +1,4 @@
-use lib_conxian_core::{ContractBridge, Wallet};
+use crate::compat::core_bridge::{ContractBridge, Wallet};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

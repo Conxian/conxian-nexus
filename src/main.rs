@@ -1,6 +1,7 @@
 use anyhow::Context;
 use conxian_nexus::api;
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
+use conxian_nexus::compat::core_bridge::Wallet;
 use conxian_nexus::config::{
     Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
 };
@@ -13,7 +14,6 @@ use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
-use lib_conxian_core::Wallet;
 use opentelemetry::{global, trace::TracerProvider};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;

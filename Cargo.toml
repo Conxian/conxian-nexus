@@ -27,8 +27,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
 tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 futures-util = "0.3"
-# Legacy consumer-compatibility bridge for active Wallet/ContractBridge/DLC-signing/gateway-status APIs; the CON-1533 verifier is Nexus-owned.
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "4bcdbc72a3676377043e9d95e0f8930828882b8b" }
+ripemd = "0.2"
 prometheus = "0.14"
 lazy_static = "1.4"
 reqwest = { version = "0.13", features = ["json"] }
