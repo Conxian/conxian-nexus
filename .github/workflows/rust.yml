@@ -43,17 +43,22 @@ jobs:
         sudo mv gitleaks /usr/local/bin/
     - name: Secret Scanning (Gitleaks)
       env:
-        EVENT_NAME: ${{ github.event_name }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: |
-        if [[ "$EVENT_NAME" == "pull_request" ]]; then
-          log_opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
+        if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+          if [[ ! "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pull request commit range" >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${PR_BASE_SHA}^{commit}" || ! git cat-file -e "${PR_HEAD_SHA}^{commit}"; then
+            echo "Pull request commit range is unavailable in the checkout" >&2
+            exit 1
+          fi
+          gitleaks detect --source . -v --log-opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
         else
-          log_opts="$GITHUB_SHA"
+          gitleaks detect --source . -v
         fi
-
-        gitleaks detect --source . --log-opts="$log_opts" -v
 
   build:
     name: Build & Test
@@ -68,6 +73,8 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy
