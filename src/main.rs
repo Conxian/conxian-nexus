@@ -5,6 +5,12 @@ use conxian_nexus::config::{
     Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
 };
 use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::executor::{
+    bitvm_groth16::CanonicalStateTransitionVerifier,
+    canonical_bitvm::{
+        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, UnavailableBitcoinHeightProvider,
+    },
+};
 use conxian_nexus::oracle::OracleService;
 use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use conxian_nexus::safety::NexusSafety;
@@ -88,11 +94,28 @@ async fn main() -> anyhow::Result<()> {
     } else {
         conxian_nexus::executor::rgb::RGBRolloutMode::Disabled
     };
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        rgb_mode,
-        std::collections::HashSet::new(),
-    ));
+    let mut executor =
+        NexusExecutor::new(storage.clone(), rgb_mode, std::collections::HashSet::new());
+    if let Some(registry_config) = &config.bitvm_groth16_trusted_registry {
+        let (expected_network, registry) = registry_config
+            .build_registry()
+            .context("Failed to construct canonical BitVM trusted registry")?;
+        let service = CanonicalBitvmService::new(
+            Arc::new(CanonicalStateTransitionVerifier::new(Arc::new(registry))),
+            expected_network,
+            Arc::new(UnavailableBitcoinHeightProvider),
+            Arc::new(PostgresCanonicalBitvmReceiptStore::new(storage.clone())),
+        );
+        executor = executor.with_canonical_bitvm_service(Arc::new(service));
+        tracing::warn!(
+            "Canonical BitVM registry loaded, but verification remains unavailable until a reviewed trusted Bitcoin-height provider is wired"
+        );
+    } else {
+        tracing::info!(
+            "Canonical BitVM verification unavailable: NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON is not configured"
+        );
+    }
+    let executor = Arc::new(executor);
 
     // Initialize Tableland Adapter [CON-69]
     let tableland = Arc::new(TablelandAdapter::new(

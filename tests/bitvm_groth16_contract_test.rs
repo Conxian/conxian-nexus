@@ -186,6 +186,32 @@ fn wrong_trusted_vk_and_circuit_associations_fail_closed() {
 }
 
 #[test]
+fn registry_rejects_same_vk_id_under_conflicting_associations() {
+    let fixture = fixture();
+    let mut registry = TrustedVerificationKeyRegistry::default();
+    registry.register(fixture.vk_config.clone()).unwrap();
+
+    assert_eq!(
+        registry.register(fixture.vk_config.clone()).unwrap_err(),
+        CanonicalGroth16Error::DuplicateVerificationKey
+    );
+
+    let mut different_circuit = fixture.vk_config.clone();
+    different_circuit.circuit_id = "different-reviewed-circuit".to_owned();
+    assert_eq!(
+        registry.register(different_circuit).unwrap_err(),
+        CanonicalGroth16Error::ConflictingVerificationKeyAssociation
+    );
+
+    let mut different_enablement = fixture.vk_config;
+    different_enablement.enabled = false;
+    assert_eq!(
+        registry.register(different_enablement).unwrap_err(),
+        CanonicalGroth16Error::ConflictingVerificationKeyAssociation
+    );
+}
+
+#[test]
 fn mutated_proof_and_authenticated_roots_are_rejected() {
     let fixture = fixture();
     let backend = verifier(fixture.vk_config);
@@ -300,7 +326,7 @@ fn trailing_proof_and_vk_bytes_are_rejected() {
     assert!(matches!(
         backend.verify(&fixture.transition, &proof, 840_100),
         Err(CanonicalGroth16Error::InvalidProofEncoding(message))
-            if message.contains("trailing bytes")
+            if message.contains("exactly 128 bytes")
     ));
 
     let mut trailing_vk = fixture.vk_config;
@@ -313,6 +339,32 @@ fn trailing_proof_and_vk_bytes_are_rejected() {
         Err(CanonicalGroth16Error::InvalidVerificationKey(message))
             if message.contains("trailing bytes")
     ));
+}
+
+#[test]
+fn proof_width_zero_proof_and_zero_current_height_are_rejected_early() {
+    let fixture = fixture();
+
+    let mut short_text = envelope_json(&fixture.envelope);
+    short_text["proof"] = json!("00".repeat(127));
+    assert!(matches!(
+        parse_gateway_envelope_json(short_text),
+        Err(CanonicalGroth16Error::InvalidProofEncoding(_))
+    ));
+
+    let mut zero_text = envelope_json(&fixture.envelope);
+    zero_text["proof"] = json!("00".repeat(128));
+    assert_eq!(
+        parse_gateway_envelope_json(zero_text).unwrap_err(),
+        CanonicalGroth16Error::AllZeroProof
+    );
+
+    assert_eq!(
+        verifier(fixture.vk_config)
+            .verify(&fixture.transition, &fixture.envelope, 0)
+            .unwrap_err(),
+        CanonicalGroth16Error::InvalidCurrentBlockHeight
+    );
 }
 
 #[test]

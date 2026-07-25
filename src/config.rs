@@ -1,3 +1,9 @@
+use crate::executor::bitvm_groth16::{
+    BitcoinNetwork, Groth16Curve, PublicInputLayout, TrustedVerificationKeyConfig,
+    TrustedVerificationKeyRegistry, VerificationKeyId, GROTH16_SCHEMA_VERSION,
+    NEXUS_STATE_TRANSITION_CIRCUIT_ID, NEXUS_STATE_TRANSITION_PUBLIC_INPUTS,
+};
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{env, fmt};
@@ -15,6 +21,86 @@ pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
 pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 pub const ENV_ADMIN_API_TOKEN: &str = "NEXUS_ADMIN_API_TOKEN";
+pub const ENV_BITVM_GROTH16_TRUSTED_REGISTRY: &str = "NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON";
+
+pub const NEXUS_PUBLIC_INPUT_LAYOUT_V1: &str = "nexus-state-transition-v1";
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BitvmGroth16TrustedRegistryConfig {
+    pub expected_bitcoin_network: String,
+    pub records: Vec<BitvmGroth16TrustedRecordConfig>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BitvmGroth16TrustedRecordConfig {
+    pub schema_version: u16,
+    pub curve: String,
+    pub circuit_id: String,
+    pub verification_key_id: String,
+    pub public_input_count: usize,
+    pub public_input_layout: String,
+    pub enabled: bool,
+    pub verification_key_base64: String,
+}
+
+impl BitvmGroth16TrustedRegistryConfig {
+    pub fn build_registry(
+        &self,
+    ) -> anyhow::Result<(BitcoinNetwork, TrustedVerificationKeyRegistry)> {
+        use anyhow::{bail, Context};
+
+        if self.records.is_empty() {
+            bail!("trusted BitVM Groth16 registry must contain at least one record");
+        }
+        let network = BitcoinNetwork::parse(&self.expected_bitcoin_network)
+            .context("invalid expected Bitcoin network in trusted BitVM Groth16 registry")?;
+        let mut registry = TrustedVerificationKeyRegistry::default();
+        for (index, record) in self.records.iter().enumerate() {
+            if record.schema_version != GROTH16_SCHEMA_VERSION
+                || record.curve != "bn254"
+                || record.circuit_id != NEXUS_STATE_TRANSITION_CIRCUIT_ID
+                || record.public_input_count != NEXUS_STATE_TRANSITION_PUBLIC_INPUTS
+                || record.public_input_layout != NEXUS_PUBLIC_INPUT_LAYOUT_V1
+            {
+                bail!("unsupported trusted BitVM Groth16 metadata at record {index}");
+            }
+            if record.verification_key_id.len() != 64
+                || !record
+                    .verification_key_id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            {
+                bail!(
+                    "trusted BitVM Groth16 verification_key_id at record {index} must be 64 lowercase hexadecimal characters"
+                );
+            }
+            let verification_key_id: [u8; 32] = hex::decode(&record.verification_key_id)
+                .context("invalid trusted BitVM Groth16 verification_key_id")?
+                .try_into()
+                .map_err(|_| {
+                    anyhow::anyhow!("invalid trusted BitVM Groth16 verification_key_id width")
+                })?;
+            let verification_key_bytes = BASE64_STANDARD
+                .decode(&record.verification_key_base64)
+                .with_context(|| format!("invalid base64 verification key at record {index}"))?;
+            registry
+                .register(TrustedVerificationKeyConfig {
+                    schema_version: record.schema_version,
+                    curve: Groth16Curve::Bn254,
+                    circuit_id: record.circuit_id.clone(),
+                    verification_key_id: VerificationKeyId(verification_key_id),
+                    public_input_count: record.public_input_count,
+                    public_input_layout: PublicInputLayout::NexusStateTransitionV1,
+                    enabled: record.enabled,
+                    verification_key_bytes,
+                })
+                .with_context(|| format!("invalid trusted BitVM Groth16 record {index}"))?;
+        }
+        Ok((network, registry))
+    }
+}
 
 /// Whether the OracleService is currently a stub or real.
 pub const ORACLE_SERVICE_IS_STUBBED: bool = false;
@@ -43,6 +129,7 @@ pub struct Config {
     pub rust_log: String,
     pub worldid_app_id: String,
     pub zkml_vks: HashMap<String, String>,
+    pub bitvm_groth16_trusted_registry: Option<BitvmGroth16TrustedRegistryConfig>,
     pub admin_api_token: Option<String>,
     pub admin_public_keys: Vec<String>,
     pub otel_exporter_otlp_endpoint: Option<String>,
@@ -68,6 +155,13 @@ impl fmt::Debug for Config {
             .field("rust_log", &self.rust_log)
             .field("worldid_app_id", &self.worldid_app_id)
             .field("zkml_vks", &"<redacted>")
+            .field(
+                "bitvm_groth16_trusted_registry",
+                &self
+                    .bitvm_groth16_trusted_registry
+                    .as_ref()
+                    .map(|_| "<redacted>"),
+            )
             .field(
                 "admin_api_token",
                 &self.admin_api_token.as_ref().map(|_| "<redacted>"),
@@ -107,6 +201,7 @@ impl Config {
             rust_log: "info".to_string(),
             worldid_app_id: "".to_string(),
             zkml_vks: HashMap::new(),
+            bitvm_groth16_trusted_registry: None,
             admin_api_token: None,
             admin_public_keys: vec![],
             otel_exporter_otlp_endpoint: None,
@@ -256,6 +351,21 @@ impl Config {
             }
         }
 
+        let bitvm_groth16_trusted_registry = match env::var(ENV_BITVM_GROTH16_TRUSTED_REGISTRY) {
+            Ok(raw) => {
+                let parsed: BitvmGroth16TrustedRegistryConfig = serde_json::from_str(&raw)
+                    .context("Failed to parse NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON")?;
+                parsed
+                    .build_registry()
+                    .context("Invalid NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON")?;
+                Some(parsed)
+            }
+            Err(env::VarError::NotPresent) => None,
+            Err(env::VarError::NotUnicode(_)) => {
+                bail!("NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON must be valid unicode")
+            }
+        };
+
         Ok(Self {
             nostr_secret_key,
             nostr_relays,
@@ -288,6 +398,7 @@ impl Config {
             rust_log,
             worldid_app_id,
             zkml_vks,
+            bitvm_groth16_trusted_registry,
             admin_api_token,
             admin_public_keys,
             otel_exporter_otlp_endpoint,

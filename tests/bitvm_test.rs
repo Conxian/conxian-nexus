@@ -45,7 +45,7 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 }
 
 #[tokio::test]
-async fn test_bitvm2_local_verification_success() {
+async fn test_legacy_bitvm2_route_is_unavailable_without_deserializing_body() {
     let (app, _) = setup_test_app().await;
 
     // Use placeholder hex for proof and VK
@@ -70,12 +70,14 @@ async fn test_bitvm2_local_verification_success() {
         .await
         .unwrap();
 
-    // It should be INTERNAL_SERVER_ERROR because "00" is not a valid Groth16 proof
-    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let res: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(res["error"]["code"], "legacy_bitvm_route_deprecated");
 }
 
 #[tokio::test]
-async fn test_bitvm2_local_verification_invalid_format() {
+async fn test_legacy_bitvm2_route_rejects_even_formerly_success_shaped_payloads() {
     let (app, _) = setup_test_app().await;
 
     let payload = json!({
@@ -99,12 +101,8 @@ async fn test_bitvm2_local_verification_invalid_format() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let res: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(res["valid"], false);
-    assert!(res["message"]
-        .as_str()
-        .unwrap()
-        .contains("Invalid prev_state_root"));
+    assert_eq!(res["error"]["code"], "legacy_bitvm_route_deprecated");
 }

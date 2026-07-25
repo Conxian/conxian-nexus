@@ -1,6 +1,6 @@
 # BitVM Groth16 state-transition contract
 
-Status: **phase-1 verifier boundary; not production-ready**
+Status: **phase-2 runtime/API/audit boundary; production height source pending**
 
 This document defines the Nexus profile layered on Gateway's Groth16 schema
 v1. The implementation is `src/executor/bitvm_groth16.rs`. It is deliberately
@@ -68,6 +68,12 @@ bytes. Nexus owns a trusted startup/config registry keyed by:
 (schema_version, curve, circuit_id, verification_key_id)
 ```
 
+The optional `NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON` environment value is
+a strict JSON object with `expected_bitcoin_network` and a nonempty `records`
+array. Each record contains schema version, curve, circuit ID, lowercase VK ID,
+public-input count, `nexus-state-transition-v1` layout, enabled flag, and the
+base64 canonical Arkworks VK bytes. Unknown fields fail startup.
+
 Each entry records the exact public-input count, the Nexus profile-v1 layout,
 and an enabled flag. Registration:
 
@@ -79,7 +85,48 @@ and an enabled flag. Registration:
 4. caches the parsed/prepared key.
 
 Verification rechecks the stored byte digest and rejects disabled, missing, or
-mismatched schema/curve/circuit associations before pairings.
+mismatched schema/curve/circuit associations before pairings. A VK ID may map
+to exactly one schema/curve/circuit/layout/enablement association; conflicting
+duplicates fail closed. Missing configuration never loads a fixture key and
+leaves the canonical verifier typed unavailable.
+
+## Runtime service and audit
+
+`src/executor/canonical_bitvm.rs` composes the pure verifier with:
+
+- one configured Bitcoin network;
+- an injectable trusted current-height provider; and
+- an async immutable receipt store.
+
+The operation order is network check, trusted-height lookup, cryptographic
+verification, receipt derivation, immutable persistence, then success. Audit
+write/read failures prevent success. Receipt IDs are domain-separated hashes of
+the statement hash and canonical proof digest, so exact retries are idempotent
+while a different proof for the same statement can produce a distinct record.
+
+Canonical receipts are stored in `canonical_bitvm_receipts`, not the legacy
+table containing synthetic confidence/step metadata. The record includes the
+profile identifiers, VK ID, statement/proof hashes, roots, witness commitment,
+Bitcoin context, backend identity/version, and verification timestamp.
+
+## HTTP API
+
+`POST /v1/bitvm2/verify-state-transition` accepts only named previous/next
+roots and the exact Gateway envelope. The route has a 16 KiB body limit and the
+outer request rejects unknown fields. Raw VKs and witness data are forbidden.
+Success exposes only immutable receipt/profile identifiers and `verified`
+status. The stable error policy is:
+
+- `400`: malformed payload or encoding;
+- `409`: immutable audit conflict;
+- `413`: body too large;
+- `422`: invalid statement/context/key/proof;
+- `501`: canonical registry absent;
+- `503`: trusted height or audit unavailable; and
+- `500`: unexpected verifier integrity/backend failure.
+
+The legacy `POST /v1/bitvm2/verify-state-root` route always returns typed `501`
+and never deserializes or invokes the removed caller-keyed BLS verifier.
 
 ## Ownership
 
@@ -89,8 +136,9 @@ mismatched schema/curve/circuit associations before pairings.
   backend, trusted key registry, key lifecycle, audit persistence, and API
   migration.
 - **Core** owns shared types and invariants. The currently pinned Core helper
-  is not the canonical implementation for this path and must not be used to
-  verify this profile. This phase does not change the Core pin.
+  remains non-canonical for this path and is not used by the service or API.
+  The Core revision stays pinned in this phase because no approved shared type
+  replacement is available.
 
 ## Production-readiness gate
 
@@ -104,10 +152,14 @@ and approved:
 1. a production circuit that enforces the state-transition and witness
    commitment semantics;
 2. reproducible circuit/VK artifacts and ceremony/provenance evidence;
-3. explicit trusted-registry configuration and key-rotation operations;
-4. API migration away from caller-supplied VK bytes and the legacy BLS route;
-5. fail-closed audit persistence and bounded observability; and
-6. cross-repository Gateway/Nexus conformance vectors.
+3. reviewed key-rotation and operational procedures for the strict registry;
+4. an approved trusted Bitcoin-height source wired into production;
+5. bounded production observability for registry/height/audit failures; and
+6. a shared versioned Gateway/Nexus conformance fixture.
 
 Until that gate is complete, no registered fixture key should be treated as a
 production authorization primitive.
+
+The deterministic equality circuit used by tests is fixture-only. A shared
+cross-repository JSON proof/VK vector remains follow-up work; it was not added
+here to avoid treating a large generated fixture as production configuration.

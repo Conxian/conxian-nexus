@@ -1,6 +1,7 @@
 use crate::api::analytics::analytics_routes;
 use crate::api::billing::billing_routes;
 use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::canonical_bitvm::{canonical_bitvm_routes, legacy_bitvm_unavailable};
 use crate::api::dlc::dlc_routes;
 use crate::api::erp::erp_routes;
 use crate::api::identity::identity_routes;
@@ -216,7 +217,12 @@ pub fn app_router(
 }
 
 pub fn bitvm_routes() -> Router<AppState> {
-    Router::new().route("/verify-state-root", post(verify_bitvm_transition))
+    Router::new()
+        .route(
+            "/verify-state-root",
+            post(|| async { legacy_bitvm_unavailable() }),
+        )
+        .merge(canonical_bitvm_routes())
 }
 
 pub fn evm_routes() -> Router<AppState> {
@@ -248,25 +254,6 @@ async fn get_rgb_contract(
         Ok(Some(metadata)) => (StatusCode::OK, Json(metadata)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Contract not found").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    }
-}
-
-async fn verify_bitvm_transition(
-    State(state): State<AppState>,
-    Json(payload): Json<crate::executor::bitvm::BitVMTransition>,
-) -> impl IntoResponse {
-    match state
-        .executor
-        .bitvm_adapter
-        .verify_transition(&payload)
-        .await
-    {
-        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
     }
 }
 

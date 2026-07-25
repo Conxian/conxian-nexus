@@ -43,6 +43,12 @@ impl Groth16Curve {
             Self::Bn254 => 1,
         }
     }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Bn254 => "bn254",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -91,7 +97,7 @@ pub enum BitcoinNetwork {
 }
 
 impl BitcoinNetwork {
-    fn parse(value: &str) -> Result<Self, CanonicalGroth16Error> {
+    pub fn parse(value: &str) -> Result<Self, CanonicalGroth16Error> {
         match value {
             "mainnet" => Ok(Self::Mainnet),
             "testnet" => Ok(Self::Testnet),
@@ -109,6 +115,15 @@ impl BitcoinNetwork {
             Self::Testnet => 2,
             Self::Signet => 3,
             Self::Regtest => 4,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mainnet => "mainnet",
+            Self::Testnet => "testnet",
+            Self::Signet => "signet",
+            Self::Regtest => "regtest",
         }
     }
 }
@@ -226,11 +241,15 @@ pub fn parse_gateway_envelope_json(
         .iter()
         .map(|value| decode_fixed_hex(value).and_then(FieldElement::from_bytes))
         .collect::<Result<Vec<_>, _>>()?;
-    let proof = decode_hex(&raw.proof, "proof")?;
-    if proof.len() != GROTH16_COMPRESSED_PROOF_BYTES {
+    if raw.proof.len() != GROTH16_COMPRESSED_PROOF_BYTES * 2 {
         return Err(CanonicalGroth16Error::InvalidProofEncoding(format!(
-            "proof must be exactly {GROTH16_COMPRESSED_PROOF_BYTES} bytes"
+            "proof must be exactly {} hexadecimal characters",
+            GROTH16_COMPRESSED_PROOF_BYTES * 2
         )));
+    }
+    let proof = decode_hex(&raw.proof, "proof")?;
+    if proof.iter().all(|byte| *byte == 0) {
+        return Err(CanonicalGroth16Error::AllZeroProof);
     }
     Ok(GatewayGroth16Envelope {
         schema_version: raw.schema_version,
@@ -331,8 +350,20 @@ impl TrustedVerificationKeyRegistry {
             circuit_id: config.circuit_id,
             verification_key_id: config.verification_key_id,
         };
-        if self.entries.contains_key(&key) {
-            return Err(CanonicalGroth16Error::DuplicateVerificationKey);
+        if let Some(existing) = self
+            .entries
+            .values()
+            .find(|entry| entry.key.verification_key_id == config.verification_key_id)
+        {
+            let same_association = existing.key == key
+                && existing.public_input_count == config.public_input_count
+                && existing.public_input_layout == config.public_input_layout
+                && existing.enabled == config.enabled;
+            return Err(if same_association {
+                CanonicalGroth16Error::DuplicateVerificationKey
+            } else {
+                CanonicalGroth16Error::ConflictingVerificationKeyAssociation
+            });
         }
         let entry = TrustedVerificationKey {
             key: key.clone(),
@@ -405,6 +436,9 @@ impl CanonicalStateTransitionVerifier {
         envelope: &GatewayGroth16Envelope,
         current_block_height: u64,
     ) -> Result<VerificationReceipt, CanonicalGroth16Error> {
+        if current_block_height == 0 {
+            return Err(CanonicalGroth16Error::InvalidCurrentBlockHeight);
+        }
         if envelope.schema_version != GROTH16_SCHEMA_VERSION {
             return Err(CanonicalGroth16Error::UnsupportedSchemaVersion(
                 envelope.schema_version,
@@ -424,6 +458,14 @@ impl CanonicalStateTransitionVerifier {
         envelope.block_context.validate_at(current_block_height)?;
         if envelope.witness_commitment == [0; 32] {
             return Err(CanonicalGroth16Error::InvalidWitnessCommitment);
+        }
+        if envelope.proof.len() != GROTH16_COMPRESSED_PROOF_BYTES {
+            return Err(CanonicalGroth16Error::InvalidProofEncoding(format!(
+                "proof must be exactly {GROTH16_COMPRESSED_PROOF_BYTES} bytes"
+            )));
+        }
+        if envelope.proof.iter().all(|byte| *byte == 0) {
+            return Err(CanonicalGroth16Error::AllZeroProof);
         }
         if envelope.public_inputs.len() != NEXUS_STATE_TRANSITION_PUBLIC_INPUTS {
             return Err(CanonicalGroth16Error::PublicInputCount {
@@ -679,6 +721,12 @@ pub enum CanonicalGroth16Error {
     RegistryIntegrityMismatch,
     #[error("duplicate trusted verification-key entry")]
     DuplicateVerificationKey,
+    #[error("verification key id has a conflicting trusted association")]
+    ConflictingVerificationKeyAssociation,
+    #[error("trusted current Bitcoin height must be non-zero")]
+    InvalidCurrentBlockHeight,
+    #[error("all-zero Groth16 proof is invalid")]
+    AllZeroProof,
     #[error("invalid proof encoding: {0}")]
     InvalidProofEncoding(String),
     #[error("Groth16 pairing verification failed: {0}")]
