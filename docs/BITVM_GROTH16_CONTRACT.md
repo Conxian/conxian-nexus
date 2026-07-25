@@ -1,11 +1,13 @@
 # BitVM Groth16 state-transition contract
 
-Status: **phase-2 runtime/API/audit boundary; production height source pending**
+Status: **phase-2 runtime/API/audit boundary; production height source and approved circuit/VK pending**
 
 This document defines the Nexus profile layered on Gateway's Groth16 schema
-v1. The implementation is `src/executor/bitvm_groth16.rs`. It is deliberately
-separate from the legacy BLS12-381 route in `src/executor/bitvm.rs`; that route
-is not canonical for cross-repository verification.
+v1. The implementation is `src/executor/bitvm_groth16.rs`, with runtime
+composition in `src/executor/canonical_bitvm.rs`. The former caller-keyed
+BLS12-381 implementation in `src/executor/bitvm.rs` was removed. Its legacy
+HTTP route remains only as a typed `501` compatibility surface and performs no
+verification.
 
 ## Shared envelope
 

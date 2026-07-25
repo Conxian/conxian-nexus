@@ -432,8 +432,9 @@ paths:
         envelope. Unknown fields, raw witness material, raw verification keys,
         and request bodies over 16 KiB are rejected. The envelope uses exactly
         12 ordered public inputs for the Nexus profile. Success is returned only
-        after immutable audit persistence. Production remains gated on a
-        reviewed trusted Bitcoin-height provider.
+        after immutable audit persistence. Production remains unavailable
+        pending a reviewed trusted Bitcoin-height provider and approved
+        production circuit/verifying-key artifacts.
       requestBody:
         required: true
         content:
@@ -461,6 +462,14 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '413':
           description: Request body exceeds 16 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: malformed_payload
+                  message: request payload is malformed
         '422':
           description: Invalid statement, context, untrusted key, or proof
           content:
@@ -479,6 +488,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Canonical verifier integrity or backend failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: internal_error
+                  message: canonical verification failed internally
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer

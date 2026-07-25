@@ -342,6 +342,37 @@ fn trailing_proof_and_vk_bytes_are_rejected() {
 }
 
 #[test]
+fn fixed_width_nonzero_malformed_curve_point_encodings_are_rejected() {
+    let fixture = fixture();
+    let backend = verifier(fixture.vk_config.clone());
+
+    // This preserves the exact A || B || C proof width and is nonzero, but the
+    // bytes are not a valid canonical compressed encoding of the BN254 G1/G2
+    // proof points. Checked deserialization must reject it before pairing.
+    let mut malformed_proof = fixture.envelope.clone();
+    malformed_proof.proof = vec![0xff; 128];
+    assert!(matches!(
+        backend.verify(&fixture.transition, &malformed_proof, 840_100),
+        Err(CanonicalGroth16Error::InvalidProofEncoding(message))
+            if message.contains("failed to deserialize proof")
+    ));
+
+    // Keep the valid VK's fixed width while replacing every compressed curve
+    // point encoding with deterministic nonzero malformed bytes. Recompute the
+    // ID so registration reaches strict checked VK deserialization.
+    let mut malformed_vk = fixture.vk_config;
+    malformed_vk.verification_key_bytes.fill(0xff);
+    malformed_vk.verification_key_id =
+        VerificationKeyId::from_key_bytes(&malformed_vk.verification_key_bytes).unwrap();
+    let mut registry = TrustedVerificationKeyRegistry::default();
+    assert!(matches!(
+        registry.register(malformed_vk),
+        Err(CanonicalGroth16Error::InvalidVerificationKey(message))
+            if message.contains("failed to deserialize verification key")
+    ));
+}
+
+#[test]
 fn proof_width_zero_proof_and_zero_current_height_are_rejected_early() {
     let fixture = fixture();
 

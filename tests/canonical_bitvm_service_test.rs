@@ -9,7 +9,7 @@ use ark_relations::{
 use ark_serialize::CanonicalSerialize;
 use ark_std::rand::SeedableRng;
 use axum::{
-    body::Body,
+    body::{to_bytes, Body},
     http::{Request, StatusCode},
 };
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
@@ -409,4 +409,12 @@ async fn canonical_http_success_unavailable_and_body_limit_are_typed() {
         .await
         .unwrap();
     assert_eq!(oversized.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let oversized_body: Value =
+        serde_json::from_slice(&to_bytes(oversized.into_body(), usize::MAX).await.unwrap())
+            .unwrap();
+    assert_eq!(oversized_body["error"]["code"], "malformed_payload");
+    assert_eq!(
+        oversized_body["error"]["message"],
+        "request payload is malformed"
+    );
 }
