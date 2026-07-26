@@ -74,8 +74,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -245,8 +243,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -278,8 +274,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build to generate provenance
       run: cargo build --release
     - name: Attest build
