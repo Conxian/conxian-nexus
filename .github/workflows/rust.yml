@@ -18,12 +18,12 @@ jobs:
     name: Repo Hygiene & Contamination Guard
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -42,25 +42,14 @@ jobs:
         tar -xzf gitleaks.tar.gz
         sudo mv gitleaks /usr/local/bin/
     - name: Secret Scanning (Gitleaks)
-      env:
-        EVENT_NAME: ${{ github.event_name }}
-        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      run: |
-        if [[ "$EVENT_NAME" == "pull_request" ]]; then
-          log_opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
-        else
-          log_opts="$GITHUB_SHA"
-        fi
-
-        gitleaks detect --source . --log-opts="$log_opts" -v
+      run: gitleaks detect --source . -v
 
   build:
     name: Build & Test
     needs: hygiene
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         submodules: recursive
     - name: Install Rust toolchain
@@ -68,6 +57,8 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy
