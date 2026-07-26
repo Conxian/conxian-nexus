@@ -253,6 +253,18 @@ jobs:
       uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build to generate provenance
       run: cargo build --release
+    - name: Install pinned compliance artifact tools
+      run: |
+        cargo install --locked cargo-about --version 0.8.2
+        cargo install --locked cargo-cyclonedx --version 0.5.7
+    - name: Generate release notices and SBOM
+      run: scripts/generate_compliance_artifacts.sh
+    - name: Upload release compliance artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: release-compliance-${{ github.ref_name }}
+        path: target/compliance/
+        if-no-files-found: error
     - name: Attest build
       uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018
       with:
