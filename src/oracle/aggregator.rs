@@ -1,4 +1,4 @@
-use lib_conxian_core::{ContractBridge, Wallet};
+use crate::compat::core_bridge::{ContractBridge, SignedContractCall, Wallet};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -21,10 +21,11 @@ pub struct OracleAggregator {
     client: Client,
     endpoints: Vec<(String, f64)>, // (url, weight)
     contract_principal: String,
+    wallet: Wallet,
 }
 
 impl OracleAggregator {
-    pub fn new(endpoint_url: String, contract_principal: String) -> Self {
+    pub fn new(endpoint_url: String, contract_principal: String, wallet: Wallet) -> Self {
         Self {
             client: Client::new(),
             endpoints: vec![
@@ -36,6 +37,7 @@ impl OracleAggregator {
                 ),
             ],
             contract_principal,
+            wallet,
         }
     }
 
@@ -136,19 +138,60 @@ impl OracleAggregator {
         &self,
         state: PppState,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        let wallet = Wallet::new().map_err(|e| anyhow::anyhow!("Wallet creation failed: {}", e))?;
+        let signed_call = self.sign_state_call(&state)?;
+
+        tracing::info!("Pushing Signed Oracle Call: {:?}", signed_call.payload);
+        Ok(format!("0x{}", signed_call.signature))
+    }
+
+    fn sign_state_call(&self, state: &PppState) -> anyhow::Result<SignedContractCall> {
         let state_json = serde_json::to_string(&state)
             .map_err(|e| anyhow::anyhow!("State serialization failed: {}", e))?;
 
-        let signed_call = ContractBridge::create_signed_call(
-            &wallet,
+        ContractBridge::create_signed_call(
+            &self.wallet,
             &self.contract_principal,
             "update-fx-rates",
             vec![state_json],
         )
-        .map_err(|e| anyhow::anyhow!("Contract call signing failed: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Contract call signing failed: {}", e))
+    }
+}
 
-        tracing::info!("Pushing Signed Oracle Call: {:?}", signed_call.payload);
-        Ok(format!("0x{}", signed_call.signature))
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oracle_state_call_uses_injected_wallet_and_canonical_payload() {
+        let mut private_key = [0_u8; 32];
+        private_key[31] = 1;
+        let wallet = Wallet::from_private_key_bytes(&private_key).expect("fixed test key");
+        let expected_public_key = wallet.public_key();
+        let aggregator = OracleAggregator::new(
+            "https://oracle.example.test/rates".to_string(),
+            "ST000000000000000000002AMW42H.oracle".to_string(),
+            wallet,
+        );
+        let state = PppState {
+            base_currency: "USD".to_string(),
+            rates: HashMap::from([("EUR".to_string(), 0.92)]),
+            ppp_indices: HashMap::from([("EUR".to_string(), 1.04)]),
+            confidence_intervals: HashMap::from([("EUR".to_string(), 0.98)]),
+            timestamp: 1_727_136_000,
+        };
+
+        let signed = aggregator.sign_state_call(&state).expect("signed call");
+        let canonical_payload = serde_json::to_string(&signed.payload).expect("canonical payload");
+
+        assert_eq!(signed.public_key, expected_public_key);
+        assert_eq!(
+            canonical_payload,
+            r#"{"contract_address":"ST000000000000000000002AMW42H","contract_name":"oracle","function_name":"update-fx-rates","arguments":["{\"base_currency\":\"USD\",\"rates\":{\"EUR\":0.92},\"ppp_indices\":{\"EUR\":1.04},\"confidence_intervals\":{\"EUR\":0.98},\"timestamp\":1727136000}"],"sender_address":"751e76e8199196d454941c45d1b3a323f1433bd6"}"#
+        );
+        assert_eq!(
+            signed.signature,
+            "efe99023e6df4dc642067bcc78d0fbb76c21e2d36c9565cfb51b820dc4d4272e0ee726c5498d7e903b5f6ab0fc23bcdccc961aa53a18388a28055749b654d285"
+        );
     }
 }

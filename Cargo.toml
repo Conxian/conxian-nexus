@@ -1,10 +1,6 @@
 [package]
 name = "conxian-nexus"
-
 version = "0.4.22"
-
-license = "BUSL-1.1"
-
 rust-version = "1.82"
 edition = "2021"
 
@@ -30,7 +26,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
 tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 futures-util = "0.3"
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "80976d744da28d8514b68a8d715adc8ae3cd5fc0" }
+ripemd = "0.2"
 prometheus = "0.14"
 lazy_static = "1.4"
 reqwest = { version = "0.13", features = ["json"] }

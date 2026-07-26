@@ -373,17 +373,9 @@ impl NexusService for NexusGrpcService {
         &self,
         _request: Request<ServicesRequest>,
     ) -> Result<Response<ServicesResponse>, Status> {
-        let multi_status = crate::api::services::get_all_services_status();
-        let services = multi_status
-            .services
-            .into_iter()
-            .map(|s| ServiceStatus {
-                service_name: s.service_name,
-                status: s.status,
-                version: s.version,
-            })
-            .collect();
-        Ok(Response::new(ServicesResponse { services }))
+        Ok(Response::new(ServicesResponse {
+            services: crate::api::services::get_grpc_services_status(),
+        }))
     }
 }
 

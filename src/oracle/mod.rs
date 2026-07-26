@@ -1,3 +1,4 @@
+use crate::compat::core_bridge::Wallet;
 use crate::oracle::aggregator::{OracleAggregator, PppState};
 use crate::storage::Storage;
 use std::sync::Arc;
@@ -11,10 +12,15 @@ pub struct OracleService {
 }
 
 impl OracleService {
-    pub fn new(storage: Arc<Storage>, endpoint_url: String, contract_principal: String) -> Self {
+    pub fn new(
+        storage: Arc<Storage>,
+        endpoint_url: String,
+        contract_principal: String,
+        wallet: Wallet,
+    ) -> Self {
         Self {
             storage,
-            aggregator: OracleAggregator::new(endpoint_url, contract_principal),
+            aggregator: OracleAggregator::new(endpoint_url, contract_principal, wallet),
         }
     }
 
