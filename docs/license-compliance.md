@@ -49,8 +49,10 @@ script refuses to use it unless the resolved version is exactly `0.8.15`. There
 is no repository-wide BSL allowlist.
 
 The pinned `lib-conxian-core` revision contains a complete MIT license file,
-which cargo-deny detects, but its manifest lacks `license` metadata. Its owners
-should add accurate metadata upstream; this repository does not rewrite it.
+which cargo-deny detects, but its manifest lacks `license` metadata. Current
+upstream `main` declares `MIT OR Apache-2.0`; Nexus does not rewrite that
+metadata, and updating the pin is a separate reviewed dependency/candidate
+decision.
 
 No FIBO package is present in the resolved Cargo dependency graph. FIBO is
 unrelated to this repository's current license failure.
