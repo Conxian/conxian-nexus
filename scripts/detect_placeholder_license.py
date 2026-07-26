@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Detect the known incomplete repository license without inventing legal terms."""
+"""Detect the known incomplete repository license without assessing validity."""
 
 from pathlib import Path
 import sys
@@ -25,4 +25,7 @@ if any(marker not in license_text for marker in required_markers) or all(
     )
     sys.exit(1)
 
-print("Repository license file no longer matches the known incomplete placeholder; obtain legal review.")
+print(
+    "Known six-line BUSL 1.1 placeholder not detected. This check does not assess "
+    "license validity, completeness, ownership, or Cargo metadata; obtain legal review."
+)

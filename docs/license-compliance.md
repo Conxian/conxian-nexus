@@ -11,16 +11,26 @@ terms for the Conxian Nexus package itself.
 - `scripts/check_dependency_licenses.py` fails on any dependency license error.
   It tolerates only cargo-deny's exact error for the unlicensed workspace root,
   which remains a visible legal blocker rather than an approval.
-- `scripts/check_dependency_declarations.py` rejects wildcard versions and git
-  dependencies without full revision pins. This handles cargo-deny's treatment
-  of the existing revision-pinned git dependency as a wildcard.
+- `deny.toml` requires native Cargo git sources to use `rev`, and
+  `scripts/check_dependency_declarations.py` additionally rejects wildcard
+  versions and requires a full 40-character commit ID. The Python check is
+  retained because Cargo and cargo-deny accept abbreviated revision values.
 - `scripts/generate_compliance_artifacts.sh` generates a third-party license
   report and a normalized CycloneDX 1.5 SBOM under `target/compliance/`.
+- `scripts/run_license_compliance.sh` is the shared policy/artifact entry point
+  used by pull request, main, tag, and release workflows so controls cannot
+  drift between publication paths.
 - `.github/workflows/license-governance.yml` verifies policy and uploads those
-  artifacts for review. Tagged releases generate the same artifacts.
+  artifacts for review. The release workflow has a dedicated compliance gate;
+  release creation, crates.io publication, and attestation all depend on it.
 
 Tool versions are pinned in workflows. Generated artifacts are not committed;
 they are derived from `Cargo.lock` and uploaded by CI/release jobs.
+SBOM normalization removes generator timestamps/serials and recursively maps
+absolute workspace paths in component references, PURLs, and dependency links
+to `file:///workspace`. Deterministic hash claims assume the same `Cargo.lock`,
+manifests, feature set, pinned generator versions, Rust target, and toolchain;
+target-dependent dependency metadata is intentionally outside that scope.
 The notice report intentionally omits the first-party workspace root because
 its legal terms are unresolved; the script verifies that the known git and
 Boost-licensed transitive dependencies are present in the generated report.
@@ -53,10 +63,12 @@ License, and any Additional Use Grant. Only after that review should an owner
 authorize Cargo `license` or `license-file` metadata. Repository automation must
 not choose those legal terms.
 
-`scripts/check_repository_license.py` detects the placeholder and intentionally
-fails with that remediation. It is staged for owner verification but is not in
-CI while the known placeholder remains, avoiding an unrelated permanently-red
-main branch.
+`scripts/detect_placeholder_license.py` only detects the known placeholder and
+intentionally fails with that remediation. A passing result means only that the
+known six-line placeholder was not detected; it is not a legal validity,
+completeness, ownership, or Cargo metadata assessment. It is staged for owner
+verification but is not in CI while the known placeholder remains, avoiding an
+unrelated permanently-red main branch.
 
 GitHub ruleset `19543903` and its external `license_compliance_scanning` policy
 remain an enterprise/repository administrator responsibility. These repository
@@ -71,5 +83,6 @@ python3 scripts/check_dependency_licenses.py
 python3 scripts/check_dependency_declarations.py
 cargo deny --locked check bans sources --hide-inclusion-graph
 scripts/generate_compliance_artifacts.sh
-python3 scripts/check_repository_license.py # expected to fail until owner action
+python3 scripts/test_normalize_sbom.py
+python3 scripts/detect_placeholder_license.py # expected to fail until owner action
 ```

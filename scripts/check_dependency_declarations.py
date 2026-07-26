@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject wildcard versions and unpinned git dependencies in Cargo.toml."""
+"""Reject wildcard versions and require exact full-length git revisions."""
 
 import re
 from pathlib import Path
@@ -21,6 +21,9 @@ def inspect_table(table, location):
             continue
         if spec.get("version", "").strip() == "*":
             errors.append(f"{location}.{name}: wildcard version")
+        # cargo-deny's required-git-spec="rev" rejects branch/tag-only git
+        # dependencies. Keep this stricter check because Cargo accepts short
+        # revisions, while policy requires an auditable full commit object ID.
         if "git" in spec and not re.fullmatch(r"[0-9a-fA-F]{40}", str(spec.get("rev", ""))):
             errors.append(f"{location}.{name}: git dependency must use a full 40-character rev")
 
