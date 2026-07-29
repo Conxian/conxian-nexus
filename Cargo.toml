@@ -26,7 +26,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
 tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 futures-util = "0.3"
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "3b091d2700d840514427e4190c40d631b6d8132c" }
+lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "80976d744da28d8514b68a8d715adc8ae3cd5fc0" }
 prometheus = "0.14"
 lazy_static = "1.4"
 reqwest = { version = "0.13", features = ["json"] }
