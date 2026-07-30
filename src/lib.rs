@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod executor;
+pub mod metrics;
 pub mod oracle;
 pub mod orchestrator;
 pub mod safety;
