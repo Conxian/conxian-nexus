@@ -533,3 +533,34 @@ gh release list
 
 ---
 *See Immutable Session Log above for complete record of this sprint's actions, findings, and decisions.*
+
+---
+
+## Session 2026-07-25: Issue #163 BIP-110 Observation Phase 1
+
+### Actions Taken
+
+1. Recovered the reviewed Phase 1 design from PR #166 onto a fresh branch from
+   current `main` and adapted it without upgrading `lib-conxian-core`.
+2. Added a metadata-only, fail-safe BIP-110 observed-size assessor for five
+   proposal boundaries, including explicit typed exemptions and unknown input
+   handling.
+3. Added a private fixed-cardinality Prometheus registry and an aggregate-only
+   `GET /metrics` route that does not expose default or process metrics.
+4. Documented proposal status, performance and verification boundaries,
+   metrics access control, and the Phase 2 verification/benchmark plan.
+5. Updated Bitcoin coverage scopes using the current source line ranges.
+
+### Verification
+
+- `cargo +1.94.0 fmt --check`: passed
+- Focused BIP-110, metrics, and REST tests: passed
+- `cargo +1.94.0 test --lib --no-fail-fast`: 97 passed, 0 failed
+- `python3 scripts/verify_contamination_guard.py`: passed
+- `git diff --check`: passed
+
+### Deferred Boundary
+
+Phase 2 remains responsible for Bitcoin headers and proof-of-work, Merkle
+inclusion, compact filters, reorg handling, and proposal activation,
+expiration, and UTXO grandfathering.
