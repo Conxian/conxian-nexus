@@ -21,6 +21,7 @@ sha2 = "0.11"
 hmac = "0.13"
 rand = "0.10"
 hex = "0.4"
+lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "6187bf6227f302988cc69962ed8b12ea6758f2cd" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
