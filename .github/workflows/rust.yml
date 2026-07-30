@@ -73,8 +73,15 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
+    - name: Cache Cargo downloads
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy
