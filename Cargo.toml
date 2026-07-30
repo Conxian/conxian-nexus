@@ -3,6 +3,7 @@ name = "conxian-nexus"
 version = "0.4.22"
 rust-version = "1.82"
 edition = "2021"
+repository = "https://github.com/Conxian/conxian-nexus"
 
 [dependencies]
 tokio = { version = "1.43", features = ["full"] }

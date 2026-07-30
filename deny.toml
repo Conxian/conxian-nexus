@@ -1,0 +1,45 @@
+[graph]
+all-features = true
+
+[licenses]
+# Repository-wide approvals are limited to permissive SPDX licenses already
+# present in the resolved dependency graph. Copyleft, BUSL, and unknown terms
+# are intentionally absent.
+include-dev = true
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.93
+
+# BSL-1.0 is the SPDX identifier for the Boost Software License, not the
+# Business Source License (BUSL-1.1). Keep this exception package/version
+# scoped rather than approving every package that declares BSL-1.0.
+exceptions = [
+    { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.15" },
+]
+
+[bans]
+# Version consolidation is maintained separately; it is not a license-policy
+# failure. cargo-deny treats a revision-pinned git dependency as a wildcard;
+# scripts/check_dependency_declarations.py enforces versions and full git revs.
+multiple-versions = "allow"
+wildcards = "allow"
+highlight = "simplest-path"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+required-git-spec = "rev"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/Conxian/lib-conxian-core"]

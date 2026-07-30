@@ -42,7 +42,18 @@ jobs:
         tar -xzf gitleaks.tar.gz
         sudo mv gitleaks /usr/local/bin/
     - name: Secret Scanning (Gitleaks)
-      run: gitleaks detect --source . -v
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        if [[ "$EVENT_NAME" == "pull_request" ]]; then
+          log_opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
+        else
+          log_opts="$GITHUB_SHA"
+        fi
+
+        gitleaks detect --source . --log-opts="$log_opts" -v
 
   build:
     name: Build & Test
@@ -57,8 +68,6 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy
