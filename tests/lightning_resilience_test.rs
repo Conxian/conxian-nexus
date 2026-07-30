@@ -1,7 +1,7 @@
 use chrono::Utc;
 use conxian_nexus::executor::lightning::{
-    LightningFailureType, LightningPaymentStatus, LightningResilienceAdapter, PaymentIntent,
-    PaymentEvent,
+    LightningFailureType, LightningPaymentStatus, LightningResilienceAdapter, PaymentEvent,
+    PaymentIntent,
 };
 
 #[test]
