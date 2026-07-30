@@ -1,6 +1,10 @@
 [package]
 name = "conxian-nexus"
+
 version = "0.4.22"
+
+license = "BUSL-1.1"
+
 rust-version = "1.82"
 edition = "2021"
 repository = "https://github.com/Conxian/conxian-nexus"
