@@ -12,10 +12,7 @@ fn test_failure_type_display() {
         LightningFailureType::Indeterminate.to_string(),
         "indeterminate"
     );
-    assert_eq!(
-        LightningFailureType::MppPartial.to_string(),
-        "mpp_partial"
-    );
+    assert_eq!(LightningFailureType::MppPartial.to_string(), "mpp_partial");
 }
 
 #[test]
