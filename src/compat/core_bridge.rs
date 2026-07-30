@@ -4,6 +4,30 @@
 //! HASH160 public-key derivation, and signed Clarity-call construction. It is
 //! not a BitVM verifier and must not grow protocol, persistence, or networking
 //! responsibilities.
+//!
+//! # Core v0.3.0 canonical types
+//!
+//! Use `lib_conxian_core::control_model` for canonical chain identity, trust
+//! tier, bridge system, and verification types. The `core_types` sub-module
+//! re-exports the most commonly needed items for Nexus observation boundaries.
+
+/// Re-exports of canonical Core v0.3.0 types for Nexus observation and
+/// verification boundaries. These are the single source of truth for chain
+/// identity across the Conxian ecosystem.
+pub mod core_types {
+    pub use lib_conxian_core::control_model::{
+        chain_family_for, Chain, ChainFamily, BridgeSystem, FinalityClass, TrustTier,
+        VerificationClass, VerificationStatus,
+    };
+    pub use lib_conxian_core::verifier::{
+        ChainId, ProtocolVerifier, ProtocolVerifierBackend, ProtocolVerifierError,
+        ProofVerificationRequest, ProofVerificationResult, TransactionFinalityStatus,
+        VerifiedBlockReference, VerifierCapabilities, VerifierCapability,
+    };
+    pub use lib_conxian_core::signing::{
+        SigningTarget, SigningAlgorithm, SignerCapabilities,
+    };
+}
 
 use anyhow::Context;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
