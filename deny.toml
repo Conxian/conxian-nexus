@@ -1,0 +1,29 @@
+# cargo-deny configuration for Conxian Nexus
+# SPDX-License-Identifier: BUSL-1.1
+
+[licenses]
+# The nexus is BUSL-1.1 licensed. Allow only compatible licenses for dependencies.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSL-1.0",
+    "ISC",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Zlib",
+    "OpenSSL",
+]
+# BUSL-1.1 is the project license
+copyleft = "deny"
+default = "deny"
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-git = [
+    "https://github.com/Conxian/lib-conxian-core",
+]
