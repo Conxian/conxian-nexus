@@ -152,3 +152,15 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 
 ---
 © 2026 Conxian Foundation. Code is Law.
+
+## Session State (2026-07-30)
+
+### v0.4.22 — lib-conxian-core v0.3.0 Dependency
+- PR [#189](https://github.com/Conxian/conxian-nexus/pull/189) merged to main
+- `Cargo.toml`: added `lib-conxian-core` git dependency
+- `src/compat/core_bridge.rs`: new `core_types` sub-module re-exporting:
+  - Chain, ChainFamily, BridgeSystem, TrustTier, VerificationClass, FinalityClass
+  - ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus
+  - SigningTarget, SigningAlgorithm, SignerCapabilities
+- Existing tag `v0.4.22` preserved (version unchanged)
+- Dependency review config added to allow Core license
