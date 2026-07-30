@@ -16,16 +16,14 @@
 /// identity across the Conxian ecosystem.
 pub mod core_types {
     pub use lib_conxian_core::control_model::{
-        chain_family_for, Chain, ChainFamily, BridgeSystem, FinalityClass, TrustTier,
+        chain_family_for, BridgeSystem, Chain, ChainFamily, FinalityClass, TrustTier,
         VerificationClass, VerificationStatus,
     };
+    pub use lib_conxian_core::signing::{SignerCapabilities, SigningAlgorithm, SigningTarget};
     pub use lib_conxian_core::verifier::{
-        ChainId, ProtocolVerifier, ProtocolVerifierBackend, ProtocolVerifierError,
-        ProofVerificationRequest, ProofVerificationResult, TransactionFinalityStatus,
+        ChainId, ProofVerificationRequest, ProofVerificationResult, ProtocolVerifier,
+        ProtocolVerifierBackend, ProtocolVerifierError, TransactionFinalityStatus,
         VerifiedBlockReference, VerifierCapabilities, VerifierCapability,
-    };
-    pub use lib_conxian_core::signing::{
-        SigningTarget, SigningAlgorithm, SignerCapabilities,
     };
 }
 
