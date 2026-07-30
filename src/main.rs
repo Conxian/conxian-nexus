@@ -1,10 +1,19 @@
 use anyhow::Context;
 use conxian_nexus::api;
 use conxian_nexus::api::billing::nostr::NostrTelemetry;
+use conxian_nexus::compat::core_bridge::{
+    Wallet, ENV_CONXIAN_PRIVATE_KEY_HEX, ENV_NEXUS_PRIVATE_KEY,
+};
 use conxian_nexus::config::{
     Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
 };
 use conxian_nexus::executor::NexusExecutor;
+use conxian_nexus::executor::{
+    bitvm_groth16::CanonicalStateTransitionVerifier,
+    canonical_bitvm::{
+        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, UnavailableBitcoinHeightProvider,
+    },
+};
 use conxian_nexus::oracle::OracleService;
 use conxian_nexus::orchestrator::AutonomousOrchestrator;
 use conxian_nexus::safety::NexusSafety;
@@ -13,7 +22,6 @@ use conxian_nexus::storage::kwil::{KwilAdapter, KwilConfig};
 use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::NexusSync;
-use lib_conxian_core::Wallet;
 use opentelemetry::{global, trace::TracerProvider};
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
@@ -24,6 +32,24 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::time::{self, Duration};
 use tracing_subscriber::{prelude::*, EnvFilter};
+
+fn load_oracle_wallet_with<F>(
+    oracle_enabled: bool,
+    load_wallet: F,
+) -> anyhow::Result<Option<Wallet>>
+where
+    F: FnOnce() -> anyhow::Result<Wallet>,
+{
+    if !oracle_enabled {
+        return Ok(None);
+    }
+
+    load_wallet().map(Some).with_context(|| {
+        format!(
+            "{ENV_ORACLE_ENABLED}=1 requires {ENV_CONXIAN_PRIVATE_KEY_HEX} or legacy {ENV_NEXUS_PRIVATE_KEY}"
+        )
+    })
+}
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -88,11 +114,28 @@ async fn main() -> anyhow::Result<()> {
     } else {
         conxian_nexus::executor::rgb::RGBRolloutMode::Disabled
     };
-    let executor = Arc::new(NexusExecutor::new(
-        storage.clone(),
-        rgb_mode,
-        std::collections::HashSet::new(),
-    ));
+    let mut executor =
+        NexusExecutor::new(storage.clone(), rgb_mode, std::collections::HashSet::new());
+    if let Some(registry_config) = &config.bitvm_groth16_trusted_registry {
+        let (expected_network, registry) = registry_config
+            .build_registry()
+            .context("Failed to construct canonical BitVM trusted registry")?;
+        let service = CanonicalBitvmService::new(
+            Arc::new(CanonicalStateTransitionVerifier::new(Arc::new(registry))),
+            expected_network,
+            Arc::new(UnavailableBitcoinHeightProvider),
+            Arc::new(PostgresCanonicalBitvmReceiptStore::new(storage.clone())),
+        );
+        executor = executor.with_canonical_bitvm_service(Arc::new(service));
+        tracing::warn!(
+            "Canonical BitVM registry loaded, but verification remains unavailable until a reviewed trusted Bitcoin-height provider is wired"
+        );
+    } else {
+        tracing::info!(
+            "Canonical BitVM verification unavailable: NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON is not configured"
+        );
+    }
+    let executor = Arc::new(executor);
 
     // Initialize Tableland Adapter [CON-69]
     let tableland = Arc::new(TablelandAdapter::new(
@@ -146,11 +189,14 @@ async fn main() -> anyhow::Result<()> {
         let contract_principal = config.oracle_contract_principal.clone().with_context(|| {
             format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}")
         })?;
+        let wallet = load_oracle_wallet_with(true, Wallet::new)?
+            .expect("enabled Oracle always returns an injected wallet");
 
         Some(Arc::new(OracleService::new(
             storage.clone(),
             endpoint_url,
             contract_principal,
+            wallet,
         )))
     } else {
         None
@@ -358,4 +404,50 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixed_wallet() -> Wallet {
+        let mut key = [0_u8; 32];
+        key[31] = 1;
+        Wallet::from_private_key_bytes(&key).expect("fixed test key")
+    }
+
+    #[test]
+    fn disabled_oracle_does_not_load_signer() {
+        let wallet = load_oracle_wallet_with(false, || panic!("signer loader must not run"))
+            .expect("disabled Oracle");
+        assert!(wallet.is_none());
+    }
+
+    #[test]
+    fn enabled_oracle_accepts_valid_signer() {
+        let wallet = load_oracle_wallet_with(true, || Ok(fixed_wallet()))
+            .expect("enabled Oracle signer")
+            .expect("wallet");
+        assert_eq!(
+            wallet.public_key(),
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_missing_signer() {
+        let error = load_oracle_wallet_with(true, || anyhow::bail!("missing private key"))
+            .err()
+            .expect("missing signer rejected");
+        assert!(error.to_string().contains("CONXIAN_PRIVATE_KEY_HEX"));
+        assert!(error.to_string().contains("NEXUS_PRIVATE_KEY"));
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_invalid_signer() {
+        let error = load_oracle_wallet_with(true, || Wallet::from_private_key_hex("not-hex"))
+            .err()
+            .expect("invalid signer rejected");
+        assert!(error.to_string().contains("CONXIAN_PRIVATE_KEY_HEX"));
+    }
 }

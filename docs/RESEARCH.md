@@ -4,7 +4,7 @@
 
 ### 1.1 Bitcoin & BitVM2
 - **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s.
-- **Status**: **Phase 1 Complete**. Integrated `ark-groth16` for real cryptographic verification in `BitVMAdapter`.
+- **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. The legacy `BitVMAdapter` is no longer active. Production verification remains unavailable pending an approved trusted Bitcoin-height source and reviewed production circuit/verifying-key artifacts.
 
 ### 1.2 Cosmos & IBC
 - **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.

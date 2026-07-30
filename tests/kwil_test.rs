@@ -1,11 +1,17 @@
+use conxian_nexus::compat::core_bridge::Wallet;
 use conxian_nexus::config::Config;
 use conxian_nexus::storage::kwil::{
     KwilAdapter, KwilBlockCommitment, KwilConfig, KwilMmrNodeCommitment,
     KwilSettlementLogCommitment, KwilSettlementProposalCommitment, KwilStateRootCommitment,
 };
 use conxian_nexus::storage::Storage;
-use lib_conxian_core::Wallet;
 use std::sync::Arc;
+
+fn test_wallet() -> Arc<Wallet> {
+    let mut private_key = [0_u8; 32];
+    private_key[31] = 1;
+    Arc::new(Wallet::from_private_key_bytes(&private_key).expect("fixed test-only private key"))
+}
 
 #[tokio::test]
 async fn test_kwil_block_persistence_pilot_signed() {
@@ -14,7 +20,7 @@ async fn test_kwil_block_persistence_pilot_signed() {
         Ok(s) => Arc::new(s),
         Err(_) => return,
     };
-    let wallet = Arc::new(Wallet::new().unwrap());
+    let wallet = test_wallet();
     let adapter = KwilAdapter::new(
         storage,
         KwilConfig {
@@ -43,7 +49,7 @@ async fn test_kwil_state_root_persistence_pilot_signed() {
         Ok(s) => Arc::new(s),
         Err(_) => return,
     };
-    let wallet = Arc::new(Wallet::new().unwrap());
+    let wallet = test_wallet();
     let adapter = KwilAdapter::new(
         storage,
         KwilConfig {
@@ -69,7 +75,7 @@ async fn test_kwil_mmr_node_persistence_pilot_signed() {
         Ok(s) => Arc::new(s),
         Err(_) => return,
     };
-    let wallet = Arc::new(Wallet::new().unwrap());
+    let wallet = test_wallet();
     let adapter = KwilAdapter::new(
         storage,
         KwilConfig {
@@ -96,7 +102,7 @@ async fn test_kwil_settlement_proposal_persistence_pilot_signed() {
         Ok(s) => Arc::new(s),
         Err(_) => return,
     };
-    let wallet = Arc::new(Wallet::new().unwrap());
+    let wallet = test_wallet();
     let adapter = KwilAdapter::new(
         storage,
         KwilConfig {
@@ -127,7 +133,7 @@ async fn test_kwil_settlement_log_persistence_pilot_signed() {
         Ok(s) => Arc::new(s),
         Err(_) => return,
     };
-    let wallet = Arc::new(Wallet::new().unwrap());
+    let wallet = test_wallet();
     let adapter = KwilAdapter::new(
         storage,
         KwilConfig {

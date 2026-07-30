@@ -75,16 +75,18 @@ pub async fn create_dlc_bond_handler(
             .into_response();
     }
 
-    // 2. Generate DLC Announcement (using lib-conxian-core signature logic)
+    // 2. Generate DLC Announcement using the Nexus-owned compatibility signer.
     let announcement_data = build_announcement_data(&payload);
-    let oracle_announcement =
-        match sign_announcement_with(&announcement_data, lib_conxian_core::sign_transaction) {
-            Ok(sig) => sig,
-            Err(e) => {
-                tracing::error!("Failed to sign DLC announcement: {}", e);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Signing Error").into_response();
-            }
-        };
+    let oracle_announcement = match sign_announcement_with(
+        &announcement_data,
+        crate::compat::core_bridge::sign_transaction,
+    ) {
+        Ok(sig) => sig,
+        Err(e) => {
+            tracing::error!("Failed to sign DLC announcement: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Signing Error").into_response();
+        }
+    };
 
     let dlc_contract_id = format!("dlc_{}", Uuid::new_v4());
 

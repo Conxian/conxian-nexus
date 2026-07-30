@@ -1,10 +1,6 @@
 [package]
 name = "conxian-nexus"
-
 version = "0.4.22"
-
-license = "BUSL-1.1"
-
 rust-version = "1.82"
 edition = "2021"
 
@@ -20,6 +16,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
+base64 = "0.22"
 sha2 = "0.11"
 hmac = "0.13"
 rand = "0.10"
@@ -29,7 +26,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
 tower-http = { version = "0.7", features = ["cors", "trace", "compression-gzip"] }
 futures-util = "0.3"
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "80976d744da28d8514b68a8d715adc8ae3cd5fc0" }
+ripemd = "0.2"
 prometheus = "0.14"
 lazy_static = "1.4"
 reqwest = { version = "0.13", features = ["json"] }
@@ -46,11 +43,12 @@ nostr-sdk = "0.44"
 k256 = { version = "0.14.0", features = ["ecdsa", "sha256"] }
 ark-groth16 = "0.6.0"
 ark-serialize = "0.6.0"
-ark-bls12-381 = "0.6.0"
+ark-bn254 = "0.6.0"
 ark-crypto-primitives = { version = "0.6.0", features = ["snark"] }
 ark-ff = "0.6.0"
 ark-relations = "0.6.0"
 ark-std = "0.6.0"
+thiserror = "2.0"
 # HTTP security headers (built-in with axum/tower-http)
 
 [build-dependencies]

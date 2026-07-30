@@ -18,12 +18,12 @@ jobs:
     name: Repo Hygiene & Contamination Guard
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -42,14 +42,30 @@ jobs:
         tar -xzf gitleaks.tar.gz
         sudo mv gitleaks /usr/local/bin/
     - name: Secret Scanning (Gitleaks)
-      run: gitleaks detect --source . -v
+      env:
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+          if [[ ! "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ || ! "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pull request commit range" >&2
+            exit 1
+          fi
+          if ! git cat-file -e "${PR_BASE_SHA}^{commit}" || ! git cat-file -e "${PR_HEAD_SHA}^{commit}"; then
+            echo "Pull request commit range is unavailable in the checkout" >&2
+            exit 1
+          fi
+          gitleaks detect --source . -v --log-opts="${PR_BASE_SHA}..${PR_HEAD_SHA}"
+        else
+          gitleaks detect --source . -v
+        fi
 
   build:
     name: Build & Test
     needs: hygiene
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         submodules: recursive
     - name: Install Rust toolchain
@@ -57,20 +73,8 @@ jobs:
       with:
         toolchain: stable
         components: clippy, rustfmt
-<<<<<<< HEAD
-    - name: Cache Cargo downloads
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-=======
     - name: Rust Cache
       uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
->>>>>>> db6d2be (chore(gitleaks,deps): restore Cargo.toml arkworks versions and keep gitleaks ignore)
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy

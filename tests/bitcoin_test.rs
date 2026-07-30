@@ -643,31 +643,3 @@ async fn test_rgb_validation_edge_cases() {
         conxian_nexus::executor::rgb::RGBSchema::Unknown
     );
 }
-
-#[tokio::test]
-async fn test_bitvm_validation_edge_cases() {
-    let config = conxian_nexus::config::Config::default_test();
-    let storage = conxian_nexus::storage::Storage::from_config_lazy(&config).unwrap();
-    let adapter = conxian_nexus::executor::bitvm::BitVMAdapter::new(std::sync::Arc::new(storage));
-
-    let mut transition = conxian_nexus::executor::bitvm::BitVMTransition {
-        prev_state_root: "short".to_string(),
-        next_state_root: "0x0000000000000000000000000000000000000000000000000000000000000002"
-            .to_string(),
-        proof_bytes: "00".to_string(),
-        vk_bytes: "00".to_string(),
-        public_inputs: vec![],
-        trace_id: "t1".to_string(),
-    };
-
-    let res = adapter.verify_transition(&transition).await.unwrap();
-    assert!(!res.valid);
-    assert!(res.message.contains("prev_state_root"));
-
-    transition.prev_state_root =
-        "0x0000000000000000000000000000000000000000000000000000000000000001".to_string();
-    transition.next_state_root = "bad".to_string();
-    let res = adapter.verify_transition(&transition).await.unwrap();
-    assert!(!res.valid);
-    assert!(res.message.contains("next_state_root"));
-}
