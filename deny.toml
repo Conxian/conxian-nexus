@@ -23,6 +23,16 @@ exceptions = [
     { allow = ["MPL-2.0"], crate = "webpki-roots@0.22.6" },
 ]
 
+# webpki 0.22.4 uses license files rather than a manifest license expression.
+# The root license is ISC; bundled Chromium test data is BSD-3-Clause.
+[[licenses.clarify]]
+crate = "webpki@0.22.4"
+expression = "ISC AND BSD-3-Clause"
+license-files = [
+    { path = "LICENSE", hash = 0x1c7e6c },
+    { path = "third-party/chromium/LICENSE", hash = 0x9b209a1a },
+]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
