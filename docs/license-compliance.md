@@ -49,9 +49,11 @@ script refuses to use it unless the resolved version is exactly `0.8.18`. There
 is no repository-wide BSL allowlist.
 
 The pinned `lib-conxian-core` revision
-`6187bf6227f302988cc69962ed8b12ea6758f2cd` resolves as version `0.3.0` and
+`fdd73046a97b53b1ede54d342b0439287dd44593` resolves as version `0.3.0` and
 declares `MIT OR Apache-2.0`. Nexus verifies that exact locked source and does
-not rewrite upstream metadata.
+not rewrite upstream metadata. This is the GitHub-verified merge commit from
+Core pull request #237; its removal of the unused legacy BDK dependency closure
+also removes the stale `webpki` and `webpki-roots` policy findings from Nexus.
 
 No FIBO package is present in the resolved Cargo dependency graph. FIBO is
 unrelated to this repository's current license failure.
@@ -64,10 +66,8 @@ licensor identity, publication posture, or related legal metadata.
 
 The current exact graph also exposes license-policy decisions that this
 mechanical remediation does not make: the workspace root is detected as
-`BUSL-1.1`, `hex_lit 0.1.1` declares `MITNFA`, `webpki 0.22.4` is detected from
-a license file below the configured confidence threshold, and
-`webpki-roots 0.22.6` declares `MPL-2.0`. The compliance entry point therefore
-fails closed until authorized policy owners resolve those terms.
+`BUSL-1.1`, and `hex_lit 0.1.1` declares `MITNFA`. The compliance entry point
+therefore fails closed until authorized policy owners resolve those terms.
 
 GitHub ruleset `19543903` and its external `license_compliance_scanning` policy
 remain an enterprise/repository administrator responsibility. These repository

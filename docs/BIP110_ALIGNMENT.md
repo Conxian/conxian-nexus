@@ -121,7 +121,7 @@ and module wiring in
 The implementation commit declares Rust 1.85. The original BIP-110 follow-up
 kept the then-current Core pin because moving it was outside that conservative
 metadata-only scope. Nexus now pins `lib-conxian-core` to commit
-[`6187bf6227f302988cc69962ed8b12ea6758f2cd`](https://github.com/Conxian/lib-conxian-core/commit/6187bf6227f302988cc69962ed8b12ea6758f2cd),
+[`fdd73046a97b53b1ede54d342b0439287dd44593`](https://github.com/Conxian/lib-conxian-core/commit/fdd73046a97b53b1ede54d342b0439287dd44593),
 which requires Rust 1.91. The full locked Nexus graph requires Rust 1.94.0 due
 to `sqlx` 0.9.0, so `Cargo.toml` declares Rust 1.94 as the repository MSRV.
 The later control-model API still does not supply Nexus's missing Bitcoin
