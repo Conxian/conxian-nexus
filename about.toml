@@ -1,0 +1,23 @@
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "BSL-1.0",
+    "ISC",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Zlib",
+    "OpenSSL",
+    "BSD-3-Clause",
+    "MIT-0",
+    "MITNFA",
+    "CDLA-Permissive-2.0",
+]
+
+[conxian-nexus]
+accepted = ["BUSL-1.1"]
+
+[webpki]
+accepted = ["Pixar"]
+
+[webpki-roots]
+accepted = ["MPL-2.0"]
