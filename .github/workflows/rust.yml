@@ -71,16 +71,18 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: 1.94.0
         components: clippy, rustfmt
+    - name: Verify locked dependency metadata
+      run: cargo metadata --locked --format-version 1 > /dev/null
     - name: Run rustfmt check
       run: cargo fmt --check
     - name: Run clippy
-      run: cargo clippy --all-targets -- -D warnings
+      run: cargo clippy --locked --all-targets -- -D warnings
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --locked --verbose
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)

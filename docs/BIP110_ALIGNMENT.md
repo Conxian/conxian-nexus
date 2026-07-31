@@ -118,17 +118,14 @@ with the BIP-110 implementation in
 [`src/control_model/trust.rs`](https://github.com/Conxian/lib-conxian-core/blob/5647ade8b0294351946f2e36ea77c43d8edeceed/src/control_model/trust.rs)
 and module wiring in
 [`src/control_model/mod.rs`](https://github.com/Conxian/lib-conxian-core/blob/5647ade8b0294351946f2e36ea77c43d8edeceed/src/control_model/mod.rs).
-The implementation commit declares Rust 1.85. Nexus still pins
-`lib-conxian-core` to commit
-[`3b091d2700d840514427e4190c40d631b6d8132c`](https://github.com/Conxian/lib-conxian-core/commit/3b091d2700d840514427e4190c40d631b6d8132c),
-which predates that module and exposes no drop-in BIP-110 API for Nexus. The
-later control-model API also does not supply Nexus's missing Bitcoin metadata
-extraction or verification backend. This follow-up does not move the pin:
-Nexus declares Rust 1.82 in `Cargo.toml`, and changing the pin would be a
-dependency and API/MSRV change outside this conservative metadata-only scope.
-The locked workspace is verified with Rust 1.94.0 because its existing `sqlx`
-dependency requires that newer compiler; that verification constraint is not a
-request to change the declared MSRV.
+The implementation commit declares Rust 1.85. The original BIP-110 follow-up
+kept the then-current Core pin because moving it was outside that conservative
+metadata-only scope. Nexus now pins `lib-conxian-core` to commit
+[`6187bf6227f302988cc69962ed8b12ea6758f2cd`](https://github.com/Conxian/lib-conxian-core/commit/6187bf6227f302988cc69962ed8b12ea6758f2cd),
+which requires Rust 1.91. The full locked Nexus graph requires Rust 1.94.0 due
+to `sqlx` 0.9.0, so `Cargo.toml` declares Rust 1.94 as the repository MSRV.
+The later control-model API still does not supply Nexus's missing Bitcoin
+metadata extraction or verification backend.
 
 The exact `Conxian/conxius-enclave-sdk` implementation reviewed for comparison
 is commit [`a9986ef104b9cdd560bf7316f38b6878620e1ae5`](https://github.com/Conxian/conxius-enclave-sdk/commit/a9986ef104b9cdd560bf7316f38b6878620e1ae5),

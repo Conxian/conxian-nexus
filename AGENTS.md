@@ -132,7 +132,7 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.2.5) defines the canonical 41-cha
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.82+, edition 2021
+- **MSRV**: Rust 1.94+, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
