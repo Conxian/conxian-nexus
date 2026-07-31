@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly output_dir="${1:-target/compliance}"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/compliance_output_path.sh"
+
+repository_root="$(compliance_repository_root)"
+readonly repository_root
+output_dir="$(canonical_compliance_output_dir "${repository_root}" "${1:-target/compliance}")"
+readonly output_dir
 readonly sbom_base="conxian-nexus-sbom"
+cd "${repository_root}"
 
 cargo metadata --locked --format-version 1 | python3 -c '
 import json, sys

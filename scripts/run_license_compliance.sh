@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly output_dir="${1:-target/compliance}"
-mkdir -p target
-comparison_dir="$(mktemp -d target/compliance-compare.XXXXXX)"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/compliance_output_path.sh"
+
+repository_root="$(compliance_repository_root)"
+readonly repository_root
+target_root="$(realpath -m -- "${repository_root}/target")"
+readonly target_root
+output_dir="$(canonical_compliance_output_dir "${repository_root}" "${1:-target/compliance}")"
+readonly output_dir
+cd "${repository_root}"
+
+mkdir -p "${target_root}"
+comparison_dir="$(mktemp -d "${target_root}/compliance-compare.XXXXXX")"
 readonly comparison_dir
 trap 'rm -rf "${comparison_dir}"' EXIT
 
@@ -13,7 +22,7 @@ python3 scripts/check_repository_license.py
 cargo deny --locked check licenses bans sources --hide-inclusion-graph
 python3 scripts/test_normalize_sbom.py
 
-rm -rf "${output_dir}"
+rm -rf -- "${output_dir}"
 scripts/generate_compliance_artifacts.sh "${output_dir}"
 scripts/generate_compliance_artifacts.sh "${comparison_dir}"
 cmp "${output_dir}/THIRD_PARTY_LICENSES.html" "${comparison_dir}/THIRD_PARTY_LICENSES.html"

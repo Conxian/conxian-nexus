@@ -24,6 +24,7 @@
 /scripts/test_check_dependency_declarations.py @botshelomokoka
 /scripts/check_repository_license.py @botshelomokoka
 /scripts/check_workflow_yaml.rb @botshelomokoka
+/scripts/compliance_output_path.sh @botshelomokoka
 /scripts/generate_compliance_artifacts.sh @botshelomokoka
 /scripts/normalize_sbom.py @botshelomokoka
 /scripts/run_license_compliance.sh @botshelomokoka
