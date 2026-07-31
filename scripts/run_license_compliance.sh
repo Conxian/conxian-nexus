@@ -1,29 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# License compliance script for Conxian Nexus
-# Runs cargo-deny for license policy enforcement,
-# cargo-about for license attribution, and
-# cargo-cyclonedx for SBOM generation.
-#
-# SPDX-License-Identifier: BUSL-1.1
+readonly output_dir="${1:-target/compliance}"
+mkdir -p target
+comparison_dir="$(mktemp -d target/compliance-compare.XXXXXX)"
+readonly comparison_dir
+trap 'rm -rf "${comparison_dir}"' EXIT
 
-COMPLIANCE_DIR="target/compliance"
-mkdir -p "${COMPLIANCE_DIR}"
+python3 scripts/test_check_dependency_declarations.py
+python3 scripts/check_dependency_declarations.py
+python3 scripts/check_repository_license.py
+cargo deny --locked check licenses bans sources --hide-inclusion-graph
+python3 scripts/test_normalize_sbom.py
 
-echo "=== License Policy Check (cargo-deny) ==="
-cargo deny check licenses 2>&1 | tee "${COMPLIANCE_DIR}/deny-licenses.log"
-
-echo ""
-echo "=== License Attribution (cargo-about) ==="
-cargo about generate --locked --fail --output-file "${COMPLIANCE_DIR}/licenses.html" about.hbs
-
-echo ""
-echo "=== SBOM Generation (cargo-cyclonedx) ==="
-cargo cyclonedx --format json --override-filename sbom.cdx 2>&1
-mv sbom.cdx.json "${COMPLIANCE_DIR}/sbom.cdx.json"
-
-echo ""
-echo "=== License Compliance: PASSED ==="
-echo "Artifacts written to ${COMPLIANCE_DIR}/"
-ls -la "${COMPLIANCE_DIR}/"
+rm -rf "${output_dir}"
+scripts/generate_compliance_artifacts.sh "${output_dir}"
+scripts/generate_compliance_artifacts.sh "${comparison_dir}"
+cmp "${output_dir}/THIRD_PARTY_LICENSES.html" "${comparison_dir}/THIRD_PARTY_LICENSES.html"
+cmp "${output_dir}/conxian-nexus-sbom.cdx.json" "${comparison_dir}/conxian-nexus-sbom.cdx.json"
+test -s "${output_dir}/THIRD_PARTY_LICENSES.html"
+test -s "${output_dir}/conxian-nexus-sbom.cdx.json"
+echo "Compliance artifacts are non-empty and deterministic across consecutive runs."

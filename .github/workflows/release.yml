@@ -49,6 +49,8 @@ jobs:
       run: ./scripts/verify_contracts.sh
     - name: BOS Production Boundary Check
       run: ./scripts/check_production_boundary.sh
+    - name: Parse all workflow YAML
+      run: ruby scripts/check_workflow_yaml.rb
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -74,12 +76,10 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --workspace --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --workspace --locked --verbose
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)
@@ -108,6 +108,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.value }}
       changelog: ${{ steps.changelog.outputs.body }}
+      existing: ${{ steps.existing.outputs.exists }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -167,7 +168,6 @@ jobs:
         fi
 
   # ============================================================
-<<<<<<< HEAD
   # Stage 4: Release License Compliance Gate
   # ============================================================
   release-compliance:
@@ -198,13 +198,10 @@ jobs:
 
   # ============================================================
   # Stage 5: Create GitHub Release (Automatic)
-=======
-  # Stage 4: Create GitHub Release (Automatic)
->>>>>>> db6d2be (chore(gitleaks,deps): restore Cargo.toml arkworks versions and keep gitleaks ignore)
   # ============================================================
   create-github-release:
     name: Create GitHub Release
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -232,11 +229,11 @@ jobs:
           ${PRERELEASE}
 
   # ============================================================
-  # Stage 5: Publish to crates.io (Automatic on tag)
+  # Stage 6: Publish to crates.io (Automatic on tag)
   # ============================================================
   publish-crates-io:
     name: Publish crate to crates.io
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -249,8 +246,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -263,14 +258,14 @@ jobs:
     - name: Publish to crates.io
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
+      run: cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
 
   # ============================================================
-  # Stage 6: Publish Package Attestation (SBOM/SLSA)
+  # Stage 7: Publish Package Attestation (SBOM/SLSA)
   # ============================================================
   attest-build:
     name: Generate SLSA attestation
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -282,10 +277,8 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build to generate provenance
-      run: cargo build --release
+      run: cargo build --workspace --release --locked
     - name: Attest build
       uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
       with:
