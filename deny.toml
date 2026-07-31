@@ -1,45 +1,45 @@
-# cargo-deny configuration for Conxian Nexus
-# SPDX-License-Identifier: BUSL-1.1
+[graph]
+all-features = true
 
 [licenses]
-# The nexus is BUSL-1.1 licensed. Allow only compatible licenses for dependencies.
+# Repository-wide approvals are limited to permissive SPDX licenses already
+# present in the resolved dependency graph. Copyleft, BUSL, and unknown terms
+# are intentionally absent.
+include-dev = true
 allow = [
-    "MIT",
     "Apache-2.0",
-    "BSL-1.0",
-    "ISC",
-    "CC0-1.0",
-    "Unicode-3.0",
-    "Zlib",
-    "OpenSSL",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
     "BSD-3-Clause",
-    "MIT-0",
-    "MITNFA",
+    "CC0-1.0",
     "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
 ]
-# Non-permissive licenses are intentionally scoped to exact packages.
-exceptions = [
-    { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.22" },
-    { allow = ["MPL-2.0"], crate = "webpki-roots@0.22.6" },
-]
+confidence-threshold = 0.93
 
-# webpki 0.22.4 uses license files rather than a manifest license expression.
-# The root license is ISC; bundled Chromium test data is BSD-3-Clause.
-[[licenses.clarify]]
-crate = "webpki@0.22.4"
-expression = "ISC AND BSD-3-Clause"
-license-files = [
-    { path = "LICENSE", hash = 0x1c7e6c },
-    { path = "third-party/chromium/LICENSE", hash = 0x9b209a1a },
+# BSL-1.0 is the SPDX identifier for the Boost Software License, not the
+# Business Source License (BUSL-1.1). Keep this exception package/version
+# scoped rather than approving every package that declares BSL-1.0.
+exceptions = [
+    { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
 ]
 
 [bans]
-multiple-versions = "warn"
-wildcards = "deny"
+# Version consolidation is maintained separately; it is not a license-policy
+# failure. cargo-deny treats a revision-pinned git dependency as a wildcard;
+# scripts/check_dependency_declarations.py enforces versions and full git revs.
+multiple-versions = "allow"
+wildcards = "allow"
+highlight = "simplest-path"
 
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-allow-git = [
-    "https://github.com/Conxian/lib-conxian-core",
-]
+required-git-spec = "rev"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/Conxian/lib-conxian-core"]

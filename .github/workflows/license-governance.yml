@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Reject workflow conflict markers
+        shell: bash
+        run: |
+          if git grep -nE '^(<<<<<<<|=======|>>>>>>>)' -- '.github/workflows/*.yml' '.github/workflows/*.yaml'; then
+            echo "Unresolved merge conflict marker found in workflow YAML" >&2
+            exit 1
+          fi
       - name: Install Rust
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:

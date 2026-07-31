@@ -15,6 +15,24 @@
 # Governance process docs
 /CONTRIBUTING.md @botshelomokoka @admin-conxian-labs
 
+# License, dependency, release, and distribution controls
+/LICENSE @botshelomokoka @admin-conxian-labs
+/Cargo.toml @botshelomokoka @admin-conxian-labs
+/Cargo.lock @botshelomokoka @admin-conxian-labs
+/deny.toml @botshelomokoka @admin-conxian-labs
+/about.toml @botshelomokoka @admin-conxian-labs
+/about.hbs @botshelomokoka @admin-conxian-labs
+/scripts/check_dependency_declarations.py @botshelomokoka @admin-conxian-labs
+/scripts/check_dependency_licenses.py @botshelomokoka @admin-conxian-labs
+/scripts/generate_compliance_artifacts.sh @botshelomokoka @admin-conxian-labs
+/scripts/normalize_sbom.py @botshelomokoka @admin-conxian-labs
+/scripts/run_license_compliance.sh @botshelomokoka @admin-conxian-labs
+/scripts/test_normalize_sbom.py @botshelomokoka @admin-conxian-labs
+/.github/workflows/license-governance.yml @botshelomokoka @admin-conxian-labs
+/.github/workflows/release.yml @botshelomokoka @admin-conxian-labs
+/Dockerfile @botshelomokoka @admin-conxian-labs
+/docker-compose.yml @botshelomokoka @admin-conxian-labs
+
 # Repository-specific ownership
 /src/api/ @Conxian/api-team
 /proto/ @Conxian/api-team

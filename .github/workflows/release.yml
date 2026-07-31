@@ -74,8 +74,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build
       run: cargo build --verbose
     - name: Run tests
@@ -108,6 +106,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.value }}
       changelog: ${{ steps.changelog.outputs.body }}
+      existing: ${{ steps.existing.outputs.exists }}
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
@@ -167,7 +166,6 @@ jobs:
         fi
 
   # ============================================================
-<<<<<<< HEAD
   # Stage 4: Release License Compliance Gate
   # ============================================================
   release-compliance:
@@ -193,18 +191,17 @@ jobs:
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: release-compliance-${{ github.ref_name }}
-        path: target/compliance/
+        path: |
+          target/compliance/THIRD_PARTY_LICENSES.html
+          target/compliance/conxian-nexus-sbom.cdx.json
         if-no-files-found: error
 
   # ============================================================
   # Stage 5: Create GitHub Release (Automatic)
-=======
-  # Stage 4: Create GitHub Release (Automatic)
->>>>>>> db6d2be (chore(gitleaks,deps): restore Cargo.toml arkworks versions and keep gitleaks ignore)
   # ============================================================
   create-github-release:
     name: Create GitHub Release
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -213,6 +210,11 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         fetch-depth: 0
+    - name: Download release compliance artifacts
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      with:
+        name: release-compliance-${{ github.ref_name }}
+        path: target/compliance
     - name: Create GitHub Release
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,14 +231,16 @@ jobs:
         gh release create "v${VERSION#v}" \
           --title "Release ${VERSION}" \
           --notes "${BODY}" \
+          target/compliance/THIRD_PARTY_LICENSES.html \
+          target/compliance/conxian-nexus-sbom.cdx.json \
           ${PRERELEASE}
 
   # ============================================================
-  # Stage 5: Publish to crates.io (Automatic on tag)
+  # Stage 6: Publish to crates.io (Automatic on tag)
   # ============================================================
   publish-crates-io:
     name: Publish crate to crates.io
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -249,8 +253,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -266,11 +268,11 @@ jobs:
       run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
 
   # ============================================================
-  # Stage 6: Publish Package Attestation (SBOM/SLSA)
+  # Stage 7: Publish Package Attestation (SBOM/SLSA)
   # ============================================================
   attest-build:
     name: Generate SLSA attestation
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
@@ -282,8 +284,6 @@ jobs:
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build to generate provenance
       run: cargo build --release
     - name: Attest build
