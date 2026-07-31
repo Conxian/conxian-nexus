@@ -1,7 +1,6 @@
 accepted = [
     "MIT",
     "Apache-2.0",
-    "BSL-1.0",
     "ISC",
     "CC0-1.0",
     "Unicode-3.0",
@@ -9,12 +8,19 @@ accepted = [
     "OpenSSL",
     "BSD-3-Clause",
     "MIT-0",
-    "MITNFA",
     "CDLA-Permissive-2.0",
 ]
 
 [conxian-nexus]
 accepted = ["BUSL-1.1"]
+
+# These package-specific entries only support deterministic attribution for
+# the exact locked graph; they do not broaden repository-wide license policy.
+[xxhash-rust]
+accepted = ["BSL-1.0"]
+
+[hex_lit]
+accepted = ["MITNFA"]
 
 [webpki.clarify]
 license = "ISC AND BSD-3-Clause"

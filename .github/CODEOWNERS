@@ -12,6 +12,28 @@
 /.github/PULL_REQUEST_TEMPLATE* @botshelomokoka @admin-conxian-labs
 /.github/workflows/** @botshelomokoka @admin-conxian-labs
 
+# Technical compliance review routing. These entries do not establish legal
+# authority, licensor status, or permission to change substantive terms.
+/LICENSE @botshelomokoka
+/Cargo.toml @botshelomokoka
+/Cargo.lock @botshelomokoka
+/deny.toml @botshelomokoka
+/about.toml @botshelomokoka
+/about.hbs @botshelomokoka
+/scripts/check_dependency_declarations.py @botshelomokoka
+/scripts/test_check_dependency_declarations.py @botshelomokoka
+/scripts/check_repository_license.py @botshelomokoka
+/scripts/check_workflow_yaml.rb @botshelomokoka
+/scripts/compliance_output_path.sh @botshelomokoka
+/scripts/generate_compliance_artifacts.sh @botshelomokoka
+/scripts/normalize_sbom.py @botshelomokoka
+/scripts/run_license_compliance.sh @botshelomokoka
+/scripts/test_normalize_sbom.py @botshelomokoka
+/.github/workflows/license-governance.yml @botshelomokoka
+/.github/workflows/release.yml @botshelomokoka
+/Dockerfile @botshelomokoka
+/docker-compose.yml @botshelomokoka
+
 # Governance process docs
 /CONTRIBUTING.md @botshelomokoka @admin-conxian-labs
 

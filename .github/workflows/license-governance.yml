@@ -20,6 +20,8 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
         with:
           toolchain: stable
+      - name: Parse all workflow YAML
+        run: ruby scripts/check_workflow_yaml.rb
       - name: Install pinned compliance tools
         run: |
           cargo install --locked cargo-deny --version 0.18.6
