@@ -6,17 +6,32 @@
 allow = [
     "MIT",
     "Apache-2.0",
-    "MIT OR Apache-2.0",
     "BSL-1.0",
     "ISC",
     "CC0-1.0",
     "Unicode-3.0",
     "Zlib",
     "OpenSSL",
+    "BSD-3-Clause",
+    "MIT-0",
+    "MITNFA",
+    "CDLA-Permissive-2.0",
 ]
-# BUSL-1.1 is the project license
-copyleft = "deny"
-default = "deny"
+# Non-permissive licenses are intentionally scoped to exact packages.
+exceptions = [
+    { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.22" },
+    { allow = ["MPL-2.0"], crate = "webpki-roots@0.22.6" },
+]
+
+# webpki 0.22.4 uses license files rather than a manifest license expression.
+# The root license is ISC; bundled Chromium test data is BSD-3-Clause.
+[[licenses.clarify]]
+crate = "webpki@0.22.4"
+expression = "ISC AND BSD-3-Clause"
+license-files = [
+    { path = "LICENSE", hash = 0x1c7e6c },
+    { path = "third-party/chromium/LICENSE", hash = 0x9b209a1a },
+]
 
 [bans]
 multiple-versions = "warn"

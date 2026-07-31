@@ -607,6 +607,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "base64"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9"
+
+[[package]]
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2477,8 +2483,8 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lib-conxian-core"
-version = "0.2.12"
-source = "git+https://github.com/Conxian/lib-conxian-core?rev=73143c2b916a6c0f3cf9117ea36c0ae1e170d9d4#73143c2b916a6c0f3cf9117ea36c0ae1e170d9d4"
+version = "0.3.0"
+source = "git+https://github.com/Conxian/lib-conxian-core?rev=6187bf6227f302988cc69962ed8b12ea6758f2cd#6187bf6227f302988cc69962ed8b12ea6758f2cd"
 dependencies = [
  "aluvm",
  "anyhow",
@@ -2486,7 +2492,7 @@ dependencies = [
  "ark-ff",
  "ark-groth16",
  "ark-serialize",
- "base64 0.22.1",
+ "base64 0.23.0",
  "bdk",
  "bitcoin 0.32.102",
  "chrono",
@@ -2500,6 +2506,7 @@ dependencies = [
  "rgb-std",
  "ripemd 0.2.0",
  "secp256k1 0.31.1",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.11.0",
