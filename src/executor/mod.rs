@@ -21,8 +21,19 @@ use std::sync::{Arc, Mutex};
 use lib_conxian_core::enclave::AttestationCertificate;
 
 /// Errors that can occur during enclave attestation verification.
-/// Defined locally until lib-conxian-core publishes this type (v0.3.0+).
-#[derive(Debug)]
+///
+/// [NEXUS-ATTEST-01] Enclave verification error hierarchy.
+///
+/// This is a local superset of `lib_conxian_core::enclave::EnclaveVerificationError`.
+/// Reason: Nexus performs richer attestation (certificate chain validation,
+/// measurement comparison against known-good values, expiry checks) that
+/// Core delegates to downstream consumers. These additional variants capture
+/// Nexus-specific attestation failure modes not yet represented in Core's
+/// lighter-weight error enum.
+///
+/// When Core's error type gains equivalent variants, this can be migrated to
+/// a thin wrapper or removed in favor of the Core type.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EnclaveVerificationError {
     /// The attestation certificate is missing or structurally invalid.
     InvalidCertificate,
