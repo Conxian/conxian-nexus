@@ -753,10 +753,7 @@ mod tests {
             SubscriptionTier::parse("free"),
             Some(SubscriptionTier::Free)
         );
-        assert_eq!(
-            SubscriptionTier::parse("pro"),
-            Some(SubscriptionTier::Pro)
-        );
+        assert_eq!(SubscriptionTier::parse("pro"), Some(SubscriptionTier::Pro));
         assert_eq!(
             SubscriptionTier::parse("enterprise"),
             Some(SubscriptionTier::Enterprise)
