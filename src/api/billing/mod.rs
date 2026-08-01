@@ -28,10 +28,11 @@ const ENTERPRISE_TIER_SIGNATURE_LIMIT: u64 = 5_000_000;
 ///
 /// Upgrades are driven by Lightning Network invoice settlement.
 /// The tier is stored per-API-key in Redis under key `apikey:<key>` field `tier`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionTier {
     /// Free tier: 50k signatures/mo, no DLC or ZKML features.
+    #[default]
     Free,
     /// Pro tier: 500k signatures/mo, DLC enabled, basic ZKML.
     Pro,
@@ -68,19 +69,13 @@ impl SubscriptionTier {
         matches!(self, Self::Enterprise)
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "free" => Some(Self::Free),
             "pro" => Some(Self::Pro),
             "enterprise" => Some(Self::Enterprise),
             _ => None,
         }
-    }
-}
-
-impl Default for SubscriptionTier {
-    fn default() -> Self {
-        Self::Free
     }
 }
 
@@ -377,7 +372,7 @@ async fn track_signature(
             .unwrap_or(None);
         let limit = data
             .get("tier")
-            .and_then(|t| SubscriptionTier::from_str(t))
+            .and_then(|t| SubscriptionTier::parse(t))
             .map(|t| t.signature_limit())
             .unwrap_or(FREE_TIER_SIGNATURE_LIMIT);
         let roll: f32 = rand::random();
@@ -436,7 +431,7 @@ async fn upgrade_tier(
     State(state): State<AppState>,
     Json(payload): Json<UpgradeRequest>,
 ) -> impl IntoResponse {
-    let target_tier = match SubscriptionTier::from_str(&payload.target_tier) {
+    let target_tier = match SubscriptionTier::parse(&payload.target_tier) {
         Some(tier) if tier != SubscriptionTier::Free => tier,
         _ => {
             return (
@@ -565,7 +560,7 @@ async fn verify_payment(
     let api_key = invoice_data.get("api_key").cloned().unwrap_or_default();
     let target_tier = invoice_data.get("target_tier").cloned().unwrap_or_default();
 
-    let tier = SubscriptionTier::from_str(&target_tier).unwrap_or_default();
+    let tier = SubscriptionTier::parse(&target_tier).unwrap_or_default();
 
     // In production, this would verify the Lightning payment via LND's
     // lookupinvoice or an LNURL-pay callback. For now, the presence of
@@ -755,18 +750,18 @@ mod tests {
     #[test]
     fn test_subscription_tier_from_str() {
         assert_eq!(
-            SubscriptionTier::from_str("free"),
+            SubscriptionTier::parse("free"),
             Some(SubscriptionTier::Free)
         );
         assert_eq!(
-            SubscriptionTier::from_str("pro"),
+            SubscriptionTier::parse("pro"),
             Some(SubscriptionTier::Pro)
         );
         assert_eq!(
-            SubscriptionTier::from_str("enterprise"),
+            SubscriptionTier::parse("enterprise"),
             Some(SubscriptionTier::Enterprise)
         );
-        assert_eq!(SubscriptionTier::from_str("unknown"), None);
+        assert_eq!(SubscriptionTier::parse("unknown"), None);
     }
 
     #[test]
