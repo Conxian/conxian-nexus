@@ -269,6 +269,7 @@ mod tests {
             timestamp: Utc::now(),
             sender: "sender".to_string(),
             priority: 1,
+            attestation_certificate: None,
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
