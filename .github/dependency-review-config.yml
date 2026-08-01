@@ -1,0 +1,18 @@
+# Dependency Review configuration for conxian-nexus
+# lib-conxian-core is the canonical protocol primitives library (MIT OR Apache-2.0)
+
+allow_licenses:
+  - MIT
+  - Apache-2.0
+  - MIT OR Apache-2.0
+  - CC0-1.0
+  - ISC
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - Unicode-3.0
+  - Zlib
+  - OpenSSL
+
+fail_on_severity: high
+allow_ghsas: []
+

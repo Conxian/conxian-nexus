@@ -1,4 +1,5 @@
-pub mod bitvm;
+pub mod bitvm_groth16;
+pub mod canonical_bitvm;
 pub mod cosmos;
 pub mod evm;
 pub mod fedimint;
@@ -37,7 +38,7 @@ pub struct NexusExecutor {
     pub latest_event_time_cache: Mutex<Option<DateTime<Utc>>>,
     pub rgb_adapter: rgb::RGBAdapter,
     pub lightning_adapter: lightning::LightningResilienceAdapter,
-    pub bitvm_adapter: bitvm::BitVMAdapter,
+    pub canonical_bitvm_service: Option<Arc<canonical_bitvm::CanonicalBitvmService>>,
     pub evm_adapter: evm::EVMAdapter,
     pub cosmos_adapter: cosmos::CosmosAdapter,
     pub stacks_adapter: stacks::StacksAdapter,
@@ -51,7 +52,6 @@ impl NexusExecutor {
     ) -> Self {
         let rgb_adapter = rgb::RGBAdapter::with_known_contracts(rgb_mode, known_contracts);
         let lightning_adapter = lightning::LightningResilienceAdapter::new();
-        let bitvm_adapter = bitvm::BitVMAdapter::new(storage.clone());
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
         let stacks_adapter = stacks::StacksAdapter::new();
@@ -61,12 +61,20 @@ impl NexusExecutor {
             latest_event_time_cache: Mutex::new(None),
             rgb_adapter,
             lightning_adapter,
-            bitvm_adapter,
+            canonical_bitvm_service: None,
             evm_adapter,
             cosmos_adapter,
             stacks_adapter,
             fedimint_adapter,
         }
+    }
+
+    pub fn with_canonical_bitvm_service(
+        mut self,
+        service: Arc<canonical_bitvm::CanonicalBitvmService>,
+    ) -> Self {
+        self.canonical_bitvm_service = Some(service);
+        self
     }
 
     /// Checks if the system is in safety mode and blocks submission if so.

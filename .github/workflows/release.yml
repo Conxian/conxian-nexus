@@ -33,12 +33,12 @@ jobs:
     name: Repo Hygiene & Contamination Guard
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -49,6 +49,8 @@ jobs:
       run: ./scripts/verify_contracts.sh
     - name: BOS Production Boundary Check
       run: ./scripts/check_production_boundary.sh
+    - name: Parse all workflow YAML
+      run: ruby scripts/check_workflow_yaml.rb
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -67,19 +69,17 @@ jobs:
     needs: hygiene
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         submodules: recursive
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --workspace --locked --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --workspace --locked --verbose
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)
@@ -108,8 +108,9 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.value }}
       changelog: ${{ steps.changelog.outputs.body }}
+      existing: ${{ steps.existing.outputs.exists }}
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         fetch-depth: 0
     - name: Install Rust
@@ -167,17 +168,46 @@ jobs:
         fi
 
   # ============================================================
-  # Stage 4: Create GitHub Release (Automatic)
+  # Stage 4: Release License Compliance Gate
+  # ============================================================
+  release-compliance:
+    name: Release dependency license compliance
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
+      with:
+        toolchain: stable
+    - name: Install pinned compliance tools
+      run: |
+        cargo install --locked cargo-deny --version 0.18.6
+        cargo install --locked cargo-about --version 0.8.2
+        cargo install --locked cargo-cyclonedx --version 0.5.7
+    - name: Enforce dependency policy and generate artifacts
+      run: scripts/run_license_compliance.sh
+    - name: Upload release compliance artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: release-compliance-${{ github.ref_name }}
+        path: target/compliance/
+        if-no-files-found: error
+
+  # ============================================================
+  # Stage 5: Create GitHub Release (Automatic)
   # ============================================================
   create-github-release:
     name: Create GitHub Release
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     if: needs.validate-release.outputs.existing == 'false'
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         fetch-depth: 0
     - name: Create GitHub Release
@@ -199,11 +229,11 @@ jobs:
           ${PRERELEASE}
 
   # ============================================================
-  # Stage 5: Publish to crates.io (Automatic on tag)
+  # Stage 6: Publish to crates.io (Automatic on tag)
   # ============================================================
   publish-crates-io:
     name: Publish crate to crates.io
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -211,13 +241,11 @@ jobs:
     # Auto-publish when triggered by a git tag (not workflow_dispatch)
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -230,30 +258,28 @@ jobs:
     - name: Publish to crates.io
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      run: cargo publish --token "${CARGO_REGISTRY_TOKEN}"
+      run: cargo publish --locked --token "${CARGO_REGISTRY_TOKEN}"
 
   # ============================================================
-  # Stage 6: Publish Package Attestation (SBOM/SLSA)
+  # Stage 7: Publish Package Attestation (SBOM/SLSA)
   # ============================================================
   attest-build:
     name: Generate SLSA attestation
-    needs: validate-release
+    needs: [validate-release, release-compliance]
     runs-on: ubuntu-latest
     permissions:
       attestations: write
       contents: read
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
-    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
         toolchain: stable
-    - name: Rust Cache
-      uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3
     - name: Build to generate provenance
-      run: cargo build --release
+      run: cargo build --workspace --release --locked
     - name: Attest build
-      uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018
+      uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373
       with:
         subject-path: './target/release/conxian-nexus'

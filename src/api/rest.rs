@@ -1,6 +1,7 @@
 use crate::api::analytics::analytics_routes;
 use crate::api::billing::billing_routes;
 use crate::api::billing::nostr::NostrTelemetry;
+use crate::api::canonical_bitvm::{canonical_bitvm_routes, legacy_bitvm_unavailable};
 use crate::api::dlc::dlc_routes;
 use crate::api::erp::erp_routes;
 use crate::api::identity::identity_routes;
@@ -9,20 +10,24 @@ use crate::api::settlement::settlement_routes;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
 use crate::executor::{ExecutionRequest, NexusExecutor};
+use crate::metrics::{encode_bip110_metrics, init_bip110_metrics, BIP110_PROMETHEUS_CONTENT_TYPE};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
 use crate::storage::kwil::KwilAdapter;
 use crate::storage::tableland::TablelandAdapter;
 use crate::storage::Storage;
 use axum::{
+    body::Body,
     extract::{Query, State},
-    http::StatusCode,
-    response::IntoResponse,
+    http::{header::CONTENT_TYPE, StatusCode},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use prometheus::{opts, register_int_gauge, IntGauge};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
@@ -142,6 +147,7 @@ pub fn app_router(
     config: Arc<Config>,
 ) -> Router {
     init_prometheus_metrics();
+    init_bip110_metrics();
 
     let gateway_url = config
         .gateway_url
@@ -183,6 +189,7 @@ pub fn app_router(
 
     Router::new()
         .route("/health", get(health_handler))
+        .route("/metrics", get(prometheus_metrics_handler))
         .route("/v1/proof", get(get_proof))
         .route("/v1/proof/manifest", get(get_proof_manifest)) // Narrow proof surface
         .route("/v1/submit", post(submit_transaction))
@@ -210,7 +217,12 @@ pub fn app_router(
 }
 
 pub fn bitvm_routes() -> Router<AppState> {
-    Router::new().route("/verify-state-root", post(verify_bitvm_transition))
+    Router::new()
+        .route(
+            "/verify-state-root",
+            post(|| async { legacy_bitvm_unavailable() }),
+        )
+        .merge(canonical_bitvm_routes())
 }
 
 pub fn evm_routes() -> Router<AppState> {
@@ -242,25 +254,6 @@ async fn get_rgb_contract(
         Ok(Some(metadata)) => (StatusCode::OK, Json(metadata)).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Contract not found").into_response(),
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
-    }
-}
-
-async fn verify_bitvm_transition(
-    State(state): State<AppState>,
-    Json(payload): Json<crate::executor::bitvm::BitVMTransition>,
-) -> impl IntoResponse {
-    match state
-        .executor
-        .bitvm_adapter
-        .verify_transition(&payload)
-        .await
-    {
-        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({ "error": e.to_string() })),
-        )
-            .into_response(),
     }
 }
 
@@ -354,6 +347,30 @@ pub async fn start_rest_server(
 
 pub async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+fn metrics_response(encoded: prometheus::Result<Vec<u8>>) -> Response {
+    match encoded {
+        Ok(buffer) => Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, BIP110_PROMETHEUS_CONTENT_TYPE)
+            .body(Body::from(buffer))
+            .expect("valid Prometheus metrics response"),
+        Err(error) => {
+            tracing::error!(error = %error, "failed to encode Prometheus metrics");
+            (StatusCode::INTERNAL_SERVER_ERROR, "metrics encoding failed").into_response()
+        }
+    }
+}
+
+/// Returns aggregate BIP-110-only metrics in the text exposition format.
+///
+/// This endpoint is intentionally unauthenticated and must be restricted to
+/// an internal or otherwise trusted network boundary by operators. The
+/// dedicated registry contains no transaction IDs, hashes, addresses, peers,
+/// payloads, or unbounded labels.
+async fn prometheus_metrics_handler() -> Response {
+    metrics_response(encode_bip110_metrics())
 }
 
 #[tracing::instrument(skip(state))]
@@ -511,7 +528,6 @@ mod tests {
     use axum::http::Request;
     use http_body_util::BodyExt;
     use serde_json::Value;
-    use std::collections::HashSet;
     use tower::ServiceExt;
 
     async fn test_router_with_state(
@@ -564,6 +580,65 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: HealthResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(res.status, "ok");
+    }
+
+    #[tokio::test]
+    async fn test_metrics_endpoint_exposes_bip110_metrics() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/metrics")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .expect("Prometheus content type should be present");
+        assert_eq!(content_type, BIP110_PROMETHEUS_CONTENT_TYPE);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        // These counters are process-global, so endpoint tests assert series presence, not values.
+        for classification in [
+            "within_observed_size_limits",
+            "exceeds_observed_size_limits",
+            "unknown",
+        ] {
+            assert!(body.contains(&format!(
+                "nexus_bip110_observations_assessed_total{{classification=\"{classification}\"}}"
+            )));
+        }
+        for rule in [
+            "pushdata",
+            "op_return_script",
+            "non_op_return_script_pubkey",
+            "script_argument_witness_item",
+            "taproot_control_block",
+        ] {
+            assert!(body.contains(&format!(
+                "nexus_bip110_observed_size_violations_total{{rule=\"{rule}\"}}"
+            )));
+        }
+        assert!(body.contains("nexus_bip110_observation_backend_available "));
+        assert!(!body.contains("nexus_transactions_total"));
+        assert!(!body.contains("nexus_rebalances_total"));
+        assert!(!body.contains("process_"));
+    }
+
+    #[test]
+    fn metrics_encoding_failure_returns_internal_server_error() {
+        let response = metrics_response(Err(prometheus::Error::Msg(
+            "test encoding failure".to_string(),
+        )));
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     /// Test for Issue #149: Narrow proof surface manifest endpoint

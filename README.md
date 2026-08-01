@@ -28,7 +28,7 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 
 - **Core Protocol:** `Conxian` (DAO/On-chain) <-> **Nexus** (Observation/Proof)
 - **Middleware:** `conxian-gateway` (Transport/RPC Adaptation)
-- **Libraries:** `lib-conxian-core` (Shared Primitives)
+- **Libraries:** Nexus-owned protocol and compatibility primitives
 - **Clients:** `conxius-wallet`, `conxian_ui`
 
 ## Architecture
@@ -71,6 +71,13 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
     cp .env.example .env
     ```
     *Note: Ensure `DATABASE_URL` and `REDIS_URL` are correctly set for your local or docker environment.*
+
+    The Oracle worker is disabled by default. Enabling it with `ORACLE_ENABLED=1`
+    also requires `ORACLE_ENDPOINT_URL`, `ORACLE_CONTRACT_PRINCIPAL`, and a signer
+    in `CONXIAN_PRIVATE_KEY_HEX` (or the legacy `NEXUS_PRIVATE_KEY` alias). Nexus
+    refuses to start the Oracle worker without that signer; it never generates an
+    ephemeral production key. Other signing APIs likewise require an explicitly
+    configured signer when invoked.
 
 2.  **Database Migrations**:
     Nexus requires a PostgreSQL database. Apply migrations using `sqlx`:

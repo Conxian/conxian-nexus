@@ -9,6 +9,7 @@ use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ZkmlVerifyRequest {
     pub proof: String,
     pub input_commitment: String,
@@ -18,9 +19,12 @@ pub struct ZkmlVerifyRequest {
 #[derive(Debug, Serialize)]
 pub struct ZkmlVerifyResponse {
     pub valid: bool,
-    pub attestation_id: Option<String>,
-    /// [NIP-02] Oracle confidence scoring derived from ZKML proof.
-    pub confidence: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ZkmlUnavailableResponse {
+    pub code: &'static str,
+    pub message: &'static str,
 }
 
 /// [NEXUS-ZK-01] Zero-knowledge machine learning verification.
@@ -29,7 +33,7 @@ pub fn zkml_routes() -> Router<AppState> {
 }
 
 pub async fn verify_zkml_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(payload): Json<ZkmlVerifyRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
@@ -43,68 +47,20 @@ pub async fn verify_zkml_handler(
     {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ZkmlVerifyResponse {
-                valid: false,
-                attestation_id: None,
-                confidence: None,
-            }),
+            Json(ZkmlVerifyResponse { valid: false }),
         )
             .into_response();
     }
 
-    let vk_env_key = format!(
-        "ZKML_VK_B64_{}",
-        payload.model_id.replace('-', "_").to_uppercase()
+    tracing::warn!(
+        model_id = %payload.model_id,
+        "ZKML verification rejected because no circuit-specific verifier is configured"
     );
-
-    let vk_b64 = state
-        .config
-        .zkml_vks
-        .get(&vk_env_key)
-        .cloned()
-        .unwrap_or_else(|| {
-            tracing::warn!(
-                "{} not set in config, falling back to public registry logic",
-                vk_env_key
-            );
-            "YmFzZTY0cGxhY2Vob2xkZXI=".to_string()
-        });
-
-    let is_valid = match lib_conxian_core::bitvm2::verify_state_root_bn254_groth16(
-        &vk_b64,
-        &payload.input_commitment,
-        &payload.proof,
-        None,
-    ) {
-        Ok(valid) => valid,
-        Err(e) => {
-            tracing::error!(
-                "ZKML verification error for model {}: {}",
-                payload.model_id,
-                e
-            );
-            false
-        }
-    };
-
-    let (attestation_id, confidence) = if is_valid {
-        // [NIP-02] Simulate extraction of confidence score from the ML model output metadata.
-        // In production, this would be parsed from the public inputs of the ZK proof.
-        (Some(uuid::Uuid::new_v4().to_string()), Some(0.985))
-    } else {
-        (None, None)
-    };
-
     (
-        if is_valid {
-            StatusCode::OK
-        } else {
-            StatusCode::BAD_REQUEST
-        },
-        Json(ZkmlVerifyResponse {
-            valid: is_valid,
-            attestation_id,
-            confidence,
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ZkmlUnavailableResponse {
+            code: "verifier_unavailable",
+            message: "ZKML verification is unavailable until a circuit-specific verifier contract is configured",
         }),
     )
         .into_response()
@@ -119,12 +75,13 @@ mod tests {
     use crate::state::NexusState;
     use crate::storage::tableland::TablelandAdapter;
     use crate::storage::Storage;
+    use http_body_util::BodyExt;
+    use serde_json::Value;
     use std::collections::HashSet;
     use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_verify_zkml_handler_rejects_empty_payload() {
-        let config = Arc::new(Config::default_test());
+    fn test_state(config: Config) -> AppState {
+        let config = Arc::new(config);
         let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
         let nexus_state = Arc::new(NexusState::new());
         let executor = Arc::new(NexusExecutor::new(
@@ -134,7 +91,7 @@ mod tests {
         ));
         let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "test".to_string()));
 
-        let state = AppState {
+        AppState {
             config,
             storage,
             nexus_state,
@@ -145,7 +102,12 @@ mod tests {
             nostr: None,
             gateway_url: None,
             http_client: reqwest::Client::new(),
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn test_verify_zkml_handler_rejects_empty_payload() {
+        let state = test_state(Config::default_test());
 
         let payload = ZkmlVerifyRequest {
             proof: "".to_string(),
@@ -157,5 +119,61 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_verify_zkml_handler_fails_closed_without_model_key() {
+        let state = test_state(Config::default_test());
+        let response = verify_zkml_handler(
+            State(state),
+            Json(ZkmlVerifyRequest {
+                proof: "proof".to_owned(),
+                input_commitment: "commitment".to_owned(),
+                model_id: "missing-model".to_owned(),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "code": "verifier_unavailable",
+                "message": "ZKML verification is unavailable until a circuit-specific verifier contract is configured"
+            })
+        );
+        assert!(body.get("attestation_id").is_none());
+        assert!(body.get("confidence").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_verify_zkml_handler_fails_closed_even_with_legacy_model_key() {
+        let mut config = Config::default_test();
+        config.zkml_vks.insert(
+            "ZKML_VK_B64_TEST_MODEL".to_owned(),
+            "not-a-valid-key".to_owned(),
+        );
+        let response = verify_zkml_handler(
+            State(test_state(config)),
+            Json(ZkmlVerifyRequest {
+                proof: "not-a-valid-proof".to_owned(),
+                input_commitment: "not-a-valid-commitment".to_owned(),
+                model_id: "test-model".to_owned(),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "code": "verifier_unavailable",
+                "message": "ZKML verification is unavailable until a circuit-specific verifier contract is configured"
+            })
+        );
     }
 }

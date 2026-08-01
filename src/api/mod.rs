@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod analytics;
 pub mod billing;
+pub mod canonical_bitvm;
 pub mod dlc;
 pub mod erp;
 pub mod grpc;

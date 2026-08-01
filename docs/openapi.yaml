@@ -286,33 +286,25 @@ paths:
                     type: boolean
                   drift:
                     type: integer
-  /v1/metrics:
-    get:
-      summary: Get system metrics (JSON)
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  total_transactions:
-                    type: integer
-                  total_blocks:
-                    type: integer
-                  safety_mode:
-                    type: boolean
-                  drift:
-                    type: integer
-                  uptime_seconds:
-                    type: integer
   /metrics:
     get:
-      summary: Get Prometheus metrics (Text)
+      operationId: getBip110PrometheusMetrics
+      summary: Get Prometheus metrics (text exposition)
+      description: Read-only, aggregate-only scrape of the dedicated BIP-110 Prometheus registry. It exposes the fixed-cardinality assessment, violation, and backend-availability series only; it does not expose the default/process registry. The endpoint is unauthenticated by design, so operators must restrict it to an internal or otherwise trusted network boundary.
+      security: []
       responses:
         '200':
-          description: OK
+          description: Prometheus text exposition
+          content:
+            'text/plain; version=0.0.4':
+              schema:
+                type: string
+              example: |
+                nexus_bip110_observations_assessed_total{classification="unknown"} 0
+                nexus_bip110_observed_size_violations_total{rule="pushdata"} 0
+                nexus_bip110_observation_backend_available 0
+        '500':
+          description: Prometheus text exposition encoding failed
           content:
             text/plain:
               schema:
@@ -420,44 +412,92 @@ paths:
                     type: string
   /v1/bitvm2/verify-state-root:
     post:
-      summary: Verify a BitVM2 state root SNARK proof
+      deprecated: true
+      summary: Deprecated caller-keyed BitVM verifier
+      description: >-
+        This legacy BLS12-381 endpoint is disabled. It never deserializes or
+        verifies caller-supplied verification keys and always returns 501.
+      responses:
+        '501':
+          description: Legacy verifier is deprecated and unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v1/bitvm2/verify-state-transition:
+    post:
+      summary: Verify and audit a canonical Nexus BN254 state transition
+      description: >-
+        Accepts named previous/next roots and the exact Gateway Groth16 schema-v1
+        envelope. Unknown fields, raw witness material, raw verification keys,
+        and request bodies over 16 KiB are rejected. The envelope uses exactly
+        12 ordered public inputs for the Nexus profile. Success is returned only
+        after immutable audit persistence. Production remains unavailable
+        pending a reviewed trusted Bitcoin-height provider and approved
+        production circuit/verifying-key artifacts.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - state_root
-                - proof
-              properties:
-                state_root:
-                  type: string
-                proof:
-                  type: string
-                public_inputs:
-                  type: array
-                  items:
-                    type: string
+              $ref: '#/components/schemas/CanonicalBitvmVerifyRequest'
       responses:
         '200':
-          description: OK
+          description: Proof verified and audit record persisted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
-        '502':
-          description: Bad Gateway
+                $ref: '#/components/schemas/CanonicalBitvmVerifyResponse'
+        '400':
+          description: Malformed JSON, state root, or canonical envelope encoding
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: Immutable audit integrity conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '413':
+          description: Request body exceeds 16 KiB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: malformed_payload
+                  message: request payload is malformed
+        '422':
+          description: Invalid statement, context, untrusted key, or proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '501':
+          description: Trusted canonical registry is not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '503':
-          description: Service Unavailable
+          description: Trusted height or immutable audit persistence is unavailable
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Bitvm2StateRootVerificationResponse'
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Canonical verifier integrity or backend failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+              example:
+                error:
+                  code: internal_error
+                  message: canonical verification failed internally
   /v1/execute:
     post:
       summary: Execute a transaction via FSOC Sequencer
@@ -611,7 +651,8 @@ paths:
           description: OK
   /v1/analytics/metrics:
     get:
-      summary: Get analytics metrics
+      summary: Get STX/Postgres analytics metrics
+      description: Query analytics derived from STX transaction data stored in Postgres. This is separate from the Prometheus scrape at /metrics.
       parameters:
         - name: metric
           in: query
@@ -638,6 +679,8 @@ paths:
           application/json:
             schema:
               type: object
+              additionalProperties: false
+              required: [proof, input_commitment, model_id]
               properties:
                 proof:
                   type: string
@@ -647,20 +690,149 @@ paths:
                   type: string
       responses:
         '200':
-          description: OK
+          description: Contract-authenticated proof is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [valid]
+                properties:
+                  valid:
+                    type: boolean
+                    enum: [true]
+        '400':
+          description: Malformed request
+        '422':
+          description: Proof is invalid or rejected
+        '503':
+          description: Model verification key is not configured
 
 components:
   schemas:
-    Bitvm2StateRootVerificationResponse:
+    ApiError:
       type: object
-      additionalProperties: true
+      additionalProperties: false
+      required: [error]
       properties:
-        state_root:
-          type: string
-        verified:
-          type: boolean
         error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    CanonicalBitvmVerifyRequest:
+      type: object
+      additionalProperties: false
+      required: [previous_state_root, next_state_root, envelope]
+      properties:
+        previous_state_root:
           type: string
+          pattern: '^[0-9a-f]{64}$'
+        next_state_root:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        envelope:
+          $ref: '#/components/schemas/GatewayGroth16EnvelopeV1'
+    GatewayGroth16EnvelopeV1:
+      type: object
+      additionalProperties: false
+      required:
+        - schema_version
+        - curve
+        - circuit_id
+        - verification_key_id
+        - public_inputs
+        - witness_commitment
+        - block_context
+        - proof
+        - statement_hash
+      properties:
+        schema_version:
+          type: integer
+          enum: [1]
+        curve:
+          type: string
+          enum: [bn254]
+        circuit_id:
+          type: string
+          enum: [conxian-nexus-state-transition-bn254-v1]
+        verification_key_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        public_inputs:
+          type: array
+          minItems: 12
+          maxItems: 12
+          items:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+        witness_commitment:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        block_context:
+          type: object
+          additionalProperties: false
+          required: [network, block_height, block_hash]
+          properties:
+            network:
+              type: string
+              enum: [mainnet, testnet, signet, regtest]
+            block_height:
+              type: integer
+              minimum: 1
+            block_hash:
+              type: string
+              pattern: '^[0-9a-f]{64}$'
+            max_valid_height:
+              type: integer
+              minimum: 1
+              nullable: true
+        proof:
+          type: string
+          description: Exactly 128 canonical Arkworks compressed proof bytes as 256 hex characters
+          pattern: '^[0-9a-fA-F]{256}$'
+        statement_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+    CanonicalBitvmVerifyResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - receipt_id
+        - statement_hash
+        - verification_key_id
+        - circuit_id
+        - schema_version
+        - curve
+        - status
+        - created
+      properties:
+        receipt_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        statement_hash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        verification_key_id:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+        circuit_id:
+          type: string
+        schema_version:
+          type: integer
+          enum: [1]
+        curve:
+          type: string
+          enum: [bn254]
+        status:
+          type: string
+          enum: [verified]
+        created:
+          type: boolean
     EventEnvelope:
       type: object
       properties:

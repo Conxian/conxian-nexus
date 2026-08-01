@@ -67,8 +67,8 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 - **Next Step**: Implement full mempool monitoring.
 
 ### 4.4 BitVM Full Lifecycle
-- **Status**: State Transition Simulation Complete.
-- **Next Step**: Integrate with a real BitVM prover/verifier library.
+- **Status**: The canonical BN254 verifier boundary is implemented in `bitvm_groth16`, with trusted-registry, service, audit, and HTTP composition in `canonical_bitvm`. The legacy caller-keyed implementation has been removed.
+- **Next Step**: Production remains unavailable until a trusted Bitcoin-height source and reviewed production circuit/verifying-key artifacts are approved and configured.
 
 ### 4.5 Oracle & Rebalancing
 - **Status**: **Historical FX Persistence**, **Dynamic LTV Rebalancing**, and **Multi-source Aggregated Oracle** Complete (v0.4.0). **Enhanced (v0.4.7)**: Integrated confidence interval weights and outlier rejection for multi-source aggregation.
@@ -109,4 +109,4 @@ Conxian Nexus is a high-performance middleware designed to bridge off-chain stat
 ### 5.7 Multi-Chain Tier 1 Integration (ADR-006)
 - **EVM**: Implemented `EVMAdapter` with receipt proof verification logic, enabling institutional DeFi monitoring.
 - **Cosmos**: Implemented `CosmosAdapter` with IBC Light Client verification, supporting superior interoperability models.
-- **BitVM2**: Enhanced `BitVMAdapter` with local state transition verification and audit logging.
+- **BitVM2**: Implemented the canonical `bitvm_groth16` verifier and `canonical_bitvm` service/API boundary with trusted verification-key registration and immutable audit logging. This is not production-enabled pending a trusted height source and approved circuit/VK artifacts.
