@@ -25,6 +25,26 @@ pub mod core_types {
         ProtocolVerifierBackend, ProtocolVerifierError, TransactionFinalityStatus,
         VerifiedBlockReference, VerifierCapabilities, VerifierCapability,
     };
+
+    /// Anchoring primitives for state-root persistence (Tableland, on-chain).
+    pub use lib_conxian_core::anchoring::{
+        AnchoringError, AnchoringPublication, AnchoringPublisher, AnchoringReceipt,
+        AnchoringRequest, AnchoringTarget, OnChainAnchoringPublisher, TablelandAnchoringPublisher,
+    };
+
+    pub use lib_conxian_core::bitcoin::bip322;
+    /// Bitcoin-native protocol primitives (BIP-322, Taproot, Liquid).
+    pub use lib_conxian_core::bitcoin::taproot;
+
+    pub use lib_conxian_core::protocol::covenant;
+    /// Protocol primitives (DLC, FROST, covenants, intents).
+    pub use lib_conxian_core::protocol::dlc;
+    pub use lib_conxian_core::protocol::frost;
+    pub use lib_conxian_core::protocol::intent;
+
+    pub use lib_conxian_core::adapters;
+    /// Chain adapters for multi-chain observation.
+    pub use lib_conxian_core::lightning::LightningAdapter;
 }
 
 use anyhow::Context;

@@ -9,6 +9,7 @@ async fn test_execution_request_priority_serialization() {
         timestamp: Utc::now(),
         sender: "alice".to_string(),
         priority: 10,
+        attestation_certificate: None,
     };
     let json = serde_json::to_string(&req).unwrap();
     let deserialized: ExecutionRequest = serde_json::from_str(&json).unwrap();
