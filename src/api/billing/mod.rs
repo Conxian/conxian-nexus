@@ -4,9 +4,7 @@
 
 use crate::api::rest::AppState;
 
-use axum::{
-    extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use chrono::Utc;
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
@@ -441,7 +439,10 @@ async fn upgrade_tier(
     let target_tier = match SubscriptionTier::from_str(&payload.target_tier) {
         Some(tier) if tier != SubscriptionTier::Free => tier,
         _ => {
-            return (StatusCode::BAD_REQUEST, "Invalid tier: must be 'pro' or 'enterprise'")
+            return (
+                StatusCode::BAD_REQUEST,
+                "Invalid tier: must be 'pro' or 'enterprise'",
+            )
                 .into_response();
         }
     };
@@ -473,7 +474,13 @@ async fn upgrade_tier(
     };
 
     let invoice_id = hex::encode(Sha256::digest(
-        format!("inv:{}-{}-{}", payload.api_key, payload.target_tier, Utc::now().timestamp()).as_bytes(),
+        format!(
+            "inv:{}-{}-{}",
+            payload.api_key,
+            payload.target_tier,
+            Utc::now().timestamp()
+        )
+        .as_bytes(),
     ));
 
     let expires_at = Utc::now().timestamp() + INVOICE_EXPIRY_SECONDS as i64;
@@ -588,7 +595,6 @@ async fn verify_payment(
     .into_response()
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -657,16 +663,26 @@ mod tests {
 
     #[test]
     fn test_evaluate_quota_decision_within_limit() {
-        let decision =
-            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1000, Some(900), 0.9, FREE_TIER_SIGNATURE_LIMIT);
+        let decision = evaluate_quota_decision(
+            FREE_TIER_SIGNATURE_LIMIT,
+            1000,
+            Some(900),
+            0.9,
+            FREE_TIER_SIGNATURE_LIMIT,
+        );
         assert_eq!(decision, QuotaDecision::WithinLimit);
     }
 
     #[test]
     fn test_evaluate_quota_decision_sets_grace_start_and_allows() {
         let now = 1_000_000;
-        let decision =
-            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT + 1, now, None, 0.3, FREE_TIER_SIGNATURE_LIMIT);
+        let decision = evaluate_quota_decision(
+            FREE_TIER_SIGNATURE_LIMIT + 1,
+            now,
+            None,
+            0.3,
+            FREE_TIER_SIGNATURE_LIMIT,
+        );
         assert_eq!(
             decision,
             QuotaDecision::GraceAllowed {
@@ -738,9 +754,18 @@ mod tests {
 
     #[test]
     fn test_subscription_tier_from_str() {
-        assert_eq!(SubscriptionTier::from_str("free"), Some(SubscriptionTier::Free));
-        assert_eq!(SubscriptionTier::from_str("pro"), Some(SubscriptionTier::Pro));
-        assert_eq!(SubscriptionTier::from_str("enterprise"), Some(SubscriptionTier::Enterprise));
+        assert_eq!(
+            SubscriptionTier::from_str("free"),
+            Some(SubscriptionTier::Free)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("pro"),
+            Some(SubscriptionTier::Pro)
+        );
+        assert_eq!(
+            SubscriptionTier::from_str("enterprise"),
+            Some(SubscriptionTier::Enterprise)
+        );
         assert_eq!(SubscriptionTier::from_str("unknown"), None);
     }
 
@@ -748,7 +773,8 @@ mod tests {
     fn test_pro_tier_quota_is_higher() {
         let pro_limit = PRO_TIER_SIGNATURE_LIMIT;
         // Usage at free-tier limit should still be within pro limit
-        let decision = evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1_000_000, None, 0.5, pro_limit);
+        let decision =
+            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1_000_000, None, 0.5, pro_limit);
         assert_eq!(decision, QuotaDecision::WithinLimit);
     }
 }
