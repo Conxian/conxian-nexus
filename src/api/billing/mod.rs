@@ -745,6 +745,10 @@ mod tests {
         assert!(!free.can_use_tableland());
         assert!(pro.can_use_tableland());
         assert!(ent.can_use_tableland());
+
+        assert!(!free.can_use_bitvm());
+        assert!(!pro.can_use_bitvm());
+        assert!(ent.can_use_bitvm());
     }
 
     #[test]
