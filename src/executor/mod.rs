@@ -18,7 +18,36 @@ use std::sync::{Arc, Mutex};
 /// Nexus validates that execution requests originate from a hardware-attested
 /// enclave before processing proofs. This is a critical security boundary
 /// between the executor and the core verification pipeline.
-use lib_conxian_core::enclave::{AttestationCertificate, EnclaveVerificationError};
+use lib_conxian_core::enclave::AttestationCertificate;
+
+/// Errors that can occur during enclave attestation verification.
+/// Defined locally until lib-conxian-core publishes this type (v0.3.0+).
+#[derive(Debug)]
+pub enum EnclaveVerificationError {
+    /// The attestation certificate is missing or structurally invalid.
+    InvalidCertificate,
+    /// Certificate chain verification failed.
+    ChainVerificationFailed(String),
+    /// Enclave measurement mismatch with known-good values.
+    MeasurementMismatch,
+    /// Certificate is expired or not yet valid.
+    CertificateExpired,
+}
+
+impl std::fmt::Display for EnclaveVerificationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCertificate => write!(f, "invalid attestation certificate"),
+            Self::ChainVerificationFailed(msg) => {
+                write!(f, "certificate chain verification failed: {msg}")
+            }
+            Self::MeasurementMismatch => write!(f, "enclave measurement mismatch"),
+            Self::CertificateExpired => write!(f, "certificate expired or not yet valid"),
+        }
+    }
+}
+
+impl std::error::Error for EnclaveVerificationError {}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExecutionRequest {
