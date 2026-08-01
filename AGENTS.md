@@ -143,6 +143,26 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.2.5) defines the canonical 41-cha
 
 ## Cross-Repo Dependencies
 - **lib-conxian-core**: Shared protocol primitives (git dependency, pinned rev)
+- **conxius-enclave-sdk**: Hardware enclave (optional, via lib-conxian-core `enclave` feature)
+
+### SDK Module Usage (Session 47 — Aug 2026)
+
+Nexus re-exports canonical Core types via `compat::core_bridge::core_types`:
+
+| SDK Module | Re-exported Types |
+|------------|-------------------|
+| control_model | Chain, ChainFamily, TrustTier, BridgeSystem, FinalityClass, VerificationClass |
+| signing | SignerCapabilities, SigningAlgorithm, SigningTarget |
+| verifier | ChainId, ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus, VerifierCapabilities |
+| anchoring | AnchoringPublisher, AnchoringReceipt, AnchoringRequest, TablelandAnchoringPublisher, OnChainAnchoringPublisher |
+| bitcoin::taproot | P2TR validation, control blocks, witness programs |
+| bitcoin::bip322 | BIP-322 message signing/verification |
+| protocol::dlc | DLC contract types |
+| protocol::frost | FROST DKG types |
+| protocol::covenant | Bitcoin covenant types |
+| protocol::intent | Cross-chain intent types |
+| lightning | LightningAdapter trait |
+| adapters | Chain adapter abstraction layer |
 - **conxian-gateway**: Downstream consumer of Nexus proofs
 - **conxius-enclave-sdk**: SDK defines canonical chain registry — Nexus aligns observation coverage
 
