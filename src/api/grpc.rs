@@ -353,6 +353,7 @@ impl NexusService for NexusGrpcService {
             sender: req.sender,
             priority: 0,
             timestamp,
+            attestation_certificate: None,
         };
 
         match self.executor.validate_transaction(&exec_req).await {
