@@ -2387,7 +2387,7 @@ dependencies = [
  "ark-serialize 0.6.0",
  "ark-std 0.6.0",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.0",
  "chrono",
  "dotenvy",
  "futures-util",
