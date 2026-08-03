@@ -1,6 +1,6 @@
 # Conxian Nexus (Glass Node)
 
-Conxian Nexus is a protocol-first "Glass Node" and proof layer, serving as the primary observation, synchronization, and verification point for Tier 1 Chain Families in the Conxian ecosystem.
+Conxian Nexus is a universal chain node and proof layer, serving as the primary observation, synchronization, and verification point for Tier 1 Chain Families in the Conxian ecosystem.
 
 ## Purpose
 
