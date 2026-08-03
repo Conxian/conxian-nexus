@@ -1,7 +1,0 @@
-# Gitleaks configuration file
-# For more info: https://github.com/gitleaks/gitleaks
-
-[allowlist]
-paths = [
-    '''tests/fixtures/bitvm_groth16_v1.json'''
-]

@@ -5,8 +5,11 @@ useDefault = true
 # test fixture. This is not a credential or private proving key; keep the
 # generic-api-key rule enabled and allow only the exact identifier.
 [allowlist]
-description = "Deterministic public Groth16 test verification-key identifier"
+description = "Deterministic public Groth16 test verification-key identifier and test fixture exceptions"
 regexTarget = "secret"
 regexes = [
   '''^24ec0adf5c2843f5f255c7f7ded7a6f91f37c23d10c8fb1e5613d438fa895b55$''',
+]
+paths = [
+    '''tests/fixtures/bitvm_groth16_v1.json'''
 ]
