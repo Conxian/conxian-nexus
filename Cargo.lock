@@ -2483,7 +2483,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lib-conxian-core"
-version = "0.3.0"
+version = "0.3.1"
 source = "git+https://github.com/Conxian/lib-conxian-core?rev=d3d8b3bb587a0c3476df6ac91fe9ba0f28c7d99b#d3d8b3bb587a0c3476df6ac91fe9ba0f28c7d99b"
 dependencies = [
  "aluvm",
