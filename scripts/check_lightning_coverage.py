@@ -19,8 +19,8 @@ from pathlib import Path
 # Keep these in sync with source edits that move logic blocks.
 SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
     "src/api/billing/mod.rs": [
-        (56, 60),   # billing route wiring
-        (62, 147),  # grace/auth/quota policy helpers
+        (151, 157),  # billing route wiring (billing_routes)
+        (179, 254),  # grace/auth/quota policy helpers
     ],
     "src/api/billing/nostr.rs": [
         (11, 59),  # collector filtering + key parsing + dedup/bridge decisions

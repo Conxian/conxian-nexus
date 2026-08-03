@@ -13,6 +13,7 @@ allow = [
     "ISC",
     "CC0-1.0",
     "Unicode-3.0",
+    "Unlicense",
     "Zlib",
     "BSD-3-Clause",
     "MIT-0",

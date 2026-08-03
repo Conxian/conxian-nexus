@@ -30,9 +30,9 @@ Bitcoin/EVM/Cosmos —→ sync module —→ MMR state roots —→ REST/gRPC AP
 
 ## Protocol Coverage — SDK → Nexus Alignment
 
-The Conxius Enclave SDK (`lib-conclave-sdk` v0.2.5) defines the canonical 41-chain AssetRegistry and 33 protocol modules. Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
+The Conxius Enclave SDK (`lib-conclave-sdk` v0.3.1) defines the canonical 42-chain AssetRegistry and 46 protocol modules. Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
 
-### Chain Coverage (41 SDK chains → Nexus observation status)
+### Chain Coverage (42 SDK chains → Nexus observation status)
 
 | Chain | SDK Registry | Nexus Status | Notes |
 |-------|-------------|-------------|-------|
@@ -83,6 +83,7 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.2.5) defines the canonical 41-cha
 | SDK Module | Nexus Coverage | Status |
 |-----------|---------------|--------|
 | bitcoin | ✅ Full | Primary chain |
+| statechain | ❌ Not covered | Structural boundary in SDK (P2) |
 | stacks | ✅ Executor | StacksAdapter |
 | lightning | ✅ SRL-1 | LightningResilienceAdapter |
 | ethereum/evm | ✅ Executor | EVMAdapter |
@@ -143,6 +144,26 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.2.5) defines the canonical 41-cha
 
 ## Cross-Repo Dependencies
 - **lib-conxian-core**: Shared protocol primitives (git dependency, pinned rev)
+- **conxius-enclave-sdk**: Hardware enclave (optional, via lib-conxian-core `enclave` feature)
+
+### SDK Module Usage (Session 48 — Aug 2026)
+
+Nexus re-exports canonical Core types via `compat::core_bridge::core_types`:
+
+| SDK Module | Re-exported Types |
+|------------|-------------------|
+| control_model | Chain, ChainFamily, TrustTier, BridgeSystem, FinalityClass, VerificationClass |
+| signing | SignerCapabilities, SigningAlgorithm, SigningTarget |
+| verifier | ChainId, ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus, VerifierCapabilities |
+| anchoring | AnchoringPublisher, AnchoringReceipt, AnchoringRequest, TablelandAnchoringPublisher, OnChainAnchoringPublisher |
+| bitcoin::taproot | P2TR validation, control blocks, witness programs |
+| bitcoin::bip322 | BIP-322 message signing/verification |
+| protocol::dlc | DLC contract types |
+| protocol::frost | FROST DKG types |
+| protocol::covenant | Bitcoin covenant types |
+| protocol::intent | Cross-chain intent types |
+| lightning | LightningAdapter trait |
+| adapters | Chain adapter abstraction layer |
 - **conxian-gateway**: Downstream consumer of Nexus proofs
 - **conxius-enclave-sdk**: SDK defines canonical chain registry — Nexus aligns observation coverage
 
@@ -153,7 +174,13 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 ---
 © 2026 Conxian Foundation. Code is Law.
 
-## Session State (2026-07-30)
+## Session State (2026-08-01)
+
+### v0.4.23 — Session 48: Billing Tiers + CI Pass
+- PR [#203](https://github.com/Conxian/conxian-nexus/pull/203) merged: paid tiers with LN upgrade flow (CON-24)
+- PR [#200](https://github.com/Conxian/conxian-nexus/pull/200) merged: BitVM Groth16 research salvage (CON-1533)
+- CI all green: Build & Test, Hygiene, Contamination guard
+- SubscriptionTier: Free, Developer, Professional, Enterprise via `src/api/billing/`
 
 ### v0.4.22 — lib-conxian-core v0.3.0 Dependency
 - PR [#189](https://github.com/Conxian/conxian-nexus/pull/189) merged to main
