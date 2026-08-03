@@ -2511,7 +2511,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "wasm-bindgen",
-"conxius-enclave-sdk",
+ "conxius-enclave-sdk",
 ]
 
 [[package]]
@@ -5858,8 +5858,6 @@ dependencies = [
 ]
 
 [[package]]
-
-[[package]]
 name = "conxius-enclave-sdk"
 version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5904,49 +5902,8 @@ dependencies = [
  "zeroize",
 ]
 
-
 [[package]]
-name = "conxius-enclave-sdk"
-version = "2.0.11"
+name = "zmij"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e35d22138325b93283bab7afeeca5a121a0d2019bd7d9d81b69af7ec46db5f2d"
-dependencies = [
- "aes",
- "aes-gcm",
- "alloy",
- "async-trait",
- "base64 0.22.1",
- "bdk_wallet",
- "bitcoin 0.33.0-beta",
- "blake2",
- "bs58",
- "der 0.8.1",
- "ed25519-dalek",
- "getrandom 0.2.17",
- "getrandom 0.3.4",
- "getrandom 0.4.3",
- "hex",
- "hmac 0.13.0",
- "js-sys",
- "k256 0.14.0",
- "musig2",
- "pbkdf2",
- "quick-xml",
- "rand 0.10.2",
- "rand_core 0.10.1",
- "reqwest",
- "secp256k1 0.32.0-beta.2",
- "serde",
- "serde-wasm-bindgen",
- "serde_json",
- "sha2 0.11.0",
- "subtle",
- "thiserror 2.0.18",
- "tokio",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
- "x509-cert",
- "zeroize",
-]
-
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
