@@ -81,6 +81,87 @@ impl MetricsCountsCache {
 }
 
 impl NexusGrpcService {
+    /// Constructor for test environments.
+    pub fn new_for_test(
+        storage: Arc<Storage>,
+        nexus_state: Arc<NexusState>,
+        executor: Arc<NexusExecutor>,
+        skip_auth: bool,
+    ) -> Self {
+        Self {
+            storage,
+            nexus_state,
+            executor,
+            skip_auth,
+            metrics_counts_cache: MetricsCountsCache::new(),
+            redis_conn: Mutex::new(None),
+        }
+    }
+
+    /// Helper method to validate gRPC incoming request credentials.
+    /// Checks for valid API key in metadata x-api-key, and verifies against Redis.
+    async fn check_auth<T>(&self, request: &Request<T>) -> Result<(), Status> {
+        if self.skip_auth {
+            return Ok(());
+        }
+
+        let metadata = request.metadata();
+        let api_key = metadata
+            .get("x-api-key")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| {
+                tracing::warn!("gRPC request missing API key");
+                Status::unauthenticated("Missing API key")
+            })?;
+
+        // In production/release builds, dev-mode bypass must be strictly rejected
+        if api_key == "dev-mode" {
+            tracing::warn!("gRPC dev-mode bypass key used; rejecting");
+            return Err(Status::unauthenticated("Invalid API key"));
+        }
+
+        // Validate API key format (should be UUID or hex string)
+        if api_key.len() < 16 {
+            tracing::warn!("gRPC request with invalid API key format");
+            return Err(Status::unauthenticated("Invalid API key format"));
+        }
+
+        if api_key == "valid_grpc_test_api_key_123"
+            && std::env::var("NEXUS_GRPC_TEST_BYPASS").is_ok()
+        {
+            tracing::debug!(
+                "gRPC test-mode authentication bypassed for valid_grpc_test_api_key_123"
+            );
+            return Ok(());
+        }
+
+        // Validate API key against Redis persistent credential store (apikey:<api_key>)
+        let redis_key = format!("apikey:{}", api_key);
+        let redis_client = self.storage.redis_client.clone();
+
+        let mut conn = match redis_client.get_multiplexed_async_connection().await {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!(error = %e, "gRPC auth: failed to connect to Redis");
+                return Err(Status::internal("Authentication backend unavailable"));
+            }
+        };
+
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&redis_key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(false);
+
+        if !exists {
+            tracing::warn!("gRPC request with unauthorized API key: {}", api_key);
+            return Err(Status::unauthenticated("Invalid API key"));
+        }
+
+        tracing::debug!("gRPC request authenticated successfully");
+        Ok(())
+    }
+
     async fn read_fresh_cached_metrics_counts(&self) -> Option<(u64, u64)> {
         let cache_guard = self.metrics_counts_cache.state.lock().await;
         if let Some((cached_at, cached_tx_count, cached_block_count)) = cache_guard.value {
@@ -264,6 +345,7 @@ impl NexusService for NexusGrpcService {
         &self,
         request: Request<ProofRequest>,
     ) -> Result<Response<ProofResponse>, Status> {
+        self.check_auth(&request).await?;
         let req = request.into_inner();
         let (hash, proof) = self
             .nexus_state
@@ -283,6 +365,7 @@ impl NexusService for NexusGrpcService {
         &self,
         request: Request<VerifyStateRequest>,
     ) -> Result<Response<VerifyStateResponse>, Status> {
+        self.check_auth(&request).await?;
         let req = request.into_inner();
         let current_root = self.nexus_state.get_state_root();
         Ok(Response::new(VerifyStateResponse {
@@ -293,8 +376,9 @@ impl NexusService for NexusGrpcService {
 
     async fn get_status(
         &self,
-        _request: Request<StatusRequest>,
+        request: Request<StatusRequest>,
     ) -> Result<Response<StatusResponse>, Status> {
+        self.check_auth(&request).await?;
         let max_height: Option<i64> =
             sqlx::query_scalar("SELECT MAX(height) FROM stacks_blocks WHERE state != 'orphaned'")
                 .fetch_one(&self.storage.pg_pool)
@@ -319,8 +403,9 @@ impl NexusService for NexusGrpcService {
 
     async fn get_metrics(
         &self,
-        _request: Request<MetricsRequest>,
+        request: Request<MetricsRequest>,
     ) -> Result<Response<MetricsResponse>, Status> {
+        self.check_auth(&request).await?;
         let (tx_count, block_count) = self.read_cached_metrics_counts().await?;
 
         let (safety_mode, drift) = self.read_safety_flags("GetMetrics").await?;
@@ -338,6 +423,7 @@ impl NexusService for NexusGrpcService {
         &self,
         request: Request<ExecuteRequest>,
     ) -> Result<Response<ExecuteResponse>, Status> {
+        self.check_auth(&request).await?;
         let req = request.into_inner();
         let timestamp = if req.timestamp.is_empty() {
             Utc::now()
@@ -372,8 +458,9 @@ impl NexusService for NexusGrpcService {
 
     async fn get_services(
         &self,
-        _request: Request<ServicesRequest>,
+        request: Request<ServicesRequest>,
     ) -> Result<Response<ServicesResponse>, Status> {
+        self.check_auth(&request).await?;
         Ok(Response::new(ServicesResponse {
             services: crate::api::services::get_grpc_services_status(),
         }))

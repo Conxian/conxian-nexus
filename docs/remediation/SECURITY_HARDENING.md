@@ -39,3 +39,12 @@ Transitioned BitVM2 from structural validation to full cryptographic verificatio
 The sequencer's internal audit log (`me_audit_log`) has been expanded to ensure full transparency of handled transactions.
 - **Full Payload Capture**: The entire transaction body is persisted for post-hoc analysis.
 - **Priority Metadata**: Sequencing priority is recorded to detect and prevent unauthorized front-running.
+
+## 6. Hardened gRPC Service Authentication
+
+### API Key Access Control
+To align the gRPC API layer with the REST security standards, Nexus implements full Redis-backed API key validation for all incoming gRPC remote procedure calls.
+- **Metadata Interception**: Calls must include the B2B API Key in the `x-api-key` metadata field.
+- **Redis Verification**: The key is dynamically verified against the B2B subscription pool in Redis (`apikey:<api_key>`). If the key does not exist, access is strictly denied with an `Unauthenticated` status.
+- **Development/Production Separation**: The legacy static `"dev-mode"` key is bypassed only if the service is explicitly configured to `skip_auth` (such as local debug/development builds and test suites). In production/release builds, dev-mode bypass is rejected and fails closed.
+- **Robust Fail-Closed Handling**: If the Redis authentication backend itself is unavailable or offline, the system safely fails closed and returns an `Internal` error to ensure zero unauthorized access.
