@@ -75,7 +75,7 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: "1.97"
     - name: Build
       run: cargo build --workspace --locked --verbose
     - name: Run tests
@@ -116,7 +116,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: "1.97"
     - name: Determine version
       id: version
       shell: bash
@@ -181,7 +181,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: "1.97"
     - name: Install pinned compliance tools
       run: |
         cargo install --locked cargo-deny --version 0.18.6
@@ -245,7 +245,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: "1.97"
     - name: Verify CARGO_REGISTRY_TOKEN
       env:
         TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -276,7 +276,7 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9
       with:
-        toolchain: stable
+        toolchain: "1.97"
     - name: Build to generate provenance
       run: cargo build --workspace --release --locked
     - name: Attest build
