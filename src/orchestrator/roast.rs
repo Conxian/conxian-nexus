@@ -258,8 +258,7 @@ mod tests {
     #[test]
     fn start_round_with_all_participants() {
         let mut coordinator = RoastCoordinator::new(RoastConfig::default());
-        let target = SigningTarget::default();
-        let participants = coordinator.start_round(&target).unwrap();
+        let participants = coordinator.start_round(b"signing session").unwrap();
         assert_eq!(participants.len(), 5);
         assert_eq!(coordinator.active_count(), 5);
     }
