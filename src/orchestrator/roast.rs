@@ -109,10 +109,7 @@ impl RoastCoordinator {
     ///
     /// Returns the set of participant IDs that should receive the
     /// round-1 commitment request.
-    pub fn start_round(
-        &mut self,
-        _message: &[u8],
-    ) -> Result<HashSet<ParticipantId>, RoastError> {
+    pub fn start_round(&mut self, _message: &[u8]) -> Result<HashSet<ParticipantId>, RoastError> {
         if self.config.threshold > self.config.total_participants {
             return Err(RoastError::InvalidConfig(
                 "threshold cannot exceed total_participants".into(),
@@ -144,7 +141,10 @@ impl RoastCoordinator {
 
     /// Record a participant as timed out for this round.
     pub fn mark_timeout(&mut self, participant: ParticipantId) -> RoastResult {
-        let round = self.current_round.as_mut().ok_or(RoastError::NoActiveRound)?;
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
         round.active.remove(&participant);
         round.excluded.insert(participant);
 
@@ -162,7 +162,10 @@ impl RoastCoordinator {
     /// Faulty participants are excluded from this and ALL future rounds.
     pub fn mark_faulty(&mut self, participant: ParticipantId, reason: &str) -> RoastResult {
         self.faulty_participants.insert(participant);
-        let round = self.current_round.as_mut().ok_or(RoastError::NoActiveRound)?;
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
         round.active.remove(&participant);
         round.excluded.insert(participant);
 
@@ -181,7 +184,10 @@ impl RoastCoordinator {
     /// Faulty participants remain excluded. Timed-out participants
     /// may be retried in a new round.
     pub fn retry_round(&mut self) -> Result<HashSet<ParticipantId>, RoastError> {
-        let round = self.current_round.as_mut().ok_or(RoastError::NoActiveRound)?;
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
 
         if round.retry >= self.config.max_retries {
             return Err(RoastError::MaxRetriesExceeded(self.config.max_retries));
@@ -212,7 +218,10 @@ impl RoastCoordinator {
     }
 
     pub fn active_count(&self) -> usize {
-        self.current_round.as_ref().map(|r| r.active.len()).unwrap_or(0)
+        self.current_round
+            .as_ref()
+            .map(|r| r.active.len())
+            .unwrap_or(0)
     }
 
     pub fn faulty_count(&self) -> usize {
@@ -237,7 +246,10 @@ impl std::fmt::Display for RoastError {
         match self {
             Self::InvalidConfig(msg) => write!(f, "invalid ROAST config: {msg}"),
             Self::NoActiveRound => write!(f, "no active ROAST round"),
-            Self::InsufficientParticipants { available, required } => {
+            Self::InsufficientParticipants {
+                available,
+                required,
+            } => {
                 write!(
                     f,
                     "insufficient participants: {available} available, {required} required"
