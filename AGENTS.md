@@ -174,9 +174,20 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 ---
 © 2026 Conxian Foundation. Code is Law.
 
+## Session State (2026-08-01)
 
-## Key References
-- **Dependency policy**: `scripts/check_dependency_declarations.py`
-- **Compliance artifacts**: `scripts/generate_compliance_artifacts.sh`
-- **Session archive**: `docs/archive/AGENTS_archive_session_58.md`
-- **Build**: `cargo build --locked && cargo test --locked && cargo clippy -- -D warnings`
+### v0.4.23 — Session 48: Billing Tiers + CI Pass
+- PR [#203](https://github.com/Conxian/conxian-nexus/pull/203) merged: paid tiers with LN upgrade flow (CON-24)
+- PR [#200](https://github.com/Conxian/conxian-nexus/pull/200) merged: BitVM Groth16 research salvage (CON-1533)
+- CI all green: Build & Test, Hygiene, Contamination guard
+- SubscriptionTier: Free, Developer, Professional, Enterprise via `src/api/billing/`
+
+### v0.4.22 — lib-conxian-core v0.3.0 Dependency
+- PR [#189](https://github.com/Conxian/conxian-nexus/pull/189) merged to main
+- `Cargo.toml`: added `lib-conxian-core` git dependency
+- `src/compat/core_bridge.rs`: new `core_types` sub-module re-exporting:
+  - Chain, ChainFamily, BridgeSystem, TrustTier, VerificationClass, FinalityClass
+  - ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus
+  - SigningTarget, SigningAlgorithm, SignerCapabilities
+- Existing tag `v0.4.22` preserved (version unchanged)
+- Dependency review config added to allow Core license
