@@ -58,10 +58,7 @@ impl SecurityHeadersConfig {
 }
 
 /// Middleware to apply secure headers to HTTP responses
-pub async fn apply_security_headers(
-    req: Request,
-    next: Next,
-) -> Response {
+pub async fn apply_security_headers(req: Request, next: Next) -> Response {
     let mut response = next.run(req).await;
     let headers = response.headers_mut();
 
@@ -77,17 +74,11 @@ pub async fn apply_security_headers(
     );
 
     if let Ok(name) = header::HeaderName::from_bytes(b"x-xss-protection") {
-        headers.insert(
-            name,
-            HeaderValue::from_static(config.x_xss_protection),
-        );
+        headers.insert(name, HeaderValue::from_static(config.x_xss_protection));
     }
 
     if let Ok(name) = header::HeaderName::from_bytes(b"referrer-policy") {
-        headers.insert(
-            name,
-            HeaderValue::from_static(config.referrer_policy),
-        );
+        headers.insert(name, HeaderValue::from_static(config.referrer_policy));
     }
 
     headers.insert(

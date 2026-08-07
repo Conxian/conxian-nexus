@@ -212,7 +212,9 @@ pub fn app_router(
         .layer(cors)
         .layer(rate_limit)
         .layer(compression)
-        .layer(axum::middleware::from_fn(crate::api::security::apply_security_headers))
+        .layer(axum::middleware::from_fn(
+            crate::api::security::apply_security_headers,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -860,7 +862,13 @@ mod tests {
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
         assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
         assert_eq!(headers.get("X-XSS-Protection").unwrap(), "0");
-        assert_eq!(headers.get("Referrer-Policy").unwrap(), "strict-origin-when-cross-origin");
-        assert_eq!(headers.get("Strict-Transport-Security").unwrap(), "max-age=31536000; includeSubDomains; preload");
+        assert_eq!(
+            headers.get("Referrer-Policy").unwrap(),
+            "strict-origin-when-cross-origin"
+        );
+        assert_eq!(
+            headers.get("Strict-Transport-Security").unwrap(),
+            "max-age=31536000; includeSubDomains; preload"
+        );
     }
 }
