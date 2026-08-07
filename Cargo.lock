@@ -1406,9 +1406,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.17.3"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00bdb5da18dac48ca2cc7cd4a98e533e8635a58e2361d13a1a4ee3888e0d72f1"
+checksum = "ce2b2dcc879c3bae0d371e77c99f2238400ef24ec001394befa67b6e543add9e"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -1416,9 +1416,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.43.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43103168cc76fe62678a375e722fc9cb3a0146159ac5828bc4f0dfd755c2224c"
+checksum = "f09fae7be8bb3174e05c6afdb34199e6dc0c7c04ba9fa237b1967adfbde27483"
 dependencies = [
  "cc",
  "cmake",
@@ -2380,8 +2380,8 @@ dependencies = [
 
 [[package]]
 name = "conxius-enclave-sdk"
-version = "2.0.12"
-source = "git+https://github.com/Conxian/conxius-enclave-sdk?tag=v2.0.14#d3adefa40b3db8ce72e4959227ff9afffcca3bc5"
+version = "2.0.15"
+source = "git+https://github.com/Conxian/conxius-enclave-sdk?tag=v2.0.15#5cf890bfd6c6fc3ffcd43593d68fe9c94ea61a49"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -4131,8 +4131,8 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "lib-conxian-core"
-version = "0.3.1"
-source = "git+https://github.com/Conxian/lib-conxian-core?rev=89ebdfc2ae7dadad42490b0ce43345b52a69a8c4#89ebdfc2ae7dadad42490b0ce43345b52a69a8c4"
+version = "0.3.2"
+source = "git+https://github.com/Conxian/lib-conxian-core?rev=6075ef7c1640b03246eec4b0d323a19960b18f91#6075ef7c1640b03246eec4b0d323a19960b18f91"
 dependencies = [
  "aluvm",
  "anyhow",
