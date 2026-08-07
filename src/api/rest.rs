@@ -212,6 +212,7 @@ pub fn app_router(
         .layer(cors)
         .layer(rate_limit)
         .layer(compression)
+        .layer(axum::middleware::from_fn(crate::api::security::apply_security_headers))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -837,5 +838,29 @@ mod tests {
             Some(tx_id.as_str())
         );
         assert_eq!(payload.get("pos").and_then(Value::as_u64), Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_security_headers_middleware() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let headers = response.headers();
+        assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
+        assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
+        assert_eq!(headers.get("X-XSS-Protection").unwrap(), "0");
+        assert_eq!(headers.get("Referrer-Policy").unwrap(), "strict-origin-when-cross-origin");
+        assert_eq!(headers.get("Strict-Transport-Security").unwrap(), "max-age=31536000; includeSubDomains; preload");
     }
 }
