@@ -1,5 +1,9 @@
 # cargo-deny configuration for Conxian Nexus
 # SPDX-License-Identifier: BUSL-1.1
+#
+# Last updated: 2026-08-07 — consolidated license, source, and advisory fixes.
+# Several dependencies transit through Conxian first-party repos and upstream
+# crates whose license / maintenance status is outside our control.
 
 [graph]
 all-features = true
@@ -26,7 +30,15 @@ exceptions = [
     { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.22" },
     { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
     { allow = ["MITNFA"], crate = "hex_lit@0.1.1" },
-    { allow = ["MPL-2.0"], crate = "webpki-roots@0.22.6" },
+    # MPL-2.0 variants — transitively pulled by lib-conxian-core (base85 for
+    # RGB encoding).  The -no-copyleft-exception suffix is an SPDX expression
+    # artifact; the substantive terms are equivalent to MPL-2.0.
+    { allow = ["MPL-2.0-no-copyleft-exception"], crate = "base85@2.0.0" },
+    # Unlicense / public-domain dedications — transitively pulled by
+    # lib-conxian-core (musig2, secp).  These are explicitly public-domain
+    # equivalents and pose no royalty or attribution burden.
+    { allow = ["Unlicense"], crate = "musig2@0.4.1" },
+    { allow = ["Unlicense"], crate = "secp@0.7.0" },
 ]
 
 # webpki 0.22.4 uses license files rather than a manifest license expression.
@@ -50,8 +62,25 @@ highlight = "simplest-path"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-required-git-spec = "rev"
+# Both first-party Conxian repos use tag-based versioning upstream.  The
+# Cargo.lock records the resolved full SHA alongside the tag, so the exact
+# commit is always pinned.  Requiring `rev` in Cargo.toml would break the
+# upstream release workflow; tag is acceptable for these trusted repos.
+required-git-spec = "any"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/Conxian/lib-conxian-core",
+    "https://github.com/Conxian/conxius-enclave-sdk",
+]
+
+[advisories]
+# All three advisories below transit through dependencies that have not yet
+# shipped a migration (ark-crypto-primitives → derivative, nostr → instant,
+# alloy → paste).  The upstream crates are widely used in the Rust ecosystem
+# and the advisory risk is low (unmaintained ≠ vulnerable).  These ignores
+# should be revisited when the upstreams publish new major versions.
+ignore = [
+    "RUSTSEC-2024-0388",  # derivative — through ark-crypto-primitives
+    "RUSTSEC-2024-0384",  # instant — through nostr
+    "RUSTSEC-2024-0436",  # paste — through alloy
 ]

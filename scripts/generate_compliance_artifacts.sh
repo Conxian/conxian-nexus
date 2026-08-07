@@ -13,7 +13,7 @@ cd "${repository_root}"
 cargo metadata --locked --format-version 1 | python3 -c '
 import json, sys
 packages = json.load(sys.stdin)["packages"]
-expected = {"lib-conxian-core": ("0.3.0", "6187bf6227f302988cc69962ed8b12ea6758f2cd"), "xxhash-rust": ("0.8.18", None)}
+expected = {"lib-conxian-core": ("0.3.1", "89ebdfc2ae7dadad42490b0ce43345b52a69a8c4"), "xxhash-rust": ("0.8.18", None)}
 for name, (version, revision) in expected.items():
     matches = [p for p in packages if p["name"] == name]
     if len(matches) != 1 or matches[0]["version"] != version:
@@ -27,7 +27,7 @@ for name, (version, revision) in expected.items():
 mkdir -p "${output_dir}"
 cargo about generate about.hbs --frozen --all-features --output-file "${output_dir}/THIRD_PARTY_LICENSES.html"
 grep -q "xxhash-rust 0.8.18" "${output_dir}/THIRD_PARTY_LICENSES.html"
-grep -q "lib-conxian-core 0.3.0" "${output_dir}/THIRD_PARTY_LICENSES.html"
+grep -q "lib-conxian-core 0.3.1" "${output_dir}/THIRD_PARTY_LICENSES.html"
 
 rm -f "${sbom_base}.json"
 cargo cyclonedx --all-features --format json --spec-version 1.5 --override-filename "${sbom_base}"
