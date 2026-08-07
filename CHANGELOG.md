@@ -1,11 +1,11 @@
 # Changelog
 
-## [0.4.22] - 2026-07-15
+## [v0.4.22] - 2026-07-15
 
 ### Changed
 - Updated release workflow: stages now run independently for better reliability
 
-## [0.4.21] - 2026-07-15
+## [v0.4.21] - 2026-07-15
 
 ### Changed
 - Enhanced AGENTS.md with comprehensive release documentation
@@ -15,13 +15,13 @@
 ### Fixed
 - Release workflow: publish and attest now independent of create-github-release stage
 
-## [0.4.20] - 2026-07-15
+## [v0.4.20] - 2026-07-15
 
 ### Changed
 - Enhanced AGENTS.md with version alignment matrix and release process documentation
 - Updated AGENTS.md with multi-dimensional knowledge base structure
 
-## [0.4.19] - 2026-07-07
+## [v0.4.19] - 2026-07-07
 
 ### Added
 - **NIP-005 Hardening**: Enhanced structural validation for EVM, Cosmos, Fedimint, and Stacks adapters.
@@ -36,7 +36,7 @@
 - Removed unused code and dead variants in `admin.rs` and `erp.rs` to resolve compiler warnings.
 - Corrected type inference issues in `sqlx` and `reqwest` call sites across the API layer.
 
-## [0.4.18] - 2026-07-06
+## [v0.4.18] - 2026-07-06
 
 ### Added
 - **NIP-006**: Scoped Admin API Keys and Dual-Signature Login (`/admin/v1/login`).
@@ -48,7 +48,7 @@
 - Updated `Storage::new` to bail on unauthenticated Redis in release builds unless overridden.
 - Synchronized `docs/GAP_ANALYSIS.md` and `docs/RESEARCH.md` with v0.4.18 implementations.
 
-## [0.4.17] - 2026-06-27
+## [v0.4.17] - 2026-06-27
 
 ### Added
 - **NIP-005**: Real Groth16 cryptographic verification for BitVM2 transitions using `ark-groth16`.
