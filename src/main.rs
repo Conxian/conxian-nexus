@@ -11,7 +11,7 @@ use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::executor::{
     bitvm_groth16::CanonicalStateTransitionVerifier,
     canonical_bitvm::{
-        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, UnavailableBitcoinHeightProvider,
+        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, StacksBitcoinHeightProvider,
     },
 };
 use conxian_nexus::oracle::OracleService;
@@ -123,12 +123,15 @@ async fn main() -> anyhow::Result<()> {
         let service = CanonicalBitvmService::new(
             Arc::new(CanonicalStateTransitionVerifier::new(Arc::new(registry))),
             expected_network,
-            Arc::new(UnavailableBitcoinHeightProvider),
+            Arc::new(StacksBitcoinHeightProvider::new(
+                config.stacks_node_rpc_url.clone(),
+            )),
             Arc::new(PostgresCanonicalBitvmReceiptStore::new(storage.clone())),
         );
         executor = executor.with_canonical_bitvm_service(Arc::new(service));
-        tracing::warn!(
-            "Canonical BitVM registry loaded, but verification remains unavailable until a reviewed trusted Bitcoin-height provider is wired"
+        tracing::info!(
+            "Canonical BitVM registry loaded with Stacks-derived Bitcoin height provider (RPC: {})",
+            config.stacks_node_rpc_url
         );
     } else {
         tracing::info!(
