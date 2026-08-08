@@ -48,3 +48,15 @@ To align the gRPC API layer with the REST security standards, Nexus implements f
 - **Redis Verification**: The key is dynamically verified against the B2B subscription pool in Redis (`apikey:<api_key>`). If the key does not exist, access is strictly denied with an `Unauthenticated` status.
 - **Development/Production Separation**: The legacy static `"dev-mode"` key is bypassed only if the service is explicitly configured to `skip_auth` (such as local debug/development builds and test suites). In production/release builds, dev-mode bypass is rejected and fails closed.
 - **Robust Fail-Closed Handling**: If the Redis authentication backend itself is unavailable or offline, the system safely fails closed and returns an `Internal` error to ensure zero unauthorized access.
+
+## 7. HTTP Security Headers [CON-SEC-01]
+
+### Secure Headers Configuration
+The REST API layer (`src/api/rest.rs`) has been hardened with secure HTTP headers by enforcing the `SecurityHeadersConfig` middleware to mitigate clickjacking, MIME-type sniffing, cross-site scripting (XSS), and session hijacking.
+- **Strict Headers Enforced**:
+  - `X-Frame-Options: DENY` (Mitigates Clickjacking)
+  - `X-Content-Type-Options: nosniff` (Mitigates MIME sniffing)
+  - `X-XSS-Protection: 0` (Sanitization filter control)
+  - `Referrer-Policy: strict-origin-when-cross-origin` (Protects referrer data)
+  - `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload` (HSTS enforces HTTPS connections)
+- **Integration**: The middleware is implemented in `src/api/security.rs` and registered as a top-level Router layer in `src/api/rest.rs` to secure all public endpoints.
