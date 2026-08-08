@@ -3,6 +3,13 @@
 //!
 //! Rate limiting is provided by tower-http's built-in utilities.
 
+use axum::{
+    extract::Request,
+    http::{header, HeaderValue},
+    middleware::Next,
+    response::Response,
+};
+
 /// Security headers configuration for production use
 pub struct SecurityHeadersConfig {
     /// X-Frame-Options header value
@@ -48,4 +55,42 @@ impl SecurityHeadersConfig {
             ..Default::default()
         }
     }
+}
+
+/// Middleware to apply secure headers to HTTP responses
+pub async fn apply_security_headers(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+
+    let config = SecurityHeadersConfig::strict();
+
+    headers.insert(
+        header::X_FRAME_OPTIONS,
+        HeaderValue::from_static(config.x_frame_options),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static(config.x_content_type_options),
+    );
+
+    if let Ok(name) = header::HeaderName::from_bytes(b"x-xss-protection") {
+        headers.insert(name, HeaderValue::from_static(config.x_xss_protection));
+    }
+
+    if let Ok(name) = header::HeaderName::from_bytes(b"referrer-policy") {
+        headers.insert(name, HeaderValue::from_static(config.referrer_policy));
+    }
+
+    headers.insert(
+        header::STRICT_TRANSPORT_SECURITY,
+        HeaderValue::from_static(config.strict_transport_security),
+    );
+
+    if let Some(ref csp) = config.content_security_policy {
+        if let Ok(v) = HeaderValue::from_str(csp) {
+            headers.insert(header::CONTENT_SECURITY_POLICY, v);
+        }
+    }
+
+    response
 }
