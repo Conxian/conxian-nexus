@@ -167,6 +167,20 @@ Nexus re-exports canonical Core types via `compat::core_bridge::core_types`:
 - **conxian-gateway**: Downstream consumer of Nexus proofs
 - **conxius-enclave-sdk**: SDK defines canonical chain registry — Nexus aligns observation coverage
 
+### Session 48 — Enhancement Implementation Complete
+
+All 7 market enhancement phases implemented. Documentation in conxian_market@39136c0:
+
+| Doc | Covers | Relevant Nexus Role |
+|-----|--------|---------------------|
+| `SETTLEMENT_RAILS.md` | 6 rails cataloged | Execution attestation for Managed+ tiers |
+| `monitoring.md` | sBTC, Fedimint, Babylon health | Nexus provides attestation data for metrics |
+| `sla_bounty_system.md` | CJCS gap cards, reputation | Enclave attestation gates auto-bounty execution |
+| `trust_tier_pricing.md` | Tier detection, SLA templates | Nexus `ExecutionRequest` carries TrustTier (PR #196) |
+
+> Nexus enclave attestation (PR #196) is the gating mechanism for Managed/Strict tier auto-execution.
+> See `conxian_market/docs/knowledge_base/trust_tier_pricing.md` §2 for tier detection flow.
+
 ## License
 BUSL-1.1 (Business Source License 1.1). Change Date: 2030-01-01. Change License: GPL-3.0-or-later.
 See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
