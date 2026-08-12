@@ -106,6 +106,18 @@ For more detailed setup instructions, including production hardening, see the [O
 - [REPO_OWNERSHIP.md](./docs/REPO_OWNERSHIP.md)
 - [LICENSE](./LICENSE)
 
+## Support Expectations & Escalation SLA Matrix
+
+As a sovereign, non-custodial infrastructure component, Conxian Nexus operates on a fail-closed model. Public support expectations and escalation paths are strictly codified as follows:
+
+| Severity Level | Definition | Response Target | Resolution Target | Escalation Path |
+|---|---|---|---|---|
+| **L3 - Critical** | Network downtime, TEE/Enclave attestation failures, or potential security vulnerabilities. | < 2 Hours | < 12 Hours | Email to `security@conxian-labs.com` / PGP-encrypted dispatch to lead maintainers. |
+| **L2 - Major** | Multi-chain adapter synchronization drift (> 2 blocks) triggering Safety Mode, or SRL-1 payment recovery blocks. | < 6 Hours | < 24 Hours | Technical Issue template on GitHub / routing via `@Conxian/security-team`. |
+| **L1 - Minor** | Local configuration, documentation ambiguity, non-breaking CLI issues, or API telemetry updates. | < 24 Hours | < 48 Hours | General Support template on GitHub / routing to community maintainers. |
+
+All issues are routed and prioritized according to the administrative registry in [CODEOWNERS](./.github/CODEOWNERS). Technical compliance is managed under the policies described in [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md).
+
 ## Contact
 
 - Support: [support@conxian-labs.com](mailto:support@conxian-labs.com) (See [SUPPORT.md](./SUPPORT.md) for details)
