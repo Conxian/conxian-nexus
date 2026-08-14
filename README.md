@@ -8,7 +8,7 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Status
 
-**Active development (v0.4.19).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
+**Active development (v0.4.22).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
 
 ## Audience
 
@@ -61,7 +61,7 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Rust 1.82+, PostgreSQL 15, and Redis 7
+- Rust 1.97+, PostgreSQL 15, and Redis 7
 
 ### Setup
 
