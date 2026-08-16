@@ -1,4 +1,4 @@
-# Conxian Nexus: Gap Analysis & Research Map (v0.4.19)
+# Conxian Nexus: Gap Analysis & Research Map (v0.4.22)
 
 This document maps identified security holes and protocol gaps to their research foundations and provides a prioritization score.
 
