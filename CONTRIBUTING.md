@@ -34,7 +34,7 @@ To set up your local environment for development:
 - Follow standard Rust formatting (`cargo fmt`).
 - Ensure all public functions have doc comments.
 - Maintain high test coverage for new logic.
-- **Do not commit source code dumps, audit logs, or temporary artifacts**. Check `.gitignore` for current patterns.
+- **Do not commit source code dumps, audit logs, temporary artifacts, or Python build/cache outputs** (`__pycache__`, `.pytest_cache`, `.coverage`). Check `.gitignore` and `.dockerignore` for current ignore patterns.
 
 ## Governance Support Routing
 

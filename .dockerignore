@@ -41,3 +41,14 @@ full_audit_dump.txt
 *.crt
 *.csr
 *.p7b
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
