@@ -46,3 +46,14 @@ full_audit_dump.txt
 
 # Submodules
 lib-conxian-core/target/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/
