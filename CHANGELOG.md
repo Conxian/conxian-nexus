@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.23] - 2026-08-01
+
+### Added
+- **CON-24 B2B Paid Subscription Tiers**: Implemented `Free`, `Pro`, and `Enterprise` subscription tiers with feature-gating for DLC, ZKML, Tableland, and canonical BitVM (`src/api/billing/mod.rs`).
+- **Lightning Network Tier Upgrades**: Added `/billing/upgrade` and `/billing/verify-payment` REST endpoints to facilitate automated tier upgrades settled via Lightning Network invoices.
+- **CON-1533 BitVM Groth16 Research Salvage**: Salvaged BitVM Groth16 research artifacts into unit test coverage and verifier integration.
+
+### Changed
+- Synchronized repository version across `Cargo.toml`, `README.md`, `AGENTS.md`, `CHANGELOG.md`, and `docs/GAP_ANALYSIS.md`.
+
 ## [0.4.22] - 2026-07-15
 
 ### Changed
@@ -55,5 +65,3 @@
 - **Hole 4.1**: Expanded MEV audit logging with full transaction payloads and sequencer priority metadata.
 - **NIP-004**: Cryptographic dual-signature verification for release approvals and governance.
 - **NIP-007**: Safety Mode enforcement in the submission path.
-
-[Output truncated for brevity]
