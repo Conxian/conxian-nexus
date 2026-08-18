@@ -2,6 +2,8 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use conxian_nexus::api::rest::app_router;
 use conxian_nexus::config::Config;
 use conxian_nexus::executor::rgb::RGBRolloutMode;
@@ -48,9 +50,12 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 async fn test_cosmos_ibc_verification_success() {
     let (app, _) = setup_test_app().await;
 
+    let header_bytes = b"tendermint_header_payload_bytes_v123456";
+    let encoded_header = BASE64.encode(header_bytes);
+
     let payload = json!({
         "client_id": "07-tendermint-0",
-        "header": "header_base64",
+        "header": encoded_header,
         "trusted_height": 100
     });
 
@@ -71,7 +76,38 @@ async fn test_cosmos_ibc_verification_success() {
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], true);
     assert_eq!(res["client_id"], "07-tendermint-0");
-    assert_eq!(res["trust_level"], "T1 (NIP-005 Phase 1)");
+    assert!(res["trust_level"]
+        .as_str()
+        .unwrap()
+        .contains("Cryptographic Header"));
+}
+
+#[tokio::test]
+async fn test_cosmos_ibc_verification_corrupt_header() {
+    let (app, _) = setup_test_app().await;
+
+    let payload = json!({
+        "client_id": "07-tendermint-0",
+        "header": "!!!invalid_base64!!!",
+        "trusted_height": 100
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/cosmos/verify-ibc")
+                .header("Content-Type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let res: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(res["valid"], false);
 }
 
 #[tokio::test]
