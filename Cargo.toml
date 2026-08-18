@@ -1,6 +1,6 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.22"
+version = "0.4.23"
 license = "BUSL-1.1"
 rust-version = "1.97"
 edition = "2021"
@@ -19,6 +19,7 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 base64 = "0.23"
 sha2 = "0.11"
+sha3 = "0.10"
 hmac = "0.13"
 rand = "0.10"
 hex = "0.4"
