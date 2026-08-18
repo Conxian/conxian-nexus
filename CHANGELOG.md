@@ -1,14 +1,16 @@
 # Changelog
 
-## [0.4.23] - 2026-08-01
+## [0.4.23] - 2026-08-18
 
 ### Added
+- **CON-1304 Fedimint Phase 2 Cryptographic Audit**: Implemented Fedimint e-cash blinded mint proof verification in `src/executor/fedimint.rs`, including prefix checks (`fed:`, `fed1:`), payload length validation, SHA-256 nonce hash derivation, double-spend detection against PostgreSQL, and audit persistence (`migrations/20260818000000_fedimint_mint_audit.sql`).
+- **NIP-005 Phase 2 Cryptographic Verification**: Upgraded EVM (MPT receipt proof Keccak-256 root matching) and Cosmos (IBC Tendermint base64 header SHA-256 digest computation) adapters to full cryptographic verification.
 - **CON-24 B2B Paid Subscription Tiers**: Implemented `Free`, `Pro`, and `Enterprise` subscription tiers with feature-gating for DLC, ZKML, Tableland, and canonical BitVM (`src/api/billing/mod.rs`).
 - **Lightning Network Tier Upgrades**: Added `/billing/upgrade` and `/billing/verify-payment` REST endpoints to facilitate automated tier upgrades settled via Lightning Network invoices.
 - **CON-1533 BitVM Groth16 Research Salvage**: Salvaged BitVM Groth16 research artifacts into unit test coverage and verifier integration.
 
 ### Changed
-- Synchronized repository version across `Cargo.toml`, `README.md`, `AGENTS.md`, `CHANGELOG.md`, and `docs/GAP_ANALYSIS.md`.
+- Synchronized repository documentation (`docs/GAP_ANALYSIS.md`, `docs/RESEARCH.md`, and `CHANGELOG.md`) with v0.4.23 implementation state.
 
 ## [0.4.22] - 2026-07-15
 
