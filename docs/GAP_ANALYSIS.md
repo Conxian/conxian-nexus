@@ -21,7 +21,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active Research** |
 | **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 7 | 7 | **P2** | **Active Research** |
-| **CON-1304** | Fedimint Blinded Mint e-Cash Verification | 7 | 5 | **P2** | **Phase 1 Structural** |
+| **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Phase 2 Cryptographic Audit** |
 | **CON-1200** | Stacks Clarity 4 Passkey & Bytecode Verification | 7 | 4 | **P2** | **Phase 1 Structural** |
 
 ## 2. Mapping & Research Context
@@ -72,7 +72,12 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Introspection and recursive covenant spending condition checks for Bitcoin Taproot scripts.
 - **Status**: **Active Research**. Monitored via OP_CAT execution simulator.
 
-### 2.10 Hardware Enclave Attestation Verification (Hole 2.1)
+### 2.10 Fedimint Blinded Mint e-Cash Verification (CON-1304)
+- **Gap**: Initial adapter only had a placeholder structural check returning `Ok(true)`.
+- **Status**: **Phase 2 Cryptographic Audit**. Verifies e-cash token format (`fed:` / `fed1:` prefix, base64 payload, length > 32 bytes), derives unique SHA-256 nonce hashes, enforces strict double-spend checks against `fedimint_verified_proofs` in SQLx, and logs immutable audit trails.
+- **Code**: `src/executor/fedimint.rs`, `migrations/20260818000000_fedimint_mint_audit.sql`
+
+### 2.11 Hardware Enclave Attestation Verification (Hole 2.1)
 - **Gap**: Soft enforcement allowed submission without attestation certificates in development mode.
 - **Status**: **Soft Enforcement / TEE**. Structural DER envelope validation active; root-of-trust verification configured via `require_attestation`.
 - **Code**: `src/executor/mod.rs`

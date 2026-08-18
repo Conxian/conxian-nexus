@@ -57,6 +57,6 @@
 - **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions.
 - **Status**: Active research and execution simulation.
 
-### 6.4 Fedimint Community Liquidity (CON-1304)
+### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
 - **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
-- **Status**: Phase 1 Federation Adapter active in `src/executor/fedimint.rs`.
+- **Status**: **Phase 2 Cryptographic Audit Completed (v0.4.23)** in `src/executor/fedimint.rs`. Verifies blinded mint proofs, derives SHA-256 nonce digests, checks double-spending against `fedimint_verified_proofs` in SQLx, and logs immutable audit records.
