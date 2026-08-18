@@ -84,7 +84,10 @@ impl EVMAdapter {
 
         // Cryptographic node 0 hash verification against receipt_root
         let node0_hash = Keccak256::digest(&decoded_nodes[0]);
-        let expected_root_hex = proof.receipt_root.strip_prefix("0x").unwrap_or(&proof.receipt_root);
+        let expected_root_hex = proof
+            .receipt_root
+            .strip_prefix("0x")
+            .unwrap_or(&proof.receipt_root);
         let expected_root_bytes = match hex::decode(expected_root_hex) {
             Ok(bytes) if bytes.len() == 32 => bytes,
             _ => {
@@ -116,7 +119,10 @@ impl EVMAdapter {
             if !contains_child_ref {
                 return Ok(EVMVerificationResult {
                     valid: false,
-                    status: format!("MPT trie linkage broken between node {i} and node {}", i + 1),
+                    status: format!(
+                        "MPT trie linkage broken between node {i} and node {}",
+                        i + 1
+                    ),
                     verified_at_height: 0,
                 });
             }

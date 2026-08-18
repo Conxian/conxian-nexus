@@ -76,7 +76,10 @@ async fn test_cosmos_ibc_verification_success() {
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], true);
     assert_eq!(res["client_id"], "07-tendermint-0");
-    assert!(res["trust_level"].as_str().unwrap().contains("Cryptographic Header"));
+    assert!(res["trust_level"]
+        .as_str()
+        .unwrap()
+        .contains("Cryptographic Header"));
 }
 
 #[tokio::test]
