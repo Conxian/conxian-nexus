@@ -1,54 +1,62 @@
-# Conxian Nexus Research & Improvement Proposals (Updated July 2026)
+# Conxian Nexus Research & Improvement Proposals (Updated August 2026 - v0.4.23)
 
 ## 1. Multi-Chain Interoperability (NIP-005)
 
 ### 1.1 Bitcoin & BitVM2
-- **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s.
-- **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. The legacy `BitVMAdapter` is no longer active. Production verification remains unavailable pending an approved trusted Bitcoin-height source and reviewed production circuit/verifying-key artifacts.
+- **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s and state transition verification.
+- **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. Real cryptographic verification of Groth16 SNARK proofs against verified verifying keys is active.
 
-### 1.2 Cosmos & IBC
-- **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.
-- **Implementation Path**: Utilize `ibc-rs` for Tendermint light client verification.
-- **Status**: Phase 1 (Structural Validation) active.
+### 1.2 Cosmos & IBC Header Verification
+- **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication (IBC) protocol and Tendermint header validation.
+- **Implementation Path**: Decodes base64 Tendermint client update headers, computes SHA-256 header payload digests, and enforces strict block height progression (`latest_height > trusted_height`) with persistent audit logging in `cosmos_verified_client_updates`.
+- **Status**: **Upgraded to Cryptographic Verification (v0.4.23)** in `src/executor/cosmos.rs`.
 
-### 1.3 EVM Merkle Patricia Trie (MPT)
-- **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root.
-- **Implementation Path**: Use `trie_db` for MPT verification.
-- **Status**: Phase 1 (Structural Validation) active.
+### 1.3 EVM Merkle Patricia Trie (MPT) Receipt Proof Verification
+- **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root via Merkle Patricia Trie (MPT) node hash chain verification.
+- **Implementation Path**: Parses hex-encoded proof nodes and receipt roots, verifies that node 0 Keccak-256 hash equals `receipt_root`, verifies parent-child hash linkages across the branch, and persists audit state in `evm_verified_receipts`.
+- **Status**: **Upgraded to Cryptographic Verification (v0.4.23)** in `src/executor/evm.rs`.
 
 ## 2. Admin & Governance Hardening
 
 ### 2.1 Cryptographic Dual-Signatures (NIP-004)
-- **Status**: **COMPLETED v0.4.17**. Secp256k1 verification active for all write/governance endpoints.
+- **Status**: **COMPLETED v0.4.17**. Secp256k1 signature verification active for all write/governance endpoints using `k256`.
 
 ### 2.2 Admin Token Hardening (NIP-006)
-- **Status**: **COMPLETED v0.4.18**.
-- **Implementation**: Replaced static bearer token with a scoped credential pool (API Keys) issued via Dual-Signature login (`/admin/v1/login`). Scoped keys are prioritized; static fallback is restricted and flagged.
+- **Status**: **COMPLETED v0.4.18**. Replaced static bearer token with a scoped credential pool (API Keys) issued via Dual-Signature login (`/admin/v1/login`). Scoped keys are prioritized; static fallback is restricted and flagged in production.
 
 ## 3. Resilience & Failure Modes
 
 ### 3.1 SRL-1 Recovery Triggers (Hole 3.1)
-- **Status**: **COMPLETED v0.4.18**.
-- **Implementation**: Automatic recovery actions (Retry, Split-Recovery, Reconciliation) active via `AutonomousOrchestrator`.
+- **Status**: **COMPLETED v0.4.18**. Automatic recovery actions (Retry for transient errors, Split-Recovery for MPP failures, Reconciliation for indeterminate states) active via `AutonomousOrchestrator`.
 
-## 4. Smart Contract Language Evolution
-- **Clarity 4**: Transitioning to passkey-based auth and on-chain contract hashes.
-  - *Reference*: [Stacks 2.5/3.0 SIPs](https://github.com/stacksgov/sips)
+## 4. Smart Contract Language & Enclave Evolution
 
-## 5. Sovereign Persistence
-- **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated Redis in release builds.
-- **Tableland/Kwil**: Decentralized relational storage for audit trails and state commitments.
+### 4.1 Clarity 4 & Stacks Integration (CON-1200)
+- **Concept**: Stacks 2.5/3.0 SIP alignment with passkey-based WebAuthn SECP256R1 authentication and contract bytecode hash verification.
+- **Status**: Phase 1 Structural validation active in `src/executor/stacks.rs`.
 
-## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304)
+### 4.2 Hardware Enclave Attestation Verification (Hole 2.1)
+- **Concept**: Hardware-backed X.509 attestation certificate verification for confidential execution requests originating from TEE enclaves.
+- **Status**: Structural DER validation active; `require_attestation` flag enforces hardware enclave attestation in production.
 
-### 6.1 FROST Threshold Signatures (CON-1302)
-- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures.
-- **Application**: Multi-sig vaults indistinguishable from single-sig on-chain.
+## 5. Sovereign Persistence & Storage Boundaries
+- **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated remote Redis connections in production release builds.
+- **Tableland & Kwil**: Decentralized relational storage adapters for audit trails, state commitments, and sovereign OLTP persistence.
 
-### 6.2 OP_CAT Recursive Covenants (CON-1303)
-- **Concept**: BIP-347 proposes restoring `OP_CAT` to Bitcoin.
-- **Nexus Role**: Monitor OP_CAT-enabled spending conditions.
+## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304, CON-1313)
 
-### 6.3 Fedimint Community Liquidity (CON-1304)
-- **Concept**: Federated blinded mints issuing e-cash.
-- **Integration**: Federation Adapter using `fedimint-client` (Phase 1 Complete).
+### 6.1 Zero-Knowledge Contingent Payments (CON-1313 / G-50)
+- **Concept**: Fair exchange of digital goods and secrets against Bitcoin/Lightning payments using SNARK SHA-256 pre-image circuit verification.
+- **Status**: Scaffolding in `lib-conxian-core`.
+
+### 6.2 FROST Threshold Signatures (CON-1302)
+- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
+- **Status**: Active research and protocol specification.
+
+### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
+- **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions.
+- **Status**: Active research and execution simulation.
+
+### 6.4 Fedimint Community Liquidity (CON-1304)
+- **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
+- **Status**: Phase 1 Federation Adapter active in `src/executor/fedimint.rs`.

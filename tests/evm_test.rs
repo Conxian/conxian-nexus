@@ -11,6 +11,7 @@ use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use sha3::{Digest, Keccak256};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -48,11 +49,17 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 async fn test_evm_receipt_verification_success() {
     let (app, _) = setup_test_app().await;
 
+    // Construct cryptographically valid MPT node 0
+    let node0_raw = b"mpt_leaf_receipt_node_payload_data_bytes_123456";
+    let node0_hash = Keccak256::digest(node0_raw);
+    let node0_hex = hex::encode(node0_raw);
+    let receipt_root = format!("0x{}", hex::encode(node0_hash));
+
     let payload = json!({
         "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000001",
         "transaction_index": 0,
-        "proof_nodes": ["node1", "node2"],
-        "receipt_root": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        "proof_nodes": [node0_hex],
+        "receipt_root": receipt_root
     });
 
     let response = app
@@ -72,6 +79,36 @@ async fn test_evm_receipt_verification_success() {
     let res: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(res["valid"], true);
     assert!(res["status"].as_str().unwrap().contains("verified"));
+}
+
+#[tokio::test]
+async fn test_evm_receipt_verification_root_mismatch() {
+    let (app, _) = setup_test_app().await;
+
+    let payload = json!({
+        "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000001",
+        "transaction_index": 0,
+        "proof_nodes": ["6e6f646531"],
+        "receipt_root": "0x0000000000000000000000000000000000000000000000000000000000000002"
+    });
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/evm/verify-receipt")
+                .header("Content-Type", "application/json")
+                .body(Body::from(payload.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let res: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(res["valid"], false);
+    assert!(res["status"].as_str().unwrap().contains("mismatch"));
 }
 
 #[tokio::test]
