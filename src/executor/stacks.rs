@@ -113,7 +113,8 @@ impl StacksAdapter {
                 );
                 return Ok(StacksVerificationResult {
                     valid: false,
-                    status: "Duplicate transaction attempt detected: tx_id already verified".to_string(),
+                    status: "Duplicate transaction attempt detected: tx_id already verified"
+                        .to_string(),
                     verified_at_height: tx.block_height,
                 });
             }
