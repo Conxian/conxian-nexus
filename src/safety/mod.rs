@@ -5,6 +5,7 @@
 
 use crate::storage::Storage;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
 use std::sync::Arc;
@@ -258,5 +259,35 @@ mod tests {
         assert_eq!(NexusSafety::calculate_drift(100, 98), 2);
         assert_eq!(NexusSafety::calculate_drift(100, 102), 0);
         assert_eq!(NexusSafety::calculate_drift(100, 100), 0);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnterpriseTelemetryAlert {
+    pub feed_name: String,
+    pub uncommitted_count: u64,
+    pub last_processed_timestamp: i64,
+}
+
+impl NexusSafety {
+    pub async fn check_enterprise_feed_drift(&self) -> anyhow::Result<()> {
+        let max_uncommitted_threshold = 500u64;
+
+        let row = sqlx::query(
+            "SELECT COUNT(*) as cnt FROM enterprise_pos_settlement_commitments WHERE created_at < NOW() - INTERVAL '15 minutes'"
+        )
+        .fetch_one(&self.storage.pg_pool)
+        .await?;
+
+        let uncommitted: i64 = row.get("cnt");
+        if (uncommitted as u64) > max_uncommitted_threshold {
+            tracing::error!(
+                "Enterprise POS Settlement Feed Drift Detected! Uncommitted count: {}",
+                uncommitted
+            );
+            self.trigger_safety_mode(uncommitted as u64).await?;
+        }
+
+        Ok(())
     }
 }
