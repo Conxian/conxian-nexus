@@ -309,10 +309,16 @@ mod tests {
         assert_eq!(deserialized.priority, 1);
     }
 
-
     fn make_test_executor(require_attestation: bool) -> NexusExecutor {
-        let storage = Arc::new(crate::storage::Storage::from_config_lazy(&crate::config::Config::default_test()).unwrap());
-        let mut exec = NexusExecutor::new(storage, rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new());
+        let storage = Arc::new(
+            crate::storage::Storage::from_config_lazy(&crate::config::Config::default_test())
+                .unwrap(),
+        );
+        let mut exec = NexusExecutor::new(
+            storage,
+            rgb::RGBRolloutMode::Disabled,
+            std::collections::HashSet::new(),
+        );
         exec.require_attestation = require_attestation;
         exec
     }
