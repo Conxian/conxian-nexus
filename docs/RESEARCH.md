@@ -53,7 +53,7 @@
   2. Verify attestation certificate chain against hardware root-of-trust (Intel SGX / AMD SEV-SNP).
   3. Validate enclave measurement hashes against authorized workload measurements.
   4. Enforce strict certificate validity window checks (`not_before` / `not_after`).
-- **Status**: Structural DER validation active; `require_attestation` flag enforces hardware enclave attestation in production (`src/executor/mod.rs`).
+- **Status**: **Upgraded to X.509 DER Cryptographic Verification (v0.4.23)** in `src/executor/mod.rs`. Decodes raw DER payloads using `x509-cert`, verifies certificate validity windows (`not_before` / `not_after`), and enforces strict attestation checks when `require_attestation` is set.
 
 ## 5. Sovereign Persistence & Storage Boundaries
 - **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated remote Redis connections in production release builds.

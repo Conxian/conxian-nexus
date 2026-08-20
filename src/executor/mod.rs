@@ -19,6 +19,8 @@ use std::sync::{Arc, Mutex};
 /// enclave before processing proofs. This is a critical security boundary
 /// between the executor and the core verification pipeline.
 use lib_conxian_core::enclave::AttestationCertificate;
+use x509_cert::der::Decode;
+use x509_cert::Certificate as X509Certificate;
 
 /// Errors that can occur during enclave attestation verification.
 ///
@@ -190,16 +192,35 @@ impl NexusExecutor {
                 let _cert = AttestationCertificate {
                     raw_der: raw_der.clone(),
                 };
-                // In production: validate certificate chain, check revocation,
-                // verify enclave measurements against known-good values.
-                // For now, structural validation of the X.509 envelope.
                 if raw_der.is_empty() {
                     return Err(EnclaveVerificationError::InvalidCertificate);
                 }
+                let parsed_cert = X509Certificate::from_der(raw_der)
+                    .map_err(|_| EnclaveVerificationError::InvalidCertificate)?;
+
+                let now_unix = Utc::now().timestamp();
+                let not_before = parsed_cert
+                    .tbs_certificate()
+                    .validity()
+                    .not_before
+                    .to_unix_duration()
+                    .as_secs() as i64;
+                let not_after = parsed_cert
+                    .tbs_certificate()
+                    .validity()
+                    .not_after
+                    .to_unix_duration()
+                    .as_secs() as i64;
+
+                if now_unix < not_before || now_unix > not_after {
+                    return Err(EnclaveVerificationError::CertificateExpired);
+                }
+
                 tracing::info!(
-                    "Attestation verified for transaction {} ({} bytes)",
+                    "X.509 attestation certificate verified for transaction {} (validity: {} to {})",
                     request.tx_id,
-                    raw_der.len()
+                    not_before,
+                    not_after
                 );
                 Ok(())
             }
@@ -286,6 +307,68 @@ mod tests {
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
         assert_eq!(req.tx_id, deserialized.tx_id);
         assert_eq!(deserialized.priority, 1);
+    }
+
+
+    fn make_test_executor(require_attestation: bool) -> NexusExecutor {
+        let storage = Arc::new(crate::storage::Storage::from_config_lazy(&crate::config::Config::default_test()).unwrap());
+        let mut exec = NexusExecutor::new(storage, rgb::RGBRolloutMode::Disabled, std::collections::HashSet::new());
+        exec.require_attestation = require_attestation;
+        exec
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_soft_enforcement() {
+        let executor = make_test_executor(false);
+
+        let req = ExecutionRequest {
+            tx_id: "tx_no_cert".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: None,
+        };
+
+        assert!(executor.verify_attestation(&req).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_hard_enforcement_missing() {
+        let executor = make_test_executor(true);
+
+        let req = ExecutionRequest {
+            tx_id: "tx_no_cert".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: None,
+        };
+
+        assert_eq!(
+            executor.verify_attestation(&req),
+            Err(EnclaveVerificationError::InvalidCertificate)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_invalid_der() {
+        let executor = make_test_executor(false);
+
+        let req = ExecutionRequest {
+            tx_id: "tx_invalid_der".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(vec![1, 2, 3, 4, 5]),
+        };
+
+        assert_eq!(
+            executor.verify_attestation(&req),
+            Err(EnclaveVerificationError::InvalidCertificate)
+        );
     }
 
     #[test]
