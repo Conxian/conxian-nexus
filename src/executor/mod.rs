@@ -107,7 +107,7 @@ impl NexusExecutor {
         let lightning_adapter = lightning::LightningResilienceAdapter::new();
         let evm_adapter = evm::EVMAdapter::new(storage.clone());
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
-        let stacks_adapter = stacks::StacksAdapter::new();
+        let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
         let fedimint_adapter = fedimint::FedimintAdapter::new(storage.clone());
         Self {
             storage,

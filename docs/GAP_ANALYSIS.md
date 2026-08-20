@@ -12,6 +12,8 @@ This document maps identified security holes, protocol gaps, and active research
 | **NIP-005 (BitVM)** | BitVM2 Groth16 Verification (ark-groth16) | 10 | 8 | **P0** | **Completed (v0.4.22)** |
 | **NIP-005 (EVM)** | EVM Merkle Patricia Trie (MPT) Cryptographic Verification | 9 | 6 | **P1** | **Upgraded (v0.4.23)** |
 | **NIP-005 (Cosmos)** | Cosmos IBC Tendermint Header Cryptographic Verification | 9 | 6 | **P1** | **Upgraded (v0.4.23)** |
+| **CON-1200** | Stacks Clarity 4 & sBTC Protocol Adapter Upgrade | 8 | 5 | **P1** | **Upgraded Phase 2 (v0.4.23)** |
+| **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Completed Phase 2 (v0.4.23)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
 | **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
 | **NIP-006** | Admin Token Hardening (Scoped Credentials / RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
@@ -21,8 +23,6 @@ This document maps identified security holes, protocol gaps, and active research
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active Research** |
 | **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 7 | 7 | **P2** | **Active Research** |
-| **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Phase 2 Cryptographic Audit** |
-| **CON-1200** | Stacks Clarity 4 Passkey & Bytecode Verification | 7 | 4 | **P2** | **Phase 1 Structural** |
 
 ## 2. Mapping & Research Context
 
@@ -37,12 +37,13 @@ This document maps identified security holes, protocol gaps, and active research
 - **Code**: `src/api/admin.rs`
 
 ### 2.3 Multi-Chain Verification (NIP-005)
-- **Gap**: Adapters for EVM and Cosmos required cryptographic proof verification beyond structural checks.
+- **Gap**: Adapters for EVM, Cosmos, and Stacks required cryptographic proof verification beyond structural checks.
 - **Remediation**:
   - **BitVM2**: Canonical BN254 Groth16 verifier using `ark-groth16` (`src/executor/bitvm_groth16.rs`).
   - **EVM (v0.4.23)**: Merkle Patricia Trie (MPT) node hash chain verification against `receipt_root` using Keccak-256 (`src/executor/evm.rs`).
   - **Cosmos (v0.4.23)**: Base64 header payload decoding, SHA-256 digest validation, and height progression checks (`src/executor/cosmos.rs`).
-- **Code**: `src/executor/evm.rs`, `src/executor/cosmos.rs`, `src/executor/bitvm_groth16.rs`
+  - **Stacks / sBTC (v0.4.23 Upgrade)**: Stacks address prefix (`SP`/`ST`) validation, 0x-hex tx_id verification, sBTC amount bounds enforcement, duplicate transaction detection, and SQLx PostgreSQL persistence (`src/executor/stacks.rs`).
+- **Code**: `src/executor/evm.rs`, `src/executor/cosmos.rs`, `src/executor/stacks.rs`, `src/executor/bitvm_groth16.rs`
 
 ### 2.4 SRL-1 Recovery (Hole 3.1)
 - **Gap**: Failure taxonomy exists, but automatic recovery actions were not triggered.
@@ -66,7 +67,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.8 FROST Threshold Signatures (CON-1302)
 - **Gap**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration.
-- **Status**: **Active Research**. Multi-sig vault abstraction indistinguishable on-chain.
+- **Status**: **Active Research**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs`.
 
 ### 2.9 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Gap**: Introspection and recursive covenant spending condition checks for Bitcoin Taproot scripts.

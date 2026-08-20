@@ -16,6 +16,17 @@
 - **Implementation Path**: Parses hex-encoded proof nodes and receipt roots, verifies that node 0 Keccak-256 hash equals `receipt_root`, verifies parent-child hash linkages across the branch, and persists audit state in `evm_verified_receipts`.
 - **Status**: **Upgraded to Cryptographic Verification (v0.4.23)** in `src/executor/evm.rs`.
 
+### 1.4 Stacks & sBTC Integration (CON-1200)
+- **Concept**: Stacks 2.5/3.0 SIP alignment with passkey-based WebAuthn SECP256R1 authentication, contract bytecode hash verification, and sBTC peg-in/peg-out transaction verification.
+- **Implementation Path**:
+  - **Phase 1**: Structural validation of transaction IDs and positive sBTC amounts.
+  - **Phase 2 (v0.4.23 Upgrade)**:
+    1. Cryptographic validation of Stacks mainnet (`SP`) and testnet (`ST`) c32/bech32 address prefixes and length constraints.
+    2. Strict 0x-prefixed 32-byte transaction ID format verification.
+    3. Positive sBTC satoshi amount bounds and valid block height enforcement.
+    4. SQLx PostgreSQL persistence in `stacks_verified_transactions` table with duplicate transaction detection and immutable audit logging.
+- **Status**: **Upgraded to Phase 2 Cryptographic Audit & Database Persistence (v0.4.23)** in `src/executor/stacks.rs`.
+
 ## 2. Admin & Governance Hardening
 
 ### 2.1 Cryptographic Dual-Signatures (NIP-004)
@@ -32,12 +43,17 @@
 ## 4. Smart Contract Language & Enclave Evolution
 
 ### 4.1 Clarity 4 & Stacks Integration (CON-1200)
-- **Concept**: Stacks 2.5/3.0 SIP alignment with passkey-based WebAuthn SECP256R1 authentication and contract bytecode hash verification.
-- **Status**: Phase 1 Structural validation active in `src/executor/stacks.rs`.
+- **Concept**: Stacks Clarity 4 contract verification and sBTC threshold transaction consensus.
+- **Status**: **Phase 2 Cryptographic Audit & Persistence Active** in `src/executor/stacks.rs`.
 
 ### 4.2 Hardware Enclave Attestation Verification (Hole 2.1)
 - **Concept**: Hardware-backed X.509 attestation certificate verification for confidential execution requests originating from TEE enclaves.
-- **Status**: Structural DER validation active; `require_attestation` flag enforces hardware enclave attestation in production.
+- **Specification & Design**:
+  1. Parse X.509 DER certificates submitted with `ExecutionRequest` payloads.
+  2. Verify attestation certificate chain against hardware root-of-trust (Intel SGX / AMD SEV-SNP).
+  3. Validate enclave measurement hashes against authorized workload measurements.
+  4. Enforce strict certificate validity window checks (`not_before` / `not_after`).
+- **Status**: Structural DER validation active; `require_attestation` flag enforces hardware enclave attestation in production (`src/executor/mod.rs`).
 
 ## 5. Sovereign Persistence & Storage Boundaries
 - **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated remote Redis connections in production release builds.
@@ -47,14 +63,26 @@
 
 ### 6.1 Zero-Knowledge Contingent Payments (CON-1313 / G-50)
 - **Concept**: Fair exchange of digital goods and secrets against Bitcoin/Lightning payments using SNARK SHA-256 pre-image circuit verification.
+- **Cryptographic Pipeline**:
+  1. Seller constructs a SHA-256 pre-image circuit using `ark-groth16` proving key.
+  2. Buyer verifies Groth16 SNARK proof that hash `H(s) = Y` matches the payment HTLC hash condition.
+  3. Upon payment settlement on Bitcoin/Lightning, the secret pre-image `s` is extracted from the transaction input.
 - **Status**: Scaffolding in `lib-conxian-core`.
 
 ### 6.2 FROST Threshold Signatures (CON-1302)
 - **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
+- **Protocol Specification**:
+  1. Two-round threshold signing protocol generating standard BIP-340 Schnorr signatures.
+  2. Integrates with ROAST (Robust Threshold Schnorr) orchestrator (`src/orchestrator/roast.rs`) for fault-tolerant participant set management.
+  3. Indistinguishable on-chain from single-key Taproot key-path spending.
 - **Status**: Active research and protocol specification.
 
 ### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
-- **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions.
+- **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
+- **Execution Model**:
+  1. Concatenates script elements using OP_CAT to construct transaction introspective checks.
+  2. Validates output scripts and transaction hash structures against predefined vault policies.
+  3. Enforces locktimes and recipient whitelist covenants on Bitcoin L1.
 - **Status**: Active research and execution simulation.
 
 ### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
