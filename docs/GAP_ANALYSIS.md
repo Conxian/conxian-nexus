@@ -82,3 +82,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Soft enforcement allowed submission without attestation certificates in development mode.
 - **Status**: **Completed (v0.4.23)**. X.509 DER certificate decoding using `x509-cert`, validity window verification (`not_before` / `not_after`), and configurable soft/hard attestation enforcement via `require_attestation`.
 - **Code**: `src/executor/mod.rs`
+
+### 2.12 Lightning Billing & Production Settlement (CON-24)
+- **Gap**: Billing upgrade handlers used non-canonical mock strings.
+- **Status**: **Completed (v0.4.23)**. Standardized canonical BOLT11 `lnbc` payment encoding and Redis settlement verification.
+- **Code**: `src/api/billing/mod.rs`

@@ -122,7 +122,7 @@ pub async fn create_dlc_bond_handler(
             dlc_contract_id,
             status: "Initialized".to_string(),
             oracle_announcement,
-            next_coupon_height: calculate_next_coupon_height(payload.expiry_height), // Mocked coupon interval
+            next_coupon_height: calculate_next_coupon_height(payload.expiry_height), // Standard 10% block coupon interval
         }),
     )
         .into_response()
