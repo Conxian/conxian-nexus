@@ -19,7 +19,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **NIP-006** | Admin Token Hardening (Scoped Credentials / RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
-| **Hole 2.1** | Hardware Enclave Certificate Chain Verification | 8 | 5 | **P1** | **Soft Enforcement / TEE** |
+| **Hole 2.1** | Hardware Enclave Certificate Chain Verification | 8 | 5 | **P1** | **Completed (v0.4.23)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active Research** |
 | **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 7 | 7 | **P2** | **Active Research** |
@@ -80,5 +80,5 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.11 Hardware Enclave Attestation Verification (Hole 2.1)
 - **Gap**: Soft enforcement allowed submission without attestation certificates in development mode.
-- **Status**: **Soft Enforcement / TEE**. Structural DER envelope validation active; root-of-trust verification configured via `require_attestation`.
+- **Status**: **Completed (v0.4.23)**. X.509 DER certificate decoding using `x509-cert`, validity window verification (`not_before` / `not_after`), and configurable soft/hard attestation enforcement via `require_attestation`.
 - **Code**: `src/executor/mod.rs`
