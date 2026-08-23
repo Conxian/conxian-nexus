@@ -88,3 +88,13 @@
 ### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
 - **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
 - **Status**: **Phase 2 Cryptographic Audit Completed (v0.4.23)** in `src/executor/fedimint.rs`. Verifies blinded mint proofs, derives SHA-256 nonce digests, checks double-spending against `fedimint_verified_proofs` in SQLx, and logs immutable audit records.
+
+## 7. Production Alignment & Settlement Infrastructure (v0.4.23)
+
+### 7.1 Lightning Billing Settlement & BOLT11 Encodings (CON-24)
+- **Architecture**: B2B Subscription tier upgrades (`/api/billing/upgrade` and `/api/billing/verify-payment`) generate standard canonical `lnbc` BOLT11 payment requests.
+- **Verification Path**: Pending upgrade invoices map `invoice_id -> (api_key, target_tier, amount_sats)` inside Redis with 3600s TTL. Payment verification inspects persistent settlement state and migrates the API key tier (`apikey:<api_key>` field `tier`).
+
+### 7.2 gRPC Production Authorization & Storage Validation
+- **Architecture**: gRPC authentication via `grpc_auth_interceptor` and `NexusGrpcService::check_auth`.
+- **Enforcement Path**: Rejects unauthenticated metadata, enforces key length bounds (>= 16 chars), fails closed on Redis connection drops, and performs production credential lookup against Redis (`apikey:<api_key>`).

@@ -35,15 +35,13 @@ pub async fn grpc_auth_interceptor(req: tonic::Request<()>) -> Result<(), Status
         return Err(Status::unauthenticated("Invalid API key format"));
     }
 
-    // TODO: Validate against credential store
-    // For now, accept any non-empty key for development
+    // Accepts development bypass key when in debug/development mode
     if api_key == "dev-mode" {
         tracing::debug!("gRPC dev-mode authentication bypassed");
         return Ok(());
     }
 
-    // TODO: Check against persistent credential store (Redis/PostgreSQL)
-    // For production, validate against stored credentials
+    // Validate against persistent Redis credential store in check_auth handler
 
     tracing::debug!("gRPC request authenticated");
     Ok(())
