@@ -53,6 +53,9 @@ where
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
     // Load environment variables
     dotenvy::dotenv().ok();
 
