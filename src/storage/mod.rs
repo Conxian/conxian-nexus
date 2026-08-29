@@ -83,6 +83,11 @@ impl Storage {
         Ok(())
     }
 
+    /// Consume-once idempotency store over the shared PostgreSQL pool.
+    pub fn idempotency(&self) -> idempotency::IdempotencyStore {
+        idempotency::IdempotencyStore::new(self.pg_pool.clone())
+    }
+
     #[cfg(test)]
     pub fn for_tests() -> std::sync::Arc<Self> {
         let pg_pool = sqlx::postgres::PgPoolOptions::new()
@@ -99,5 +104,6 @@ impl Storage {
     }
 }
 
+pub mod idempotency;
 pub mod kwil;
 pub mod tableland;
