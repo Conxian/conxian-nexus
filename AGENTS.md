@@ -30,7 +30,7 @@ Bitcoin/EVM/Cosmos —→ sync module —→ MMR state roots —→ REST/gRPC AP
 
 ## Protocol Coverage — SDK → Nexus Alignment
 
-The Conxius Enclave SDK (`lib-conclave-sdk` v0.3.1) defines the canonical 42-chain AssetRegistry and 46 protocol modules. Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
+The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.16) defines the canonical 42-chain AssetRegistry and 52 protocol modules (24 blockchain + 28 infrastructure). Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
 
 ### Chain Coverage (42 SDK chains → Nexus observation status)
 
