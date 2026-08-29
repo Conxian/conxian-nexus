@@ -19,7 +19,7 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 base64 = "0.23"
 sha2 = "0.11"
-sha3 = "0.10"
+sha3 = "0.11"
 x509-cert = "0.3"
 hmac = "0.13"
 rand = "0.10"
@@ -43,7 +43,7 @@ opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "tokio"] }
 tracing-opentelemetry = "0.33"
 uuid = { version = "1.23.0", features = ["v4"] }
-nostr-sdk = "0.44"
+nostr-sdk = "0.45"
 k256 = { version = "0.14.0", features = ["ecdsa", "sha256"] }
 ark-groth16 = "0.6.0"
 ark-serialize = "0.6.0"
