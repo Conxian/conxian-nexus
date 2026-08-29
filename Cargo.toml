@@ -24,7 +24,7 @@ x509-cert = "0.3"
 hmac = "0.13"
 rand = "0.10"
 hex = "0.4"
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "6075ef7c1640b03246eec4b0d323a19960b18f91", features = ["full-sdk"] }
+lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "930caaa839cefb90b5a6c10ae62585e5d893a516", features = ["full-sdk"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
