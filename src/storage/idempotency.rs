@@ -5,10 +5,12 @@
 //! primitive (`INSERT ... ON CONFLICT DO NOTHING`). A record's existence is the
 //! proof of consumption; there is no separate "claimed but not committed" state.
 
+use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPool;
 
 pub const MAX_KEY_LEN: usize = 512;
 pub const MAX_OPERATION_LEN: usize = 128;
+pub const MAX_CLOCK_LEN: usize = 128;
 
 /// Result of a consume-once attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +27,10 @@ pub enum IdempotencyError {
     InvalidKey,
     #[error("operation must be 1..={MAX_OPERATION_LEN} characters")]
     InvalidOperation,
+    #[error("idempotency clock must be 1..={MAX_CLOCK_LEN} characters")]
+    InvalidClock,
+    #[error("idempotency clock moved backwards")]
+    ClockRollback,
     #[error("idempotency backend error: {0}")]
     Backend(#[from] sqlx::Error),
 }
@@ -117,6 +123,80 @@ impl IdempotencyStore {
 
         tx.commit().await?;
         Ok(outcomes)
+    }
+
+    /// Consume a single idempotency key with an absolute retention horizon.
+    ///
+    /// The record carries `expires_at` so that [`Self::purge_expired`] can
+    /// reclaim it once the horizon passes. Consumption semantics are otherwise
+    /// identical to [`Self::consume_once`].
+    pub async fn consume_once_until(
+        &self,
+        key: &str,
+        operation: &str,
+        retain_until: DateTime<Utc>,
+    ) -> Result<ConsumeOutcome, IdempotencyError> {
+        Self::validate(key, operation)?;
+
+        let inserted = sqlx::query(
+            "INSERT INTO idempotency_records (idempotency_key, operation, expires_at) \
+             VALUES ($1, $2, $3) ON CONFLICT (idempotency_key) DO NOTHING",
+        )
+        .bind(key)
+        .bind(operation)
+        .bind(retain_until)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(if inserted.rows_affected() == 1 {
+            ConsumeOutcome::Fresh
+        } else {
+            ConsumeOutcome::AlreadyConsumed
+        })
+    }
+
+    /// Delete records whose retention horizon has passed.
+    ///
+    /// Returns the number of reclaimed records. Records without a retention
+    /// horizon (`expires_at IS NULL`) are never reclaimed.
+    pub async fn purge_expired(&self, now: DateTime<Utc>) -> Result<u64, IdempotencyError> {
+        let result = sqlx::query(
+            "DELETE FROM idempotency_records WHERE expires_at IS NOT NULL AND expires_at <= $1",
+        )
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Observe a wall-clock second for a named clock, fail-closed on rollback.
+    ///
+    /// The update is a single conditional upsert: the high-water mark is only
+    /// advanced when `now_secs` is greater than or equal to the stored value.
+    /// A zero-row result means the stored value is already ahead of `now_secs`,
+    /// which is reported as [`IdempotencyError::ClockRollback`].
+    pub async fn observe_time(&self, clock: &str, now_secs: i64) -> Result<(), IdempotencyError> {
+        if clock.is_empty() || clock.len() > MAX_CLOCK_LEN {
+            return Err(IdempotencyError::InvalidClock);
+        }
+
+        let result = sqlx::query(
+            "INSERT INTO idempotency_high_water (clock, last_observed_secs) \
+             VALUES ($1, $2) \
+             ON CONFLICT (clock) DO UPDATE \
+             SET last_observed_secs = EXCLUDED.last_observed_secs, updated_at = now() \
+             WHERE idempotency_high_water.last_observed_secs <= EXCLUDED.last_observed_secs",
+        )
+        .bind(clock)
+        .bind(now_secs)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(IdempotencyError::ClockRollback);
+        }
+        Ok(())
     }
 }
 
