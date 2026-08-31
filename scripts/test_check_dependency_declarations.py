@@ -12,7 +12,7 @@ import unittest
 
 CHECKER = Path(__file__).with_name("check_dependency_declarations.py").resolve()
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "60e92aaee7ea8a74cee0101393116ac70173ae80"
+CORE_REV = "134e6f48d9bd7c45f4b06ef08ec41f5cd3ba49e1"
 CORE_REV_MUTATED = CORE_REV[:-1] + ("1" if CORE_REV[-1] == "0" else "0")
 CORE_SOURCE = f"git+{CORE_URL}?rev={CORE_REV}#{CORE_REV}"
 CORE_DECLARATION = f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV}" }}'

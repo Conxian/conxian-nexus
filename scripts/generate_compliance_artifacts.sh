@@ -13,7 +13,7 @@ cd "${repository_root}"
 cargo metadata --locked --format-version 1 | python3 -c '
 import json, sys
 packages = json.load(sys.stdin)["packages"]
-expected = {"lib-conxian-core": ("0.3.2", "60e92aaee7ea8a74cee0101393116ac70173ae80"), "xxhash-rust": ("0.8.18", None)}
+expected = {"lib-conxian-core": ("0.3.2", "134e6f48d9bd7c45f4b06ef08ec41f5cd3ba49e1"), "xxhash-rust": ("0.8.18", None)}
 for name, (version, revision) in expected.items():
     matches = [p for p in packages if p["name"] == name]
     if len(matches) != 1 or matches[0]["version"] != version:
