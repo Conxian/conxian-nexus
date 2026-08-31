@@ -146,24 +146,18 @@ The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.16) defines the canonical 42
 - **lib-conxian-core**: Shared protocol primitives (git dependency, pinned rev)
 - **conxius-enclave-sdk**: Hardware enclave (optional, via lib-conxian-core `enclave` feature)
 
-### SDK Module Usage (Session 48 — Aug 2026)
+### Core Module Usage (Session 58 — Aug 2026)
 
-Nexus re-exports canonical Core types via `compat::core_bridge::core_types`:
+Nexus consumes `lib-conxian-core` (v0.3.2, exact git rev `134e6f48`) directly through three module boundaries. The legacy `compat::core_bridge::core_types` re-export shim was removed in PR #259 — Nexus now imports canonical types straight from their source modules:
 
-| SDK Module | Re-exported Types |
-|------------|-------------------|
-| control_model | Chain, ChainFamily, TrustTier, BridgeSystem, FinalityClass, VerificationClass |
-| signing | SignerCapabilities, SigningAlgorithm, SigningTarget |
-| verifier | ChainId, ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus, VerifierCapabilities |
-| anchoring | AnchoringPublisher, AnchoringReceipt, AnchoringRequest, TablelandAnchoringPublisher, OnChainAnchoringPublisher |
-| bitcoin::taproot | P2TR validation, control blocks, witness programs |
-| bitcoin::bip322 | BIP-322 message signing/verification |
-| protocol::dlc | DLC contract types |
-| protocol::frost | FROST DKG types |
-| protocol::covenant | Bitcoin covenant types |
-| protocol::intent | Cross-chain intent types |
-| lightning | LightningAdapter trait |
-| adapters | Chain adapter abstraction layer |
+| Core module | Nexus consumer | Types used |
+|-------------|----------------|------------|
+| control_model | `src/verification/mod.rs` | Chain, ChainFamily, RiskProfile, RiskTarget, OverallRiskStatus, RiskProfileError, canonical risk-profile set |
+| verifier | `src/verification/mod.rs` | ChainId |
+| enclave | `src/executor/mod.rs` | AttestationCertificate |
+| deployment | `src/api/admin.rs` | VerificationResult, VerificationOutcome |
+
+`src/compat/core_bridge.rs` is Nexus-owned secp256k1 signing + HASH160 (k256/ripemd/sha2) — it does not depend on Core.
 - **conxian-gateway**: Downstream consumer of Nexus proofs
 - **conxius-enclave-sdk**: SDK defines canonical chain registry — Nexus aligns observation coverage
 
@@ -189,6 +183,11 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 © 2026 Conxian Foundation. Code is Law.
 
 ## Session State (2026-08-01)
+
+### v0.4.23 — lib-conxian-core pinned to latest main (Session 58)
+- Bumped `lib-conxian-core` git rev `60e92aa` → `134e6f48` (Session 58: full non-SDK capacity, public `validate_evidence_binding`, `core_types`/`compat` canonical re-exports).
+- Graph stays yanked-crate-free (no secp256k1 0.32.0-beta.2 / bitcoin 0.33.0-beta) and carries no `full-sdk`/`conxius-enclave-sdk` tree.
+- Dependency-policy rev synced in `scripts/check_dependency_declarations.py`, `scripts/test_check_dependency_declarations.py`, and `scripts/generate_compliance_artifacts.sh`.
 
 ### v0.4.23 — Session 48: Billing Tiers + CI Pass
 - PR [#203](https://github.com/Conxian/conxian-nexus/pull/203) merged: paid tiers with LN upgrade flow (CON-24)
