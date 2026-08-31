@@ -12,7 +12,8 @@ import unittest
 
 CHECKER = Path(__file__).with_name("check_dependency_declarations.py").resolve()
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "930caaa839cefb90b5a6c10ae62585e5d893a516"
+CORE_REV = "60e92aaee7ea8a74cee0101393116ac70173ae80"
+CORE_REV_MUTATED = CORE_REV[:-1] + ("1" if CORE_REV[-1] == "0" else "0")
 CORE_SOURCE = f"git+{CORE_URL}?rev={CORE_REV}#{CORE_REV}"
 CORE_DECLARATION = f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV}" }}'
 
@@ -144,7 +145,7 @@ class CheckerTest(unittest.TestCase):
         core_cases = {
             f'lib-conxian-core = {{ git = "https://example.com/core", rev = "{CORE_REV}" }}': "git must be exactly",
             f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "6187bf6" }}': "rev must be the exact full SHA",
-            f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV[:-1]}0" }}': "rev must be the exact full SHA",
+            f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV_MUTATED}" }}': "rev must be the exact full SHA",
             f'lib-conxian-core = {{ git = "{CORE_URL}", branch = "main" }}': "branch declarations are prohibited",
             f'lib-conxian-core = {{ git = "{CORE_URL}", tag = "v0.3.0" }}': "tag declarations are prohibited",
             f'core-alias = {{ package = "lib-conxian-core", git = "{CORE_URL}", rev = "{CORE_REV}" }}': "renamed, duplicate, or non-root Core",
