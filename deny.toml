@@ -30,11 +30,6 @@ exceptions = [
     { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.23" },
     { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
     { allow = ["MITNFA"], crate = "hex_lit@0.1.1" },
-    # Unlicense / public-domain dedications — transitively pulled by
-    # lib-conxian-core (musig2, secp).  These are explicitly public-domain
-    # equivalents and pose no royalty or attribution burden.
-    { allow = ["Unlicense"], crate = "musig2@0.4.1" },
-    { allow = ["Unlicense"], crate = "secp@0.7.0" },
 ]
 
 # webpki 0.22.4 uses license files rather than a manifest license expression.
@@ -66,17 +61,15 @@ required-git-spec = "any"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/Conxian/lib-conxian-core",
-    "https://github.com/Conxian/conxius-enclave-sdk",
 ]
 
 [advisories]
-# All three advisories below transit through dependencies that have not yet
-# shipped a migration (ark-crypto-primitives → derivative, nostr → instant,
-# alloy → paste).  The upstream crates are widely used in the Rust ecosystem
-# and the advisory risk is low (unmaintained ≠ vulnerable).  These ignores
-# should be revisited when the upstreams publish new major versions.
+# The advisories below transit through dependencies that have not yet shipped a
+# migration (ark-crypto-primitives → derivative, rgb-std/aluvm → paste).  The
+# upstream crates are widely used in the Rust ecosystem and the advisory risk is
+# low (unmaintained ≠ vulnerable).  These ignores should be revisited when the
+# upstreams publish new major versions.
 ignore = [
     "RUSTSEC-2024-0388",  # derivative — through ark-crypto-primitives
-    "RUSTSEC-2024-0384",  # instant — through nostr
-    "RUSTSEC-2024-0436",  # paste — through alloy
+    "RUSTSEC-2024-0436",  # paste — through rgb-std/aluvm (lib-conxian-core)
 ]

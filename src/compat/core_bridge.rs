@@ -7,45 +7,10 @@
 //!
 //! # Core v0.3.0 canonical types
 //!
-//! Use `lib_conxian_core::control_model` for canonical chain identity, trust
-//! tier, bridge system, and verification types. The `core_types` sub-module
-//! re-exports the most commonly needed items for Nexus observation boundaries.
-
-/// Re-exports of canonical Core v0.3.0 types for Nexus observation and
-/// verification boundaries. These are the single source of truth for chain
-/// identity across the Conxian ecosystem.
-pub mod core_types {
-    pub use lib_conxian_core::control_model::{
-        chain_family_for, BridgeSystem, Chain, ChainFamily, FinalityClass, TrustTier,
-        VerificationClass, VerificationStatus,
-    };
-    pub use lib_conxian_core::signing::{SignerCapabilities, SigningAlgorithm, SigningTarget};
-    pub use lib_conxian_core::verifier::{
-        ChainId, ProofVerificationRequest, ProofVerificationResult, ProtocolVerifier,
-        ProtocolVerifierBackend, ProtocolVerifierError, TransactionFinalityStatus,
-        VerifiedBlockReference, VerifierCapabilities, VerifierCapability,
-    };
-
-    /// Anchoring primitives for state-root persistence (Tableland, on-chain).
-    pub use lib_conxian_core::anchoring::{
-        AnchoringError, AnchoringPublication, AnchoringPublisher, AnchoringReceipt,
-        AnchoringRequest, AnchoringTarget, OnChainAnchoringPublisher, TablelandAnchoringPublisher,
-    };
-
-    pub use lib_conxian_core::bitcoin::bip322;
-    /// Bitcoin-native protocol primitives (BIP-322, Taproot, Liquid).
-    pub use lib_conxian_core::bitcoin::taproot;
-
-    pub use lib_conxian_core::protocol::covenant;
-    /// Protocol primitives (DLC, FROST, covenants, intents).
-    pub use lib_conxian_core::protocol::dlc;
-    pub use lib_conxian_core::protocol::frost;
-    pub use lib_conxian_core::protocol::intent;
-
-    pub use lib_conxian_core::adapters;
-    /// Chain adapters for multi-chain observation.
-    pub use lib_conxian_core::lightning::LightningAdapter;
-}
+//! Canonical chain identity, trust tier, bridge system, verification, and risk
+//! classification types are consumed through the [`crate::verification`]
+//! module, which wraps `lib_conxian_core` primitives for Nexus's observation
+//! and proof boundaries.
 
 use anyhow::Context;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
