@@ -10,9 +10,9 @@ import tomllib
 from typing import Any
 
 CORE_NAME = "lib-conxian-core"
-CORE_VERSION = "0.3.2"
+CORE_VERSION = "0.3.3"
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "134e6f48d9bd7c45f4b06ef08ec41f5cd3ba49e1"
+CORE_REV = "b85625f7be8c77f9b656e32442f43e02eca77f1e"
 CORE_LOCK_SOURCE = (
     "git+https://github.com/Conxian/lib-conxian-core"
     f"?rev={CORE_REV}#{CORE_REV}"
