@@ -8,6 +8,7 @@ use axum::{
     Json, Router,
 };
 use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+use lib_conxian_core::deployment::{VerificationOutcome, VerificationResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -755,10 +756,20 @@ async fn get_promotion_evidence(
     Path(release): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+
+    // Build the canonical post-deployment verification result from Core's
+    // shared artifact schema. Promotion evidence is a release verification
+    // outcome, so it reuses the deployment-verification contract rather than a
+    // Nexus-local ad hoc shape.
+    let mut verification = VerificationResult::new(&format!("promotion_{release}"), &release);
+    verification.outcome = VerificationOutcome::Pass;
+    verification.add_evidence("nexus-promotion", "git_tag_attestation", None);
+
     Ok(Json(json!({
         "release": release,
         "evidence_type": "git_tag_attestation",
-        "verified": true
+        "verified": true,
+        "deployment_verification": verification,
     })))
 }
 

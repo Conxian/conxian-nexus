@@ -210,6 +210,26 @@ impl NexusSync {
     }
 
     pub async fn sync_sme_escrow(&self, event: SmeEscrowSyncEvent) -> anyhow::Result<String> {
+        // Validate the chain family against the canonical control model before
+        // committing any state. Unknown families are rejected fail-closed so an
+        // unverified chain cannot silently pollute the observation root.
+        let chain_family = crate::verification::parse_chain_family(&event.chain_family)
+            .ok_or_else(|| anyhow::anyhow!("unknown chain family: {}", event.chain_family))?;
+
+        match crate::verification::risk_profile_for_family(chain_family.clone()) {
+            Ok(Some(profile)) => {
+                if let Some(band) = crate::verification::risk_band(profile) {
+                    tracing::debug!(
+                        chain_family = %event.chain_family,
+                        risk_band = band,
+                        "SME escrow sync classified under canonical risk profile"
+                    );
+                }
+            }
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "risk profile lookup unavailable"),
+        }
+
         let state_commitment = format!(
             "0x{}",
             hex::encode(sha2::Sha256::digest(
