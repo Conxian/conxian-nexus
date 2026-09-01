@@ -47,3 +47,18 @@ accepted = ["Unlicense"]
 
 [secp]
 accepted = ["Unlicense"]
+
+[base64urlsafedata]
+accepted = ["MPL-2.0"]
+
+[webauthn-attestation-ca]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs-core]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs-proto]
+accepted = ["MPL-2.0"]
