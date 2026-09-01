@@ -61,6 +61,7 @@ required-git-spec = "any"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/Conxian/lib-conxian-core",
+    "https://github.com/Conxian/conxius-enclave-sdk",
 ]
 
 [advisories]

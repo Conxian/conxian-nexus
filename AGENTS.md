@@ -190,7 +190,7 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 
 ### v0.4.23 — lib-conxian-core pinned to latest main (Session 58)
 - Bumped `lib-conxian-core` git rev `60e92aa` → `134e6f48` (Session 58: full non-SDK capacity, public `validate_evidence_binding`, `core_types`/`compat` canonical re-exports).
-- Graph stays yanked-crate-free (no secp256k1 0.32.0-beta.2 / bitcoin 0.33.0-beta) and carries no `full-sdk`/`conxius-enclave-sdk` tree.
+- Graph stays yanked-crate-free (no secp256k1 0.32.0-beta.2 / bitcoin 0.33.0-beta); SDK capability surface enabled via `lib-conxian-core` `full-sdk` (enclave-sdk v2.0.17, yanked-crate-free).
 - Dependency-policy rev synced in `scripts/check_dependency_declarations.py`, `scripts/test_check_dependency_declarations.py`, and `scripts/generate_compliance_artifacts.sh`.
 
 ### v0.4.23 — Session 48: Billing Tiers + CI Pass
