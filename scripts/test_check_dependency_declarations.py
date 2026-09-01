@@ -12,7 +12,7 @@ import unittest
 
 CHECKER = Path(__file__).with_name("check_dependency_declarations.py").resolve()
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "134e6f48d9bd7c45f4b06ef08ec41f5cd3ba49e1"
+CORE_REV = "b85625f7be8c77f9b656e32442f43e02eca77f1e"
 CORE_REV_MUTATED = CORE_REV[:-1] + ("1" if CORE_REV[-1] == "0" else "0")
 CORE_SOURCE = f"git+{CORE_URL}?rev={CORE_REV}#{CORE_REV}"
 CORE_DECLARATION = f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV}" }}'
@@ -24,7 +24,7 @@ def lock(core_entries: str | None = None) -> str:
             f"""
             [[package]]
             name = "lib-conxian-core"
-            version = "0.3.2"
+            version = "0.3.3"
             source = "{CORE_SOURCE}"
             """
         )
@@ -189,8 +189,8 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("Cargo.lock", missing_lock.stderr)
         self.assert_fails(manifest(), "package array is missing", cargo_lock="")
         self.assert_fails(manifest(), "malformed or unreadable TOML", cargo_lock="not = [toml")
-        wrong_version = lock().replace('version = "0.3.2"', 'version = "0.3.0"')
-        self.assert_fails(manifest(), "version must be exactly 0.3.2", cargo_lock=wrong_version)
+        wrong_version = lock().replace('version = "0.3.3"', 'version = "0.3.0"')
+        self.assert_fails(manifest(), "version must be exactly 0.3.3", cargo_lock=wrong_version)
         wrong_source = lock().replace(CORE_SOURCE, "registry+https://github.com/rust-lang/crates.io-index")
         self.assert_fails(manifest(), "source must be exactly", cargo_lock=wrong_source)
         duplicate_lock = lock() + lock().split("version = 4\n", 1)[1]

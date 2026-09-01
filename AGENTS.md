@@ -148,7 +148,7 @@ The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.16) defines the canonical 42
 
 ### Core Module Usage (Session 58 — Aug 2026)
 
-Nexus consumes `lib-conxian-core` (v0.3.2, exact git rev `134e6f48`) directly through three module boundaries. The legacy `compat::core_bridge::core_types` re-export shim was removed in PR #259 — Nexus now imports canonical types straight from their source modules:
+Nexus consumes `lib-conxian-core` (v0.3.3, exact git rev `b85625f`) directly through three module boundaries. The legacy `compat::core_bridge::core_types` re-export shim was removed in PR #259 — Nexus now imports canonical types straight from their source modules:
 
 | Core module | Nexus consumer | Types used |
 |-------------|----------------|------------|
@@ -183,6 +183,10 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 © 2026 Conxian Foundation. Code is Law.
 
 ## Session State (2026-08-01)
+
+### v0.4.23 — lib-conxian-core pinned to v0.3.3 release tag
+- Bumped `lib-conxian-core` git rev `134e6f48` → `b85625f` (the `v0.3.3` release commit). The direct-source policy prohibits `tag` declarations, so the pin stays an exact full-SHA `rev`.
+- Dependency-policy rev synced in `scripts/check_dependency_declarations.py`, `scripts/test_check_dependency_declarations.py`, and `scripts/generate_compliance_artifacts.sh` (version `0.3.2` → `0.3.3`).
 
 ### v0.4.23 — lib-conxian-core pinned to latest main (Session 58)
 - Bumped `lib-conxian-core` git rev `60e92aa` → `134e6f48` (Session 58: full non-SDK capacity, public `validate_evidence_binding`, `core_types`/`compat` canonical re-exports).
