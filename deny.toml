@@ -21,6 +21,8 @@ allow = [
     "BSD-3-Clause",
     "MIT-0",
     "CDLA-Permissive-2.0",
+    "MPL-2.0",    # webauthn-rs family (FIDO2 attestation) + base64urlsafedata
+    "Unlicense",  # musig2 + secp (MuSig2/curve wrappers)
 ]
 # Non-permissive licenses are intentionally scoped to exact packages.
 exceptions = [
@@ -62,6 +64,7 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/Conxian/lib-conxian-core",
     "https://github.com/Conxian/conxius-enclave-sdk",
+    "https://github.com/ZcashFoundation/frost",
 ]
 
 [advisories]
