@@ -21,8 +21,6 @@ allow = [
     "BSD-3-Clause",
     "MIT-0",
     "CDLA-Permissive-2.0",
-    "MPL-2.0",    # webauthn-rs family (FIDO2 attestation) + base64urlsafedata
-    "Unlicense",  # musig2 + secp (MuSig2/curve wrappers)
 ]
 # Non-permissive licenses are intentionally scoped to exact packages.
 exceptions = [
@@ -32,6 +30,13 @@ exceptions = [
     { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.23" },
     { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
     { allow = ["MITNFA"], crate = "hex_lit@0.1.1" },
+    { allow = ["MPL-2.0"], crate = "base64urlsafedata@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-attestation-ca@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs-core@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs-proto@0.5.5" },
+    { allow = ["Unlicense"], crate = "musig2@0.4.1" },
+    { allow = ["Unlicense"], crate = "secp@0.7.0" },
 ]
 
 # webpki 0.22.4 uses license files rather than a manifest license expression.
