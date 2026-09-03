@@ -14,11 +14,9 @@ use sha2::{Digest, Sha256};
 use sqlx::Row;
 use std::sync::{Arc, Mutex};
 
-/// Re-export lib-conxian-core enclave types for attestation verification.
 /// Nexus validates that execution requests originate from a hardware-attested
 /// enclave before processing proofs. This is a critical security boundary
 /// between the executor and the core verification pipeline.
-use lib_conxian_core::enclave::AttestationCertificate;
 use x509_cert::der::Decode;
 use x509_cert::Certificate as X509Certificate;
 
@@ -144,6 +142,12 @@ impl NexusExecutor {
     }
 
     pub async fn submit(&self, request: ExecutionRequest) -> anyhow::Result<String> {
+        // Verify enclave attestation first (fail-closed boundary). Until a
+        // trusted attestation backend is wired this rejects any presented
+        // certificate, while soft enforcement permits certificate-less requests.
+        self.verify_attestation(&request)
+            .map_err(|e| anyhow::anyhow!("attestation verification failed: {e}"))?;
+
         self.check_safety_mode().await?;
         if !self.validate_transaction(&request).await? {
             anyhow::bail!("Transaction validation failed");
@@ -178,59 +182,45 @@ impl NexusExecutor {
 
     /// Verify the enclave attestation certificate on an execution request.
     ///
-    /// Uses `lib_conxian_core::enclave::AttestationCertificate` to validate
-    /// that the request originated from a hardware-attested TEE. When
-    /// `require_attestation` is true, requests without a certificate are
-    /// rejected. In production, this must be enabled for all high-value
-    /// proof submissions.
+    /// Fail closed: until a trusted attestation backend (root-of-trust and
+    /// enclave-measurement comparison) is wired, any presented certificate is
+    /// treated as unverifiable rather than "verified". When `require_attestation`
+    /// is true, requests without a certificate are rejected; otherwise soft
+    /// enforcement skips attestation with a warning. In production this must be
+    /// enabled for all high-value proof submissions.
     pub fn verify_attestation(
         &self,
         request: &ExecutionRequest,
     ) -> Result<(), EnclaveVerificationError> {
         match &request.attestation_certificate {
             Some(raw_der) => {
-                let _cert = AttestationCertificate {
-                    raw_der: raw_der.clone(),
-                };
                 if raw_der.is_empty() {
                     return Err(EnclaveVerificationError::InvalidCertificate);
                 }
-                let parsed_cert = X509Certificate::from_der(raw_der)
+                // Structural parse only: reject malformed DER early. This does
+                // NOT establish that the certificate was issued by a trusted
+                // TEE root or that it matches the expected enclave measurement.
+                let _parsed_cert = X509Certificate::from_der(raw_der)
                     .map_err(|_| EnclaveVerificationError::InvalidCertificate)?;
 
-                let now_unix = Utc::now().timestamp();
-                let not_before = parsed_cert
-                    .tbs_certificate()
-                    .validity()
-                    .not_before
-                    .to_unix_duration()
-                    .as_secs() as i64;
-                let not_after = parsed_cert
-                    .tbs_certificate()
-                    .validity()
-                    .not_after
-                    .to_unix_duration()
-                    .as_secs() as i64;
-
-                if now_unix < not_before || now_unix > not_after {
-                    return Err(EnclaveVerificationError::CertificateExpired);
-                }
-
-                tracing::info!(
-                    "X.509 attestation certificate verified for transaction {} (validity: {} to {})",
-                    request.tx_id,
-                    not_before,
-                    not_after
-                );
-                Ok(())
+                // Fail closed: no trusted attestation backend (root-of-trust +
+                // measurement comparison) is configured yet. A date-valid X.509
+                // certificate is not proof of hardware attestation, so every
+                // presented certificate is treated as unverifiable rather than
+                // "verified". This mirrors the fail-closed policy applied to the
+                // Liquid/BitVM3/Strata chain adapters.
+                Err(EnclaveVerificationError::ChainVerificationFailed(
+                    "attestation verification backend not configured: no trusted root or enclave measurement check performed"
+                        .to_string(),
+                ))
             }
             None => {
                 if self.require_attestation {
                     Err(EnclaveVerificationError::InvalidCertificate)
                 } else {
-                    tracing::debug!(
-                        "Skipping attestation for {} (soft enforcement)",
-                        request.tx_id
+                    tracing::warn!(
+                        tx_id = %request.tx_id,
+                        "Skipping attestation (soft enforcement is fail-open; enable require_attestation for high-value submissions)"
                     );
                     Ok(())
                 }
@@ -292,6 +282,33 @@ impl NexusExecutor {
 mod tests {
     use super::*;
     use chrono::Utc;
+
+    /// A syntactically valid, currently-dated, self-signed EC P-256 X.509
+    /// certificate (generated for test use only). It has no trusted issuer and
+    /// no enclave measurement, so a fail-closed attestation boundary must reject
+    /// it even though its validity window is in the present.
+    const VALID_SELF_SIGNED_CERT_DER: &[u8] = &[
+        48, 130, 1, 151, 48, 130, 1, 61, 160, 3, 2, 1, 2, 2, 20, 61, 44, 115, 28, 100, 147, 97,
+        120, 8, 202, 149, 98, 170, 54, 166, 81, 11, 180, 150, 96, 48, 10, 6, 8, 42, 134, 72, 206,
+        61, 4, 3, 2, 48, 33, 49, 31, 48, 29, 6, 3, 85, 4, 3, 12, 22, 110, 101, 120, 117, 115, 45,
+        116, 101, 115, 116, 45, 97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110, 48, 30, 23,
+        13, 50, 54, 48, 57, 48, 51, 49, 54, 48, 56, 48, 53, 90, 23, 13, 50, 54, 49, 48, 48, 51, 49,
+        54, 48, 56, 48, 53, 90, 48, 33, 49, 31, 48, 29, 6, 3, 85, 4, 3, 12, 22, 110, 101, 120, 117,
+        115, 45, 116, 101, 115, 116, 45, 97, 116, 116, 101, 115, 116, 97, 116, 105, 111, 110, 48,
+        89, 48, 19, 6, 7, 42, 134, 72, 206, 61, 2, 1, 6, 8, 42, 134, 72, 206, 61, 3, 1, 7, 3, 66,
+        0, 4, 252, 162, 196, 147, 241, 76, 166, 34, 17, 53, 226, 192, 205, 194, 154, 233, 191, 139,
+        98, 2, 188, 19, 64, 158, 136, 238, 163, 226, 42, 231, 19, 199, 63, 87, 17, 143, 138, 204,
+        103, 231, 109, 24, 98, 165, 33, 243, 87, 57, 111, 176, 52, 89, 72, 19, 6, 137, 57, 251,
+        237, 67, 28, 181, 112, 158, 163, 83, 48, 81, 48, 29, 6, 3, 85, 29, 14, 4, 22, 4, 20, 233,
+        234, 49, 218, 35, 21, 29, 131, 218, 127, 193, 1, 135, 251, 15, 10, 241, 89, 213, 176, 48,
+        31, 6, 3, 85, 29, 35, 4, 24, 48, 22, 128, 20, 233, 234, 49, 218, 35, 21, 29, 131, 218, 127,
+        193, 1, 135, 251, 15, 10, 241, 89, 213, 176, 48, 15, 6, 3, 85, 29, 19, 1, 1, 255, 4, 5, 48,
+        3, 1, 1, 255, 48, 10, 6, 8, 42, 134, 72, 206, 61, 4, 3, 2, 3, 72, 0, 48, 69, 2, 33, 0, 209,
+        165, 96, 66, 44, 97, 213, 220, 30, 53, 78, 114, 34, 135, 216, 122, 114, 63, 18, 82, 145,
+        147, 132, 159, 174, 158, 215, 116, 234, 139, 217, 139, 2, 32, 67, 190, 156, 108, 254, 13,
+        183, 179, 215, 76, 98, 175, 159, 27, 201, 228, 51, 11, 120, 201, 1, 209, 124, 243, 144, 26,
+        149, 245, 40, 109, 52, 65,
+    ];
 
     #[tokio::test]
     async fn test_execution_request_serialization() {
@@ -374,6 +391,52 @@ mod tests {
         assert_eq!(
             executor.verify_attestation(&req),
             Err(EnclaveVerificationError::InvalidCertificate)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_fails_closed_for_valid_cert() {
+        let executor = make_test_executor(false);
+
+        // A syntactically valid, currently-dated, self-signed X.509 certificate
+        // must NOT be accepted as proof of hardware attestation: no trusted-root
+        // or measurement verification is configured, so the boundary must fail
+        // closed rather than report "verified".
+        let req = ExecutionRequest {
+            tx_id: "tx_valid_but_untrusted".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+        };
+
+        match executor.verify_attestation(&req) {
+            Err(EnclaveVerificationError::ChainVerificationFailed(_)) => {}
+            other => panic!("expected ChainVerificationFailed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_rejects_unverifiable_attestation() {
+        let executor = make_test_executor(false);
+
+        // submit() must enforce the attestation boundary before any other
+        // processing: a presented (but unverifiable) certificate is rejected
+        // fail-closed before safety-mode/DB work is reached.
+        let req = ExecutionRequest {
+            tx_id: "tx_submit_attestation".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+        };
+
+        let err = executor.submit(req).await.unwrap_err();
+        assert!(
+            err.to_string().contains("attestation verification failed"),
+            "unexpected error: {err}"
         );
     }
 
