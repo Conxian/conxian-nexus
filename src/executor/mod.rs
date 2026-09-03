@@ -142,6 +142,12 @@ impl NexusExecutor {
     }
 
     pub async fn submit(&self, request: ExecutionRequest) -> anyhow::Result<String> {
+        // Verify enclave attestation first (fail-closed boundary). Until a
+        // trusted attestation backend is wired this rejects any presented
+        // certificate, while soft enforcement permits certificate-less requests.
+        self.verify_attestation(&request)
+            .map_err(|e| anyhow::anyhow!("attestation verification failed: {e}"))?;
+
         self.check_safety_mode().await?;
         if !self.validate_transaction(&request).await? {
             anyhow::bail!("Transaction validation failed");
@@ -415,6 +421,29 @@ mod tests {
             Err(EnclaveVerificationError::ChainVerificationFailed(_)) => {}
             other => panic!("expected ChainVerificationFailed, got {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_submit_rejects_unverifiable_attestation() {
+        let executor = make_test_executor(false);
+
+        // submit() must enforce the attestation boundary before any other
+        // processing: a presented (but unverifiable) certificate is rejected
+        // fail-closed before safety-mode/DB work is reached.
+        let req = ExecutionRequest {
+            tx_id: "tx_submit_attestation".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+        };
+
+        let err = executor.submit(req).await.unwrap_err();
+        assert!(
+            err.to_string().contains("attestation verification failed"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]
