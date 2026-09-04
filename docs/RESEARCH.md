@@ -79,7 +79,7 @@
      - **Round 2 (Shares & Aggregation)**: Dispatch signing package to cooperative subset and aggregate signature shares.
      - **Fault Isolation**: Flag faulty nodes persistently across rounds; allow timed-out nodes to rejoin on round retries up to `max_retries`.
   3. Indistinguishable on-chain from single-key Taproot key-path spending.
-- **Status**: Active research and ROAST orchestrator verification (`src/orchestrator/roast.rs`).
+- **Status**: **Orchestrator Integrated (v0.4.23)** via ROAST orchestrator in `src/orchestrator/roast.rs`.
 
 ### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
@@ -109,7 +109,7 @@
 - **Primary Domain**: Schnorr Taproot Threshold Signing (`src/orchestrator/roast.rs`)
 - **Impact Score**: 9/10
 - **Effort Score**: 6/10
-- **Candidate Status**: **Primary Candidate Initialized**
+- **Candidate Status**: **Orchestrator Integrated (v0.4.23)**
 - **Architecture & Implementation Matrix**:
   1. **ROAST Engine Integration**: Connects `RoastConfig` with `FrostSigningContext` to orchestrate 2-round Schnorr signing with dynamic participant subset filtering.
   2. **Fault Exclusion**: Identifies and isolates malicious or slow signers across rounds, persisting fault metrics.

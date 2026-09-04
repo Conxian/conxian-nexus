@@ -21,7 +21,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
 | **Hole 2.1** | Hardware Enclave Certificate Chain Verification | 8 | 5 | **P1** | **Completed (v0.4.23)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
-| **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active Research** |
+| **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Orchestrator Integrated (v0.4.23)** |
 | **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 7 | 7 | **P2** | **Active Research** |
 
 ## 2. Mapping & Research Context
@@ -67,7 +67,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.8 FROST Threshold Signatures (CON-1302)
 - **Gap**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration requiring cooperative subset coordination and threshold bounds enforcement.
-- **Status**: **Active Research & Orchestration Scaffolding**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs` for dynamic fault exclusion, retry tracking, and threshold participant set management.
+- **Status**: **Orchestrator Integrated (v0.4.23)**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs` for 2-round Schnorr signing, dynamic fault exclusion, retry tracking, and threshold participant set management.
 - **Code**: `src/orchestrator/roast.rs`
 
 ### 2.9 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
