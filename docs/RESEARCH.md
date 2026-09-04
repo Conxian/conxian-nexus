@@ -102,3 +102,24 @@
 ### 7.2 gRPC Production Authorization & Storage Validation
 - **Architecture**: gRPC authentication via `grpc_auth_interceptor` and `NexusGrpcService::check_auth`.
 - **Enforcement Path**: Rejects unauthenticated metadata, enforces key length bounds (>= 16 chars), fails closed on Redis connection drops, and performs production credential lookup against Redis (`apikey:<api_key>`).
+
+## 8. Best Candidate Initialization Specifications
+
+### 8.1 Candidate 1: FROST Threshold Signature Productionization (CON-1302)
+- **Primary Domain**: Schnorr Taproot Threshold Signing (`src/orchestrator/roast.rs`)
+- **Impact Score**: 9/10
+- **Effort Score**: 6/10
+- **Candidate Status**: **Primary Candidate Initialized**
+- **Architecture & Implementation Matrix**:
+  1. **ROAST Engine Integration**: Connects `RoastConfig` with `FrostSigningContext` to orchestrate 2-round Schnorr signing with dynamic participant subset filtering.
+  2. **Fault Exclusion**: Identifies and isolates malicious or slow signers across rounds, persisting fault metrics.
+  3. **Taproot On-Chain Compatibility**: Outputs standard BIP-340 Schnorr signatures indistinguishable from single-key outputs.
+
+### 8.2 Candidate 2: ZKCP Pre-Image Circuit Verification (CON-1313 / G-50)
+- **Primary Domain**: Zero-Knowledge Contingent Payments (`lib-conxian-core`)
+- **Impact Score**: 8/10
+- **Effort Score**: 7/10
+- **Candidate Status**: **Secondary Candidate Initialized**
+- **Architecture & Implementation Matrix**:
+  1. **SHA-256 Circuit Pipeline**: Validates Groth16 SNARK proofs for preimage verification without secret disclosure prior to payment execution.
+  2. **Atomic Settlement Gate**: Verifies HTLC secret revelation on Bitcoin/Lightning upon settlement.
