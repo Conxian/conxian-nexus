@@ -10,7 +10,6 @@ pub mod zkcp;
 
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
 
-
 use lib_conxian_core::control_model::{
     canonical_risk_profile_set, chain_family_for, Chain, ChainFamily, OverallRiskStatus,
     RiskProfile, RiskProfileError, RiskTarget,

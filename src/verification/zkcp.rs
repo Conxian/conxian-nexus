@@ -41,7 +41,10 @@ pub enum ZkcpError {
     InvalidProof(String),
 
     #[error("SHA-256 pre-image commitment mismatch: expected {expected}, calculated {calculated}")]
-    HashMismatch { expected: String, calculated: String },
+    HashMismatch {
+        expected: String,
+        calculated: String,
+    },
 
     #[error("Public inputs count mismatch: expected {expected}, found {found}")]
     PublicInputCountMismatch { expected: usize, found: usize },
