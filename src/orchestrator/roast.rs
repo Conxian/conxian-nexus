@@ -350,7 +350,10 @@ mod tests {
         let err_no_round = RoastError::NoActiveRound;
         assert_eq!(err_no_round.to_string(), "no active ROAST round");
 
-        let err_insuff = RoastError::InsufficientParticipants { available: 1, required: 3 };
+        let err_insuff = RoastError::InsufficientParticipants {
+            available: 1,
+            required: 3,
+        };
         assert!(err_insuff.to_string().contains("1 available, 3 required"));
 
         let err_abandoned = RoastError::RoundAbandoned("failed".into());
