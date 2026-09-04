@@ -6,6 +6,10 @@
 //! module intentionally reuses Core's platform-neutral contracts rather than
 //! re-deriving chain identity, risk classification, or proof-envelope rules.
 
+pub mod zkcp;
+
+pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
+
 use lib_conxian_core::control_model::{
     canonical_risk_profile_set, chain_family_for, Chain, ChainFamily, OverallRiskStatus,
     RiskProfile, RiskProfileError, RiskTarget,

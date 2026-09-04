@@ -15,7 +15,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-1200** | Stacks Clarity 4 & sBTC Protocol Adapter Upgrade | 8 | 5 | **P1** | **Upgraded Phase 2 (v0.4.23)** |
 | **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Completed Phase 2 (v0.4.23)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
-| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Scaffolding (lib-core)** |
+| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Candidate Initialized (v0.4.23)** |
 | **NIP-006** | Admin Token Hardening (Scoped Credentials / RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
@@ -62,7 +62,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.7 Zero-Knowledge Contingent Payments (G-50 / CON-1313)
 - **Gap**: Fair exchange of secrets against Bitcoin/Lightning payments using SNARK pre-image verification.
-- **Status**: **Scaffolding (lib-core)**. SHA-256 pre-image circuit verification pipeline in research.
+- **Status**: **Candidate Initialized (v0.4.23)**. Integrated `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
 - **Code**: `lib-conxian-core`
 
 ### 2.8 FROST Threshold Signatures (CON-1302)

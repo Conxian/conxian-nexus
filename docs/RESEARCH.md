@@ -67,7 +67,7 @@
   1. Seller constructs a SHA-256 pre-image circuit using `ark-groth16` proving key.
   2. Buyer verifies Groth16 SNARK proof that hash `H(s) = Y` matches the payment HTLC hash condition.
   3. Upon payment settlement on Bitcoin/Lightning, the secret pre-image `s` is extracted from the transaction input.
-- **Status**: Scaffolding in `lib-conxian-core`.
+- **Status**: **Candidate Initialized (v0.4.23)** via `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
 
 ### 6.2 FROST Threshold Signatures (CON-1302)
 - **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
@@ -119,7 +119,8 @@
 - **Primary Domain**: Zero-Knowledge Contingent Payments (`lib-conxian-core`)
 - **Impact Score**: 8/10
 - **Effort Score**: 7/10
-- **Candidate Status**: **Secondary Candidate Initialized**
+- **Candidate Status**: **Candidate Initialized (v0.4.23)**
 - **Architecture & Implementation Matrix**:
-  1. **SHA-256 Circuit Pipeline**: Validates Groth16 SNARK proofs for preimage verification without secret disclosure prior to payment execution.
-  2. **Atomic Settlement Gate**: Verifies HTLC secret revelation on Bitcoin/Lightning upon settlement.
+  1. **SHA-256 Circuit Pipeline**: Validates Groth16 SNARK proofs for preimage verification without secret disclosure prior to payment execution via `ZkcpVerifier` in `src/verification/zkcp.rs`.
+  2. **BN254 Groth16 Proof Engine**: Deserializes Groth16 proofs, verifying keys, and public inputs using `ark-groth16` and `ark-bn254`.
+  3. **Atomic Settlement Gate**: Verifies HTLC hash commitment $H(s) = Y$ revelation on Bitcoin/Lightning upon settlement.
