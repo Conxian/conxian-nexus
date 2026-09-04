@@ -208,3 +208,10 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
   - SigningTarget, SigningAlgorithm, SignerCapabilities
 - Existing tag `v0.4.22` preserved (version unchanged)
 - Dependency review config added to allow Core license
+
+### v0.4.23 — Full Research & System Baseline Audit Cycle
+- Conducted full cross-repo system review, dependency verification, and gap scorecard audit.
+- Updated `docs/GAP_ANALYSIS.md` and `docs/RESEARCH.md` mapping all missing research areas and initializing best candidate specifications:
+  - Candidate 1: FROST Threshold Signature Productionization (`CON-1302` in `src/orchestrator/roast.rs`).
+  - Candidate 2: ZKCP Pre-Image Circuit Verification (`CON-1313` / `G-50` in `lib-conxian-core`).
+- Verified build and test suite readiness under Rust 1.97.1.
