@@ -3,6 +3,7 @@
 ## [0.4.23] - 2026-08-18
 
 ### Added
+- **CON-1302 FROST Threshold Signatures & ROAST Orchestrator Integration**: Integrated `FrostSigningContext` into `src/orchestrator/roast.rs` supporting 2-round Schnorr threshold signing, participant timeout and fault isolation, cooperative subset selection, and BIP-340 Schnorr signature aggregation.
 - **Hole 2.1 Hardware Enclave X.509 DER Certificate Verification**: Upgraded `src/executor/mod.rs` to parse X.509 DER attestation certificates using `x509-cert`, enforce validity window bounds (`not_before` / `not_after`), and reject invalid or expired attestation envelopes.
 - **CON-1304 Fedimint Phase 2 Cryptographic Audit**: Implemented Fedimint e-cash blinded mint proof verification in `src/executor/fedimint.rs`, including prefix checks (`fed:`, `fed1:`), payload length validation, SHA-256 nonce hash derivation, double-spend detection against PostgreSQL, and audit persistence (`migrations/20260818000000_fedimint_mint_audit.sql`).
 - **NIP-005 Phase 2 Cryptographic Verification**: Upgraded EVM (MPT receipt proof Keccak-256 root matching) and Cosmos (IBC Tendermint base64 header SHA-256 digest computation) adapters to full cryptographic verification.

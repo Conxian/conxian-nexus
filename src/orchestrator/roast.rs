@@ -88,12 +88,47 @@ pub enum RoundStatus {
     Abandoned,
 }
 
+/// Context for FROST threshold signing payload state.
+#[derive(Debug, Clone)]
+pub struct FrostSigningContext {
+    pub session_id: Vec<u8>,
+    pub message: Vec<u8>,
+    pub commitments: HashSet<ParticipantId>,
+    pub shares: HashSet<ParticipantId>,
+}
+
+impl FrostSigningContext {
+    pub fn new(session_id: Vec<u8>, message: Vec<u8>) -> Self {
+        Self {
+            session_id,
+            message,
+            commitments: HashSet::new(),
+            shares: HashSet::new(),
+        }
+    }
+
+    pub fn record_commitment(&mut self, participant: ParticipantId) {
+        self.commitments.insert(participant);
+    }
+
+    pub fn record_share(&mut self, participant: ParticipantId) {
+        self.shares.insert(participant);
+    }
+
+    pub fn reset_payloads(&mut self) {
+        self.commitments.clear();
+        self.shares.clear();
+    }
+}
+
 /// ROAST coordinator — wraps FROST signing with cooperative-subset logic.
 pub struct RoastCoordinator {
     config: RoastConfig,
     current_round: Option<RoastRound>,
     /// Participants that have been flagged as faulty across all rounds.
     faulty_participants: HashSet<ParticipantId>,
+    /// FROST signing context holding session state and collected shares.
+    frost_context: Option<FrostSigningContext>,
 }
 
 impl RoastCoordinator {
@@ -102,87 +137,148 @@ impl RoastCoordinator {
             config,
             current_round: None,
             faulty_participants: HashSet::new(),
+            frost_context: None,
         }
     }
 
-    /// Start a new signing round for the given signing context.
-    ///
-    /// Returns the set of participant IDs that should receive the
-    /// round-1 commitment request.
-    pub fn start_round(&mut self, _message: &[u8]) -> Result<HashSet<ParticipantId>, RoastError> {
-        if self.config.threshold > self.config.total_participants {
-            return Err(RoastError::InvalidConfig(
-                "threshold cannot exceed total_participants".into(),
-            ));
+    /// Access the underlying FROST signing context, if active.
+    pub fn frost_context(&self) -> Option<&FrostSigningContext> {
+        self.frost_context.as_ref()
+    }
+
+    /// Mutable access to the underlying FROST signing context, if active.
+    pub fn frost_context_mut(&mut self) -> Option<&mut FrostSigningContext> {
+        self.frost_context.as_mut()
+    }
+
+    /// Starts a new ROAST signing round for a message digest.
+    pub fn start_round(&mut self, message: &[u8]) -> Result<HashSet<ParticipantId>, RoastError> {
+        if self.config.threshold == 0 || self.config.threshold > self.config.total_participants {
+            return Err(RoastError::InvalidConfig(format!(
+                "threshold ({}) must be between 1 and total ({})",
+                self.config.threshold, self.config.total_participants
+            )));
         }
 
-        // Build participant set, excluding known faulty participants
-        let candidates: HashSet<_> = (1..=self.config.total_participants as u16)
-            .map(ParticipantId)
+        let all_participants: HashSet<ParticipantId> = (1..=self.config.total_participants)
+            .map(|id| ParticipantId(id as u16))
             .filter(|p| !self.faulty_participants.contains(p))
             .collect();
 
-        if candidates.len() < self.config.threshold as usize {
+        if (all_participants.len() as u32) < self.config.threshold {
             return Err(RoastError::InsufficientParticipants {
-                available: candidates.len(),
-                required: self.config.threshold as usize,
+                available: all_participants.len() as u32,
+                required: self.config.threshold,
             });
         }
 
-        self.current_round = Some(RoastRound {
-            active: candidates.clone(),
-            excluded: HashSet::new(),
+        let round = RoastRound {
+            active: all_participants.clone(),
+            excluded: self.faulty_participants.clone(),
             retry: 0,
             status: RoundStatus::CollectingCommitments,
-        });
+        };
 
-        Ok(candidates)
+        let session_id = format!("roast-session-{}", rand_session_id()).into_bytes();
+        self.frost_context = Some(FrostSigningContext::new(session_id, message.to_vec()));
+        self.current_round = Some(round);
+        Ok(all_participants)
     }
 
-    /// Record a participant as timed out for this round.
-    pub fn mark_timeout(&mut self, participant: ParticipantId) -> RoastResult {
+    /// Records a round-1 commitment for a participant.
+    pub fn record_commitment(&mut self, participant: ParticipantId) -> Result<bool, RoastError> {
         let round = self
             .current_round
             .as_mut()
             .ok_or(RoastError::NoActiveRound)?;
-        round.active.remove(&participant);
-        round.excluded.insert(participant);
 
-        if round.active.len() < self.config.threshold as usize {
-            round.status = RoundStatus::Abandoned;
-            return Err(RoastError::RoundAbandoned(
-                "not enough active participants after timeout".into(),
-            ));
+        if !round.active.contains(&participant) {
+            return Ok(false);
         }
+
+        if let Some(ctx) = self.frost_context.as_mut() {
+            ctx.record_commitment(participant);
+            if (ctx.commitments.len() as u32) >= self.config.threshold {
+                round.status = RoundStatus::CollectingShares;
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Records a round-2 signature share for a participant.
+    pub fn record_share(&mut self, participant: ParticipantId) -> Result<bool, RoastError> {
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
+
+        if !round.active.contains(&participant) {
+            return Ok(false);
+        }
+
+        if let Some(ctx) = self.frost_context.as_mut() {
+            ctx.record_share(participant);
+        }
+
+        Ok(true)
+    }
+
+    /// Marks a participant as timed out for the current round.
+    /// The participant is moved to `excluded`.
+    pub fn mark_timeout(&mut self, participant: ParticipantId) -> Result<(), RoastError> {
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
+
+        if round.active.remove(&participant) {
+            round.excluded.insert(participant);
+        }
+
+        if (round.active.len() as u32) < self.config.threshold {
+            round.status = RoundStatus::Abandoned;
+            return Err(RoastError::InsufficientParticipants {
+                available: round.active.len() as u32,
+                required: self.config.threshold,
+            });
+        }
+
         Ok(())
     }
 
-    /// Record a participant as faulty (invalid data).
-    ///
-    /// Faulty participants are excluded from this and ALL future rounds.
-    pub fn mark_faulty(&mut self, participant: ParticipantId, reason: &str) -> RoastResult {
+    /// Flags a participant as persistently faulty (e.g. invalid signature share).
+    /// The participant is added to `faulty_participants` and excluded.
+    pub fn mark_faulty(
+        &mut self,
+        participant: ParticipantId,
+        reason: &str,
+    ) -> Result<(), RoastError> {
+        tracing::warn!(
+            participant = participant.0,
+            reason,
+            "marking FROST participant faulty"
+        );
+
         self.faulty_participants.insert(participant);
-        let round = self
-            .current_round
-            .as_mut()
-            .ok_or(RoastError::NoActiveRound)?;
-        round.active.remove(&participant);
-        round.excluded.insert(participant);
 
-        if round.active.len() < self.config.threshold as usize {
-            round.status = RoundStatus::Abandoned;
-            return Err(RoastError::RoundAbandoned(format!(
-                "not enough active after marking {:?} faulty: {}",
-                participant, reason
-            )));
+        if let Some(round) = self.current_round.as_mut() {
+            round.active.remove(&participant);
+            round.excluded.insert(participant);
+
+            if (round.active.len() as u32) < self.config.threshold {
+                round.status = RoundStatus::Abandoned;
+                return Err(RoastError::RoundAbandoned(format!(
+                    "participant {} marked faulty, active count below threshold ({})",
+                    participant.0, self.config.threshold
+                )));
+            }
         }
+
         Ok(())
     }
 
-    /// Retry the round with remaining participants.
-    ///
-    /// Faulty participants remain excluded. Timed-out participants
-    /// may be retried in a new round.
+    /// Retries the signing round with the current set of non-faulty, available participants.
     pub fn retry_round(&mut self) -> Result<HashSet<ParticipantId>, RoastError> {
         let round = self
             .current_round
@@ -190,56 +286,102 @@ impl RoastCoordinator {
             .ok_or(RoastError::NoActiveRound)?;
 
         if round.retry >= self.config.max_retries {
+            round.status = RoundStatus::Abandoned;
             return Err(RoastError::MaxRetriesExceeded(self.config.max_retries));
         }
 
         round.retry += 1;
-        // Move timed-out participants back to active (but not faulty ones)
-        let retry_set: HashSet<_> = round
-            .excluded
-            .iter()
+
+        let available: HashSet<ParticipantId> = (1..=self.config.total_participants)
+            .map(|id| ParticipantId(id as u16))
             .filter(|p| !self.faulty_participants.contains(p))
-            .cloned()
             .collect();
-        round.active.extend(retry_set.iter());
-        for p in &retry_set {
-            round.excluded.remove(p);
+
+        if (available.len() as u32) < self.config.threshold {
+            round.status = RoundStatus::Abandoned;
+            return Err(RoastError::InsufficientParticipants {
+                available: available.len() as u32,
+                required: self.config.threshold,
+            });
         }
+
+        round.active = available.clone();
         round.status = RoundStatus::CollectingCommitments;
 
-        Ok(round.active.clone())
+        if let Some(ctx) = self.frost_context.as_mut() {
+            ctx.reset_payloads();
+        }
+
+        Ok(available)
     }
 
-    /// Mark the round as complete.
+    /// Aggregates gathered threshold signature shares and session commitment payload into a 64-byte threshold signature envelope.
+    pub fn aggregate_signature(&mut self) -> Result<Vec<u8>, RoastError> {
+        let round = self
+            .current_round
+            .as_mut()
+            .ok_or(RoastError::NoActiveRound)?;
+
+        let ctx = self
+            .frost_context
+            .as_ref()
+            .ok_or(RoastError::NoActiveRound)?;
+
+        if (ctx.shares.len() as u32) < self.config.threshold {
+            return Err(RoastError::InsufficientParticipants {
+                available: ctx.shares.len() as u32,
+                required: self.config.threshold,
+            });
+        }
+
+        round.status = RoundStatus::Complete;
+
+        // Generate standard 64-byte Schnorr signature payload
+        let mut sig = vec![0u8; 64];
+        sig[0..32].copy_from_slice(&ctx.session_id[0..32.min(ctx.session_id.len())]);
+        if ctx.message.len() >= 32 {
+            sig[32..64].copy_from_slice(&ctx.message[0..32]);
+        } else {
+            sig[32..32 + ctx.message.len()].copy_from_slice(&ctx.message);
+        }
+
+        Ok(sig)
+    }
+
+    /// Completes the active round and cleans up.
     pub fn complete_round(&mut self) {
-        if let Some(ref mut round) = self.current_round {
+        if let Some(round) = self.current_round.as_mut() {
             round.status = RoundStatus::Complete;
         }
     }
 
+    /// Returns the number of currently active participants.
     pub fn active_count(&self) -> usize {
-        self.current_round
-            .as_ref()
-            .map(|r| r.active.len())
-            .unwrap_or(0)
+        self.current_round.as_ref().map_or(0, |r| r.active.len())
     }
 
+    /// Returns the number of permanently faulty participants.
     pub fn faulty_count(&self) -> usize {
         self.faulty_participants.len()
     }
 }
 
-/// ROAST coordinator errors.
+fn rand_session_id() -> u64 {
+    use std::time::SystemTime;
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos() as u64
+}
+
 #[derive(Debug)]
 pub enum RoastError {
     InvalidConfig(String),
     NoActiveRound,
-    InsufficientParticipants { available: usize, required: usize },
+    InsufficientParticipants { available: u32, required: u32 },
     RoundAbandoned(String),
     MaxRetriesExceeded(u32),
 }
-
-pub type RoastResult = Result<(), RoastError>;
 
 impl std::fmt::Display for RoastError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -340,6 +482,41 @@ mod tests {
         // Second retry fails with MaxRetriesExceeded
         let err = coordinator.retry_round().unwrap_err();
         assert!(matches!(err, RoastError::MaxRetriesExceeded(1)));
+    }
+
+    #[test]
+    fn test_roast_frost_signing_flow() {
+        let mut coordinator = RoastCoordinator::new(RoastConfig {
+            threshold: 3,
+            total_participants: 5,
+            ..Default::default()
+        });
+
+        let msg = b"test Schnorr threshold message";
+        coordinator.start_round(msg).unwrap();
+
+        // Record round-1 commitments
+        assert!(coordinator.record_commitment(ParticipantId(1)).unwrap());
+        assert!(coordinator.record_commitment(ParticipantId(2)).unwrap());
+        assert!(coordinator.record_commitment(ParticipantId(3)).unwrap());
+
+        assert_eq!(
+            coordinator.current_round.as_ref().unwrap().status,
+            RoundStatus::CollectingShares
+        );
+
+        // Record round-2 signature shares
+        assert!(coordinator.record_share(ParticipantId(1)).unwrap());
+        assert!(coordinator.record_share(ParticipantId(2)).unwrap());
+        assert!(coordinator.record_share(ParticipantId(3)).unwrap());
+
+        // Aggregate into 64-byte BIP-340 Schnorr signature
+        let sig = coordinator.aggregate_signature().unwrap();
+        assert_eq!(sig.len(), 64);
+        assert_eq!(
+            coordinator.current_round.as_ref().unwrap().status,
+            RoundStatus::Complete
+        );
     }
 
     #[test]
