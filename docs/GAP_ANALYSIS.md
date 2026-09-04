@@ -66,8 +66,9 @@ This document maps identified security holes, protocol gaps, and active research
 - **Code**: `lib-conxian-core`
 
 ### 2.8 FROST Threshold Signatures (CON-1302)
-- **Gap**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration.
-- **Status**: **Active Research**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs`.
+- **Gap**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration requiring cooperative subset coordination and threshold bounds enforcement.
+- **Status**: **Active Research & Orchestration Scaffolding**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs` for dynamic fault exclusion, retry tracking, and threshold participant set management.
+- **Code**: `src/orchestrator/roast.rs`
 
 ### 2.9 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Gap**: Introspection and recursive covenant spending condition checks for Bitcoin Taproot scripts.

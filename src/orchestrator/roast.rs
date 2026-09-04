@@ -314,4 +314,52 @@ mod tests {
         });
         assert!(coordinator.start_round(b"signing session").is_err());
     }
+
+    #[test]
+    fn test_roast_round_completion_status() {
+        let mut coordinator = RoastCoordinator::new(RoastConfig::default());
+        let _ = coordinator.start_round(b"session").unwrap();
+        coordinator.complete_round();
+        assert_eq!(
+            coordinator.current_round.as_ref().unwrap().status,
+            RoundStatus::Complete
+        );
+    }
+
+    #[test]
+    fn test_roast_max_retries_exceeded() {
+        let mut coordinator = RoastCoordinator::new(RoastConfig {
+            threshold: 3,
+            total_participants: 5,
+            max_retries: 1,
+            ..Default::default()
+        });
+        let _ = coordinator.start_round(b"session").unwrap();
+        // First retry succeeds
+        let _ = coordinator.retry_round().unwrap();
+        // Second retry fails with MaxRetriesExceeded
+        let err = coordinator.retry_round().unwrap_err();
+        assert!(matches!(err, RoastError::MaxRetriesExceeded(1)));
+    }
+
+    #[test]
+    fn test_roast_display_error_formatting() {
+        let err_cfg = RoastError::InvalidConfig("bad config".into());
+        assert!(err_cfg.to_string().contains("invalid ROAST config"));
+
+        let err_no_round = RoastError::NoActiveRound;
+        assert_eq!(err_no_round.to_string(), "no active ROAST round");
+
+        let err_insuff = RoastError::InsufficientParticipants {
+            available: 1,
+            required: 3,
+        };
+        assert!(err_insuff.to_string().contains("1 available, 3 required"));
+
+        let err_abandoned = RoastError::RoundAbandoned("failed".into());
+        assert!(err_abandoned.to_string().contains("ROAST round abandoned"));
+
+        let err_retries = RoastError::MaxRetriesExceeded(3);
+        assert!(err_retries.to_string().contains("max retries (3) exceeded"));
+    }
 }

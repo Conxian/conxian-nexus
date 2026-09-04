@@ -73,9 +73,13 @@
 - **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
 - **Protocol Specification**:
   1. Two-round threshold signing protocol generating standard BIP-340 Schnorr signatures.
-  2. Integrates with ROAST (Robust Threshold Schnorr) orchestrator (`src/orchestrator/roast.rs`) for fault-tolerant participant set management.
+  2. Integrates with ROAST (Robust Threshold Schnorr) orchestrator (`src/orchestrator/roast.rs`) for fault-tolerant participant set management:
+     - **Round 1 (Commitments)**: Collect participant nonce commitments within `commit_timeout`.
+     - **Filter & Exclude**: Exclude timed-out or faulty participants while verifying active candidates count >= `threshold`.
+     - **Round 2 (Shares & Aggregation)**: Dispatch signing package to cooperative subset and aggregate signature shares.
+     - **Fault Isolation**: Flag faulty nodes persistently across rounds; allow timed-out nodes to rejoin on round retries up to `max_retries`.
   3. Indistinguishable on-chain from single-key Taproot key-path spending.
-- **Status**: Active research and protocol specification.
+- **Status**: Active research and ROAST orchestrator verification (`src/orchestrator/roast.rs`).
 
 ### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
