@@ -25,7 +25,9 @@ pub enum OpCatError {
     #[error("Stack underflow: OP_CAT requires at least 2 stack elements")]
     StackUnderflow,
 
-    #[error("Stack element size exceeded limit: {size} bytes exceeds maximum allowed {limit} bytes")]
+    #[error(
+        "Stack element size exceeded limit: {size} bytes exceeds maximum allowed {limit} bytes"
+    )]
     ElementSizeExceeded { size: usize, limit: usize },
 
     #[error("Recursion depth limit exceeded: depth {depth} exceeds maximum allowed {max}")]
@@ -38,7 +40,10 @@ pub enum OpCatError {
     MalformedHex(String),
 
     #[error("Covenant script state hash mismatch: expected {expected}, calculated {calculated}")]
-    ScriptHashMismatch { expected: String, calculated: String },
+    ScriptHashMismatch {
+        expected: String,
+        calculated: String,
+    },
 }
 
 /// Request payload for evaluating an OP_CAT covenant policy.
@@ -155,7 +160,10 @@ impl OpCatCovenantVerifier {
     }
 
     /// Utility helper to calculate state hash for given stack elements and optional target.
-    pub fn compute_covenant_state_hash(stack: &[Vec<u8>], target_script_pubkey: Option<&[u8]>) -> String {
+    pub fn compute_covenant_state_hash(
+        stack: &[Vec<u8>],
+        target_script_pubkey: Option<&[u8]>,
+    ) -> String {
         let mut hasher = Sha256::new();
         for elem in stack {
             hasher.update(elem);
