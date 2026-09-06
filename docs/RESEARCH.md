@@ -1,9 +1,12 @@
-# Conxian Nexus Research & Improvement Proposals (Updated August 2026 - v0.4.23)
+# Conxian Nexus: Research & Architectural Evolution Plan (v0.4.23)
 
-## 1. Multi-Chain Interoperability (NIP-005)
+This document establishes the official research map, cryptographic specifications, and engineering boundaries for the Conxian Nexus platform.
 
-### 1.1 Bitcoin & BitVM2
-- **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s and state transition verification.
+## 1. Multi-Chain Cryptographic Proof Verification
+
+### 1.1 BitVM2 Groth16 State Transition Verification
+- **Concept**: Verification of Groth16 zero-knowledge proofs for BitVM2 optimistic state transitions on Bitcoin.
+- **Implementation Path**: Real cryptographic verification of SNARK proofs against verified verifying keys using `ark-groth16` and BN254 curve in `src/executor/bitvm_groth16.rs`.
 - **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. Real cryptographic verification of Groth16 SNARK proofs against verified verifying keys is active.
 
 ### 1.2 Cosmos & IBC Header Verification
@@ -85,9 +88,9 @@
 - **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
 - **Execution Model**:
   1. Concatenates script elements using OP_CAT to construct transaction introspective checks.
-  2. Validates output scripts and transaction hash structures against predefined vault policies.
-  3. Enforces locktimes and recipient whitelist covenants on Bitcoin L1.
-- **Status**: Active research and execution simulation.
+  2. Enforces stack element size limit (`MAX_STACK_ELEMENT_SIZE` = 520 bytes) and max recursion depth limit (`MAX_RECURSION_DEPTH` = 16).
+  3. Verifies combined script state hash commitments against expected vault covenant policy hashes on Bitcoin L1.
+- **Status**: **Candidate Initialized (v0.4.23)** via `OpCatCovenantVerifier` in `src/verification/op_cat.rs`.
 
 ### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
 - **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
@@ -110,17 +113,19 @@
 - **Impact Score**: 9/10
 - **Effort Score**: 6/10
 - **Candidate Status**: **Orchestrator Integrated (v0.4.23)**
-- **Architecture & Implementation Matrix**:
-  1. **ROAST Engine Integration**: Connects `RoastConfig` with `FrostSigningContext` to orchestrate 2-round Schnorr signing with dynamic participant subset filtering.
-  2. **Fault Exclusion**: Identifies and isolates malicious or slow signers across rounds, persisting fault metrics.
-  3. **Taproot On-Chain Compatibility**: Outputs standard BIP-340 Schnorr signatures indistinguishable from single-key outputs.
 
 ### 8.2 Candidate 2: ZKCP Pre-Image Circuit Verification (CON-1313 / G-50)
-- **Primary Domain**: Zero-Knowledge Contingent Payments (`lib-conxian-core`)
+- **Primary Domain**: Zero-Knowledge Contingent Payments (`src/verification/zkcp.rs`)
+- **Impact Score**: 8/10
+- **Effort Score**: 7/10
+- **Candidate Status**: **Candidate Initialized (v0.4.23)**
+
+### 8.3 Candidate 3: OP_CAT Recursive Covenant Verifier (CON-1303 / BIP-347)
+- **Primary Domain**: Bitcoin Taproot Covenants (`src/verification/op_cat.rs`)
 - **Impact Score**: 8/10
 - **Effort Score**: 7/10
 - **Candidate Status**: **Candidate Initialized (v0.4.23)**
 - **Architecture & Implementation Matrix**:
-  1. **SHA-256 Circuit Pipeline**: Validates Groth16 SNARK proofs for preimage verification without secret disclosure prior to payment execution via `ZkcpVerifier` in `src/verification/zkcp.rs`.
-  2. **BN254 Groth16 Proof Engine**: Deserializes Groth16 proofs, verifying keys, and public inputs using `ark-groth16` and `ark-bn254`.
-  3. **Atomic Settlement Gate**: Verifies HTLC hash commitment $H(s) = Y$ revelation on Bitcoin/Lightning upon settlement.
+  1. **Stack Concatenation Simulation**: Simulates `OP_CAT` execution by popping two top stack elements, concatenating $x_1 \parallel x_2$, checking max element bounds ($\le 520$ bytes), and pushing result back.
+  2. **Recursion Depth Bounds**: Restricts state tree depth to $\le 16$ levels to prevent stack overflow or expensive script execution loops.
+  3. **Script Hash State Verification**: Computes SHA-256 state commitment hash across resulting stack elements and optional target `scriptPubKey` to enforce vault spending covenant constraints.

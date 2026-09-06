@@ -3,6 +3,8 @@
 ## [0.4.23] - 2026-08-18
 
 ### Added
+- **CON-1303 OP_CAT Recursive Covenants & Taproot Introspection Verifier**: Implemented `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting script element concatenation simulation, max element bounds checking (≤ 520 bytes), recursion depth limits (≤ 16), and vault script state hash verification for Bitcoin.
+- **CON-1313 Zero-Knowledge Contingent Payments (ZKCP) SHA-256 Pre-Image Verifier**: Implemented `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 pre-image proof verification on BN254 curve (`ark-groth16` and `ark-bn254`).
 - **CON-1302 FROST Threshold Signatures & ROAST Orchestrator Integration**: Integrated `FrostSigningContext` into `src/orchestrator/roast.rs` supporting 2-round Schnorr threshold signing, participant timeout and fault isolation, cooperative subset selection, and BIP-340 Schnorr signature aggregation.
 - **Hole 2.1 Hardware Enclave X.509 DER Certificate Verification**: Upgraded `src/executor/mod.rs` to parse X.509 DER attestation certificates using `x509-cert`, enforce validity window bounds (`not_before` / `not_after`), and reject invalid or expired attestation envelopes.
 - **CON-1304 Fedimint Phase 2 Cryptographic Audit**: Implemented Fedimint e-cash blinded mint proof verification in `src/executor/fedimint.rs`, including prefix checks (`fed:`, `fed1:`), payload length validation, SHA-256 nonce hash derivation, double-spend detection against PostgreSQL, and audit persistence (`migrations/20260818000000_fedimint_mint_audit.sql`).
