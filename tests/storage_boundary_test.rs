@@ -65,11 +65,8 @@ mod tests {
                     "Confirmed: Production boundary violation triggered for new_lazy PostgreSQL."
                 );
             }
-        } else {
-            assert!(
-                cfg!(debug_assertions),
-                "Storage::new_lazy should succeed only in debug mode without overrides"
-            );
+        } else if !cfg!(debug_assertions) {
+            panic!("Storage::new_lazy should succeed only in debug mode without overrides");
         }
     }
 
