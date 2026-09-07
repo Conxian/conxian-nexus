@@ -37,3 +37,4 @@ Please include:
 - keep secrets and credentials out of source control
 - redact sensitive values from logs and debug output
 - use protected channels for incident handling
+- enforce production storage boundary controls (remote authenticated Redis and PostgreSQL) across both eager and lazy storage initializations (`Storage::new` and `Storage::new_lazy`) in release builds

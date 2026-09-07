@@ -8,7 +8,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
+    fn check_production_boundary(database_url: &str, redis_url: &str) -> anyhow::Result<()> {
         if !cfg!(debug_assertions) {
             // Redis Boundary Check (Hole 1.2)
             let redis_local = redis_url.contains("127.0.0.1") || redis_url.contains("localhost");
@@ -49,6 +49,11 @@ impl Storage {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub async fn new(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
+        Self::check_production_boundary(database_url, redis_url)?;
 
         let pg_pool = PgPool::connect(database_url).await?;
         let redis_client = RedisClient::open(redis_url)?;
@@ -64,6 +69,8 @@ impl Storage {
     }
 
     pub fn new_lazy(database_url: &str, redis_url: &str) -> anyhow::Result<Self> {
+        Self::check_production_boundary(database_url, redis_url)?;
+
         let pg_pool = sqlx::postgres::PgPoolOptions::new().connect_lazy(database_url)?;
         let redis_client = RedisClient::open(redis_url)?;
 
