@@ -2,7 +2,7 @@
 name = "conxian-nexus"
 version = "0.4.23"
 license = "BUSL-1.1"
-rust-version = "1.98.0"
+rust-version = "1.98.1"
 edition = "2021"
 
 [dependencies]
