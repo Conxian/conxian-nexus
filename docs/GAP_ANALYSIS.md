@@ -56,8 +56,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Code**: `src/api/admin.rs`
 
 ### 2.6 Authenticated Redis & Enclave Isolation (Hole 1.2)
-- **Gap**: Redis could be unauthenticated in production builds.
-- **Status**: **Resolved v0.4.18**. Enforced authenticated and remote Redis in release builds with safety override flag.
+- **Gap**: Redis could be unauthenticated in production builds, and lazy storage initialization bypassed production storage boundary checks.
+- **Status**: **Resolved v0.4.18 (Hardened v0.4.23)**. Enforced authenticated and remote Redis and PostgreSQL across both eager (`Storage::new`) and lazy (`Storage::new_lazy` / `Storage::from_config_lazy`) storage initializations in release builds, requiring explicit `NEXUS_ALLOW_UNSAFE_REDIS` or `NEXUS_ALLOW_UNSAFE_DB` overrides if needed.
 - **Code**: `src/storage/mod.rs`
 
 ### 2.7 Zero-Knowledge Contingent Payments (G-50 / CON-1313)
