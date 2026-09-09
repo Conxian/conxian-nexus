@@ -955,8 +955,8 @@ mod verify_endpoint_tests {
         let elem1 = "01020304";
         let elem2 = "05060708";
         let mut hasher = sha2::Sha256::new();
-        hasher.update(&hex::decode(elem1).unwrap());
-        hasher.update(&hex::decode(elem2).unwrap());
+        hasher.update(hex::decode(elem1).unwrap());
+        hasher.update(hex::decode(elem2).unwrap());
         let expected_hash = hex::encode(hasher.finalize());
 
         let payload = crate::verification::OpCatCovenantPayload {
