@@ -3,6 +3,7 @@
 ## [0.4.23] - 2026-08-18
 
 ### Added
+- **Verification REST API Expansion**: Added `/v1/verify/zkcp` and `/v1/verify/op-cat` REST endpoints in `src/api/rest.rs` and documented schemas in `docs/openapi.yaml`.
 - **CON-1303 OP_CAT Recursive Covenants & Taproot Introspection Verifier**: Implemented `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting script element concatenation simulation, max element bounds checking (≤ 520 bytes), recursion depth limits (≤ 16), and vault script state hash verification for Bitcoin.
 - **CON-1313 Zero-Knowledge Contingent Payments (ZKCP) SHA-256 Pre-Image Verifier**: Implemented `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 pre-image proof verification on BN254 curve (`ark-groth16` and `ark-bn254`).
 - **CON-1302 FROST Threshold Signatures & ROAST Orchestrator Integration**: Integrated `FrostSigningContext` into `src/orchestrator/roast.rs` supporting 2-round Schnorr threshold signing, participant timeout and fault isolation, cooperative subset selection, and BIP-340 Schnorr signature aggregation.
