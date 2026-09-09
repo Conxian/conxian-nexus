@@ -70,7 +70,7 @@ This document establishes the official research map, cryptographic specification
   1. Seller constructs a SHA-256 pre-image circuit using `ark-groth16` proving key.
   2. Buyer verifies Groth16 SNARK proof that hash `H(s) = Y` matches the payment HTLC hash condition.
   3. Upon payment settlement on Bitcoin/Lightning, the secret pre-image `s` is extracted from the transaction input.
-- **Status**: **Candidate Initialized (v0.4.23)** via `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
+- **Status**: **Active REST Endpoint (v0.4.23)** via `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
 
 ### 6.2 FROST Threshold Signatures (CON-1302)
 - **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
@@ -90,7 +90,7 @@ This document establishes the official research map, cryptographic specification
   1. Concatenates script elements using OP_CAT to construct transaction introspective checks.
   2. Enforces stack element size limit (`MAX_STACK_ELEMENT_SIZE` = 520 bytes) and max recursion depth limit (`MAX_RECURSION_DEPTH` = 16).
   3. Verifies combined script state hash commitments against expected vault covenant policy hashes on Bitcoin L1.
-- **Status**: **Candidate Initialized (v0.4.23)** via `OpCatCovenantVerifier` in `src/verification/op_cat.rs`.
+- **Status**: **Active REST Endpoint (v0.4.23)** via `OpCatCovenantVerifier` in `src/verification/op_cat.rs`.
 
 ### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
 - **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
@@ -118,13 +118,13 @@ This document establishes the official research map, cryptographic specification
 - **Primary Domain**: Zero-Knowledge Contingent Payments (`src/verification/zkcp.rs`)
 - **Impact Score**: 8/10
 - **Effort Score**: 7/10
-- **Candidate Status**: **Candidate Initialized (v0.4.23)**
+- **Candidate Status**: **Active REST Endpoint (v0.4.23)**
 
 ### 8.3 Candidate 3: OP_CAT Recursive Covenant Verifier (CON-1303 / BIP-347)
 - **Primary Domain**: Bitcoin Taproot Covenants (`src/verification/op_cat.rs`)
 - **Impact Score**: 8/10
 - **Effort Score**: 7/10
-- **Candidate Status**: **Candidate Initialized (v0.4.23)**
+- **Candidate Status**: **Active REST Endpoint (v0.4.23)**
 - **Architecture & Implementation Matrix**:
   1. **Stack Concatenation Simulation**: Simulates `OP_CAT` execution by popping two top stack elements, concatenating $x_1 \parallel x_2$, checking max element bounds ($\le 520$ bytes), and pushing result back.
   2. **Recursion Depth Bounds**: Restricts state tree depth to $\le 16$ levels to prevent stack overflow or expensive script execution loops.

@@ -15,8 +15,8 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-1200** | Stacks Clarity 4 & sBTC Protocol Adapter Upgrade | 8 | 5 | **P1** | **Upgraded Phase 2 (v0.4.23)** |
 | **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Completed Phase 2 (v0.4.23)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
-| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Candidate Initialized (v0.4.23)** |
-| **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 8 | 7 | **P1** | **Candidate Initialized (v0.4.23)** |
+| **G-50** | ZKCP Implementation (CON-1313) | 8 | 7 | **P1** | **Active REST Endpoint (v0.4.23)** |
+| **CON-1303** | OP_CAT Recursive Covenants (BIP-347) | 8 | 7 | **P1** | **Active REST Endpoint (v0.4.23)** |
 | **NIP-006** | Admin Token Hardening (Scoped Credentials / RBAC) | 8 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 3.1** | SRL-1 Recovery Triggers | 7 | 6 | **P1** | **Completed (v0.4.18)** |
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
@@ -62,7 +62,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.7 Zero-Knowledge Contingent Payments (G-50 / CON-1313)
 - **Gap**: Fair exchange of secrets against Bitcoin/Lightning payments using SNARK pre-image verification.
-- **Status**: **Candidate Initialized (v0.4.23)**. Integrated `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
+- **Status**: **Active REST Endpoint (v0.4.23)**. Integrated `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
 - **Code**: `src/verification/zkcp.rs`
 
 ### 2.8 FROST Threshold Signatures (CON-1302)
@@ -72,7 +72,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.9 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Gap**: Introspection and recursive covenant spending condition checks for Bitcoin Taproot scripts.
-- **Status**: **Candidate Initialized (v0.4.23)**. Integrated `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting stack element concatenation, element size bounds ($\le 520$ bytes), recursion depth limits ($\le 16$), and vault script state hash verification.
+- **Status**: **Active REST Endpoint (v0.4.23)**. Integrated `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting stack element concatenation, element size bounds ($\le 520$ bytes), recursion depth limits ($\le 16$), and vault script state hash verification.
 - **Code**: `src/verification/op_cat.rs`
 
 ### 2.10 Fedimint Blinded Mint e-Cash Verification (CON-1304)

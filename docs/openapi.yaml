@@ -708,6 +708,59 @@ paths:
         '503':
           description: Model verification key is not configured
 
+
+  /v1/verify/zkcp:
+    post:
+      summary: Verify Zero-Knowledge Contingent Payment (ZKCP) Groth16 Pre-Image Proof
+      operationId: verifyZkcp
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZkcpProofPayload'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  circuit_id:
+                    type: string
+        '400':
+          description: Invalid payload or proof verification failed
+  /v1/verify/op-cat:
+    post:
+      summary: Verify OP_CAT Recursive Covenant Stack Execution & State Commitment
+      operationId: verifyOpCat
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpCatCovenantPayload'
+      responses:
+        '200':
+          description: Covenant verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  domain_id:
+                    type: string
+        '400':
+          description: Stack bounds exceeded or covenant verification failed
 components:
   schemas:
     ApiError:
@@ -954,3 +1007,42 @@ components:
           type: integer
         trust_level:
           type: string
+
+    ZkcpProofPayload:
+      type: object
+      required: [circuit_id, hash_commitment, verifying_key_bytes, proof_bytes, public_inputs]
+      properties:
+        circuit_id:
+          type: string
+        hash_commitment:
+          type: string
+        verifying_key_bytes:
+          type: array
+          items:
+            type: integer
+        proof_bytes:
+          type: array
+          items:
+            type: integer
+        public_inputs:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+    OpCatCovenantPayload:
+      type: object
+      required: [domain_id, stack, expected_state_hash, recursion_depth]
+      properties:
+        domain_id:
+          type: string
+        stack:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+        expected_state_hash:
+          type: string
+        recursion_depth:
+          type: integer
