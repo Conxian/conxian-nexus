@@ -761,6 +761,27 @@ paths:
                     type: string
         '400':
           description: Stack bounds exceeded or covenant verification failed
+  /v1/verify/frost:
+    post:
+      summary: Verify FROST Schnorr Threshold Signature Share & Commitment Payload
+      operationId: verifyFrost
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrostVerificationPayload"
+      responses:
+        "200":
+          description: FROST threshold signature verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrostVerificationResponse"
+        "400":
+          description: Threshold not met or invalid Schnorr signature payload
 components:
   schemas:
     ApiError:
@@ -1046,3 +1067,37 @@ components:
           type: string
         recursion_depth:
           type: integer
+    FrostVerificationPayload:
+      type: object
+      required: [protocol_id, message_hash, group_public_key, signature, threshold, participant_count, participant_ids]
+      properties:
+        protocol_id:
+          type: string
+        message_hash:
+          type: string
+        group_public_key:
+          type: string
+        signature:
+          type: string
+        threshold:
+          type: integer
+        participant_count:
+          type: integer
+        participant_ids:
+          type: array
+          items:
+            type: integer
+    FrostVerificationResponse:
+      type: object
+      required: [protocol_id, is_valid, threshold, participant_count, message_hash]
+      properties:
+        protocol_id:
+          type: string
+        is_valid:
+          type: boolean
+        threshold:
+          type: integer
+        participant_count:
+          type: integer
+        message_hash:
+          type: string

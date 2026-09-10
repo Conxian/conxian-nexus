@@ -82,7 +82,7 @@ This document establishes the official research map, cryptographic specification
      - **Round 2 (Shares & Aggregation)**: Dispatch signing package to cooperative subset and aggregate signature shares.
      - **Fault Isolation**: Flag faulty nodes persistently across rounds; allow timed-out nodes to rejoin on round retries up to `max_retries`.
   3. Indistinguishable on-chain from single-key Taproot key-path spending.
-- **Status**: **Orchestrator Integrated (v0.4.23)** via ROAST orchestrator in `src/orchestrator/roast.rs`.
+- **Status**: **Active REST Endpoint (v0.4.23)** via `FrostVerifier` in `src/verification/frost.rs` and `/v1/verify/frost` REST endpoint in `src/api/rest.rs` integrated with ROAST orchestrator in `src/orchestrator/roast.rs`.
 
 ### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
 - **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
@@ -112,7 +112,7 @@ This document establishes the official research map, cryptographic specification
 - **Primary Domain**: Schnorr Taproot Threshold Signing (`src/orchestrator/roast.rs`)
 - **Impact Score**: 9/10
 - **Effort Score**: 6/10
-- **Candidate Status**: **Orchestrator Integrated (v0.4.23)**
+- **Candidate Status**: **Active REST Endpoint (v0.4.23)**
 
 ### 8.2 Candidate 2: ZKCP Pre-Image Circuit Verification (CON-1313 / G-50)
 - **Primary Domain**: Zero-Knowledge Contingent Payments (`src/verification/zkcp.rs`)
