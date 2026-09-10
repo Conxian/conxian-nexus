@@ -6,9 +6,14 @@
 //! module intentionally reuses Core's platform-neutral contracts rather than
 //! re-deriving chain identity, risk classification, or proof-envelope rules.
 
+pub mod frost;
 pub mod op_cat;
 pub mod zkcp;
 
+pub use frost::{
+    FrostError, FrostVerificationPayload, FrostVerificationResponse, FrostVerifier,
+    FROST_VERIFIER_ID,
+};
 pub use op_cat::{OpCatCovenantPayload, OpCatCovenantVerifier, OpCatError, OP_CAT_COVENANT_ID};
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
 

@@ -878,6 +878,21 @@ pub fn verify_routes() -> Router<AppState> {
     Router::new()
         .route("/zkcp", post(verify_zkcp))
         .route("/op-cat", post(verify_op_cat))
+        .route("/frost", post(verify_frost))
+}
+
+async fn verify_frost(
+    Json(payload): Json<crate::verification::FrostVerificationPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::FrostVerifier::new();
+    match verifier.verify_signature(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "is_valid": false })),
+        )
+            .into_response(),
+    }
 }
 
 async fn verify_zkcp(
@@ -970,6 +985,32 @@ mod verify_endpoint_tests {
         let req = Request::builder()
             .method("POST")
             .uri("/v1/verify/op-cat")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_frost_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::verification::FrostVerificationPayload {
+            protocol_id: crate::verification::FROST_VERIFIER_ID.to_string(),
+            message_hash: "00".repeat(32),
+            group_public_key: "02".to_string() + &"01".repeat(32),
+            signature: "03".repeat(64),
+            threshold: 3,
+            participant_count: 5,
+            participant_ids: vec![1, 2, 3, 4, 5],
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/frost")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(
                 serde_json::to_vec(&payload).unwrap(),
