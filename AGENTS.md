@@ -133,7 +133,7 @@ The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.17) defines the canonical 42
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.97.1, edition 2021
+- **MSRV**: Rust 1.98.1, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
@@ -214,4 +214,4 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 - Updated `docs/GAP_ANALYSIS.md` and `docs/RESEARCH.md` mapping all missing research areas and initializing best candidate specifications:
   - Candidate 1: FROST Threshold Signature Productionization (`CON-1302` in `src/orchestrator/roast.rs`).
   - Candidate 2: ZKCP Pre-Image Circuit Verification (`CON-1313` / `G-50` in `lib-conxian-core`).
-- Verified build and test suite readiness under Rust 1.97.1.
+- Verified build and test suite readiness under Rust 1.98.1.
