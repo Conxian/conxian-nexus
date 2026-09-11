@@ -133,7 +133,7 @@ The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.17) defines the canonical 42
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.82+, edition 2021
+- **MSRV**: Rust 1.97.1, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
