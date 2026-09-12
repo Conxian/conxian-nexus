@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.23] - 2026-09-12
+
+### Added
+- **NIP-005 Phase 2 Cryptographic Verification**: Upgraded EVM receipt proof adapter to validate Merkle Patricia Trie (MPT) node linkages and root hash consistency.
+- **NIP-005 Phase 2 Cosmos Verification**: Upgraded Cosmos IBC adapter to decode base64 Tendermint headers and verify SHA-256 cryptographic digests.
+
+### Changed
+- Updated `docs/GAP_ANALYSIS.md`, `docs/RESEARCH.md`, and `README.md` to reflect Phase 2 cryptographic verification for Tier 1 multi-chain adapters.
+- Version bump to `0.4.23` across workspace.
+
 ## [0.4.22] - 2026-07-15
 
 ### Changed

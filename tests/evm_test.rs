@@ -11,6 +11,7 @@ use conxian_nexus::storage::tableland::TablelandAdapter;
 use conxian_nexus::storage::Storage;
 use http_body_util::BodyExt;
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -48,11 +49,15 @@ async fn setup_test_app() -> (axum::Router, Arc<Storage>) {
 async fn test_evm_receipt_verification_success() {
     let (app, _) = setup_test_app().await;
 
+    let root_node_raw = b"sample_rlp_encoded_root_node_payload";
+    let root_hash = Sha256::digest(root_node_raw);
+    let root_hash_hex = format!("0x{}", hex::encode(root_hash));
+
     let payload = json!({
         "block_hash": "0x0000000000000000000000000000000000000000000000000000000000000001",
         "transaction_index": 0,
-        "proof_nodes": ["node1", "node2"],
-        "receipt_root": "0x0000000000000000000000000000000000000000000000000000000000000002"
+        "proof_nodes": [format!("0x{}", hex::encode(root_node_raw))],
+        "receipt_root": root_hash_hex
     });
 
     let response = app
