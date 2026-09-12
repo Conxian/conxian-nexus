@@ -209,6 +209,7 @@ pub fn app_router(
         .nest("/v1/cosmos", cosmos_routes())
         .nest("/v1/stacks", stacks_routes())
         .nest("/v1/rgb", rgb_routes())
+        .nest("/v1/verify", verification_routes())
         .layer(cors)
         .layer(rate_limit)
         .layer(compression)
@@ -235,6 +236,32 @@ pub fn cosmos_routes() -> Router<AppState> {
 
 pub fn stacks_routes() -> Router<AppState> {
     Router::new().route("/verify-tx", post(verify_stacks_tx))
+}
+
+// Verification handlers
+async fn verify_frost_handler(
+    Json(payload): Json<crate::verification::FrostVerificationPayload>,
+) -> Json<crate::verification::FrostVerificationResponse> {
+    Json(crate::verification::FrostVerifier::verify(&payload))
+}
+
+async fn verify_zkcp_handler(
+    Json(payload): Json<crate::verification::ZkcpVerificationPayload>,
+) -> Json<crate::verification::ZkcpVerificationResponse> {
+    Json(crate::verification::ZkcpVerifier::verify(&payload))
+}
+
+async fn verify_op_cat_handler(
+    Json(payload): Json<crate::verification::OpCatVerificationPayload>,
+) -> Json<crate::verification::OpCatVerificationResponse> {
+    Json(crate::verification::OpCatVerifier::verify(&payload))
+}
+
+pub fn verification_routes() -> Router<AppState> {
+    Router::new()
+        .route("/frost", post(verify_frost_handler))
+        .route("/zkcp", post(verify_zkcp_handler))
+        .route("/op-cat", post(verify_op_cat_handler))
 }
 
 pub fn rgb_routes() -> Router<AppState> {
