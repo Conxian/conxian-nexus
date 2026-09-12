@@ -1,15 +1,14 @@
 # Changelog
 
-## [0.4.23] - 2026-08-20
+## [0.4.23] - 2026-09-12
 
 ### Added
-- FROST Threshold Signatures (CON-1302): Productionized FROST verifier (src/verification/frost.rs) and ROAST threshold signature orchestrator (src/orchestrator/roast.rs).
-- ZKCP SHA-256 Pre-Image Verifier (CON-1313): Arkworks Groth16 circuit verification for zero-knowledge contingent payments (src/verification/zkcp.rs).
-- OP_CAT Recursive Covenant Verifier (CON-1303): Taproot BIP-347 covenant spending policy simulation (src/verification/op_cat.rs).
-- Verification Endpoints: Added /v1/verify/frost, /v1/verify/zkcp, and /v1/verify/op-cat to src/api/rest.rs and documented in docs/openapi.yaml.
+- **NIP-005 Phase 2 Cryptographic Verification**: Upgraded EVM receipt proof adapter to validate Merkle Patricia Trie (MPT) node linkages and root hash consistency.
+- **NIP-005 Phase 2 Cosmos Verification**: Upgraded Cosmos IBC adapter to decode base64 Tendermint headers and verify SHA-256 cryptographic digests.
 
 ### Changed
-- Version bump to 0.4.23 across all manifests and documentation.
+- Updated `docs/GAP_ANALYSIS.md`, `docs/RESEARCH.md`, and `README.md` to reflect Phase 2 cryptographic verification for Tier 1 multi-chain adapters.
+- Version bump to `0.4.23` across workspace.
 
 ## [0.4.22] - 2026-07-15
 

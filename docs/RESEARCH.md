@@ -9,12 +9,12 @@
 ### 1.2 Cosmos & IBC
 - **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.
 - **Implementation Path**: Utilize `ibc-rs` for Tendermint light client verification.
-- **Status**: Phase 1 (Structural Validation) active.
+- **Status**: Phase 2 (Cryptographic Verification) active in v0.4.23.
 
 ### 1.3 EVM Merkle Patricia Trie (MPT)
 - **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root.
 - **Implementation Path**: Use `trie_db` for MPT verification.
-- **Status**: Phase 1 (Structural Validation) active.
+- **Status**: Phase 2 (Cryptographic Verification) active in v0.4.23.
 
 ## 2. Admin & Governance Hardening
 
