@@ -3,6 +3,20 @@
 target/
 **/*.rs.bk
 
+# Frontend / Web Build Outputs & Bundler Artifacts
+.next/
+dist/
+build/
+out/
+coverage/
+.turbo/
+.cache/
+.parcel-cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
 # IDEs
 .idea/
 .vscode/
@@ -13,7 +27,7 @@ target/
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment & Config
 .env
 .env.local
 .env.*
@@ -22,7 +36,12 @@ Thumbs.db
 # SQLx
 .sqlx/
 
-# Testing
+# Local Database & Storage Dumps
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing & Execution Artifacts
 tests/output/
 *.log
 tests/*.log
@@ -30,12 +49,14 @@ node_modules/
 test-results/
 playwright-report/
 
-# Audit and Dumps
+# Audit, Dumps, Temporary & Backup Files
 full_audit_dump.txt
 *dump.txt
 *audit*.txt
+*.tmp
+*.bak
 
-# Security and Credentials
+# Security, Credentials & SSH Keys
 *.pem
 *.key
 *.p12
@@ -43,6 +64,10 @@ full_audit_dump.txt
 *.crt
 *.csr
 *.p7b
+id_rsa*
+id_ed25519*
+id_dsa*
+id_ecdsa*
 
 # Submodules
 lib-conxian-core/target/

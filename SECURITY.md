@@ -34,7 +34,8 @@ Please include:
 
 ## Security expectations
 
-- keep secrets and credentials out of source control
+- keep secrets, API keys, private SSH/TLS keys, and credentials out of source control
+- enforce strict repository ignore boundaries (`.gitignore` and `.dockerignore`) against generated runtime artifacts (`node_modules/`, `test-results/`, `playwright-report/`), web build outputs (`.next/`, `dist/`, `build/`), local database dumps (`*.db`, `*.sqlite`), and temporary files
 - redact sensitive values from logs and debug output
 - use protected channels for incident handling
 - enforce production storage boundary controls (remote authenticated Redis and PostgreSQL) across both eager and lazy storage initializations (`Storage::new` and `Storage::new_lazy`) in release builds
