@@ -61,9 +61,9 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Rust 1.97+, PostgreSQL 15, and Redis 7
+- Rust 1.98.1 (MSRV), PostgreSQL 15, and Redis 7
 
-### Setup
+### Setup & Local Development
 
 1.  **Environment Configuration**:
     Copy the example environment file and configure your secrets:
@@ -86,6 +86,31 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
     sqlx migrate run
     ```
 
+3.  **Local Build & Test**:
+    Build the workspace binaries and execute the unit and integration test suite:
+    ```bash
+    cargo build --workspace
+    cargo test --workspace
+    ```
+
+4.  **Running the Node**:
+    Start the Nexus node directly using Cargo:
+    ```bash
+    cargo run
+    ```
+
+5.  **Verifying Service Health & Proof APIs**:
+    Probe the local REST API server to verify node status and verification endpoints:
+    ```bash
+    # Node health check
+    curl -f http://localhost:8080/health
+
+    # Verification endpoint inspection
+    curl -X POST http://localhost:8080/v1/verify/zkcp \
+      -H "Content-Type: application/json" \
+      -d '{"proof": "...", "public_inputs": "..."}'
+    ```
+
 ### Quick Start (Docker)
 
 If you prefer using Docker, you can start the entire stack (including Postgres and Redis) with:
@@ -96,11 +121,12 @@ docker-compose up --build
 
 For more detailed setup instructions, including production hardening, see the [Operator Guide](./docs/PRD.md).
 
-## Policies
+## Policies & Release Guidance
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)
 - [SUPPORT.md](./SUPPORT.md)
+- [RELEASE.md](./docs/RELEASE.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 - [CODEOWNERS](./.github/CODEOWNERS)
 - [REPO_OWNERSHIP.md](./docs/REPO_OWNERSHIP.md)
