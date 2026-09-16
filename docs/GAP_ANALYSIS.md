@@ -23,6 +23,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **Hole 2.1** | Hardware Enclave Certificate Chain Verification | 8 | 5 | **P1** | **Completed (v0.4.23)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active REST Endpoint (v0.4.23)** |
+| **CON-70** | ZKML Verifier Circuit-Key Contract Verification | 8 | 6 | **P1** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -89,3 +90,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Billing upgrade handlers used non-canonical mock strings.
 - **Status**: **Completed (v0.4.23)**. Standardized canonical BOLT11 `lnbc` payment encoding and Redis settlement verification.
 - **Code**: `src/api/billing/mod.rs`
+
+### 2.13 ZKML Circuit-Key Verifier Execution (CON-70)
+- **Gap**: ZKML REST endpoint returned service unavailable when model keys were missing, without circuit-key Groth16 proof verification execution.
+- **Status**: **Completed (v0.4.23)**. Configured ZKML base64 verifying key resolution (`ZKML_VK_B64_*`), input commitment hex extraction, and Groth16 ZKCP verifier execution yielding signed attestations.
+- **Code**: `src/api/zkml.rs`
