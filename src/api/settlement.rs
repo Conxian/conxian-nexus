@@ -863,4 +863,55 @@ mod tests {
         assert_eq!(SettlementSource::parse("CIPS").unwrap().as_str(), "CIPS");
         assert_eq!(SettlementSource::parse("SPFS").unwrap().as_str(), "SPFS");
     }
+
+    #[test]
+    fn rejects_invalid_routing_policy_json_type() {
+        let payload = json!({
+            "routing_policy": "invalid_string_instead_of_object"
+        });
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "invalid_routing_policy");
+    }
+
+    #[test]
+    fn rejects_t4_trust_tier() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "IBC",
+            "trust_tier": "T4",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+            "evidence_hash": "0xabc123",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "trust_tier_not_allowed");
+    }
+
+    #[test]
+    fn rejects_verification_class_mismatch() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "Hyperlane",
+            "trust_tier": "T2",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+            "evidence_hash": "0xabc123",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "verification_class_mismatch");
+    }
+
+    #[test]
+    fn rejects_missing_required_evidence_hash() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "IBC",
+            "trust_tier": "T1",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "missing_required_routing_policy_field");
+    }
 }
