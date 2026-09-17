@@ -997,12 +997,20 @@ mod verify_endpoint_tests {
 
     #[tokio::test]
     async fn test_verify_frost_endpoint_success() {
+        use k256::schnorr::SigningKey;
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let signing_key = SigningKey::from_bytes(&[0x01u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let msg_bytes = [0x42u8; 32];
+        let aux_rand = [0x01u8; 32];
+        let signature = signing_key.sign_raw(&msg_bytes, &aux_rand).unwrap();
+
         let payload = crate::verification::FrostVerificationPayload {
             protocol_id: crate::verification::FROST_VERIFIER_ID.to_string(),
-            message_hash: "00".repeat(32),
-            group_public_key: "02".to_string() + &"01".repeat(32),
-            signature: "03".repeat(64),
+            message_hash: hex::encode(msg_bytes),
+            group_public_key: hex::encode(verifying_key.to_bytes()),
+            signature: hex::encode(signature.to_bytes()),
             threshold: 3,
             participant_count: 5,
             participant_ids: vec![1, 2, 3, 4, 5],

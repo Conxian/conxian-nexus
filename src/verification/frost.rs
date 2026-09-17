@@ -3,8 +3,8 @@
 //! Provides cryptographic verification of threshold Schnorr signature shares,
 //! commitment sets, and group public key aggregation per CON-1302 and BIP-340/FROST.
 
+use k256::schnorr::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 /// Canonical FROST verifier protocol identifier.
@@ -42,7 +42,7 @@ pub struct FrostVerificationPayload {
     pub protocol_id: String,
     /// 32-byte hex-encoded message digest or payload hash.
     pub message_hash: String,
-    /// 32-byte hex-encoded aggregated group Schnorr public key (XOnly or SEC1).
+    /// 32-byte hex-encoded aggregated group Schnorr public key (XOnly BIP-340 or SEC1 compressed).
     pub group_public_key: String,
     /// 64-byte hex-encoded BIP-340 Schnorr signature (r || s).
     pub signature: String,
@@ -78,7 +78,7 @@ impl FrostVerifier {
         Self
     }
 
-    /// Verifies a FROST threshold signature payload.
+    /// Cryptographically verifies a FROST threshold BIP-340 Schnorr signature payload.
     pub fn verify_signature(
         &self,
         payload: &FrostVerificationPayload,
@@ -115,7 +115,7 @@ impl FrostVerifier {
             });
         }
 
-        // Decode hex fields
+        // Decode message hash
         let msg_bytes = hex::decode(payload.message_hash.trim_start_matches("0x"))
             .map_err(|e| FrostError::MalformedHex(format!("message_hash: {}", e)))?;
 
@@ -125,16 +125,33 @@ impl FrostVerifier {
             ));
         }
 
+        // Decode group public key (32-byte BIP-340 XOnly or 33-byte SEC1)
         let group_pk_bytes = hex::decode(payload.group_public_key.trim_start_matches("0x"))
             .map_err(|e| FrostError::MalformedHex(format!("group_public_key: {}", e)))?;
 
-        if group_pk_bytes.len() != 32 && group_pk_bytes.len() != 33 {
+        let verifying_key = if group_pk_bytes.len() == 32 {
+            let key_array: [u8; 32] = group_pk_bytes.as_slice().try_into().map_err(|_| {
+                FrostError::InvalidGroupPublicKey("invalid key array conversion".to_string())
+            })?;
+            VerifyingKey::from_bytes(&key_array.into()).map_err(|e| {
+                FrostError::InvalidGroupPublicKey(format!("invalid 32-byte BIP-340 key: {}", e))
+            })?
+        } else if group_pk_bytes.len() == 33 {
+            let xonly_slice = &group_pk_bytes[1..33];
+            let key_array: [u8; 32] = xonly_slice.try_into().map_err(|_| {
+                FrostError::InvalidGroupPublicKey("invalid SEC1 slice conversion".to_string())
+            })?;
+            VerifyingKey::from_bytes(&key_array.into()).map_err(|e| {
+                FrostError::InvalidGroupPublicKey(format!("invalid SEC1 group public key: {}", e))
+            })?
+        } else {
             return Err(FrostError::InvalidGroupPublicKey(
                 "group_public_key must be 32 bytes (XOnly) or 33 bytes (compressed SEC1)"
                     .to_string(),
             ));
-        }
+        };
 
+        // Decode 64-byte BIP-340 Schnorr signature (r || s)
         let sig_bytes = hex::decode(payload.signature.trim_start_matches("0x"))
             .map_err(|e| FrostError::MalformedHex(format!("signature: {}", e)))?;
 
@@ -144,20 +161,19 @@ impl FrostVerifier {
             ));
         }
 
-        // Perform Schnorr commitment derivation check
-        // Hash commitment H = SHA-256(msg_bytes || group_pk_bytes || sig_bytes[0..32])
-        let mut hasher = Sha256::new();
-        hasher.update(&msg_bytes);
-        hasher.update(&group_pk_bytes);
-        hasher.update(&sig_bytes[..32]);
-        let digest = hasher.finalize();
+        let signature = Signature::try_from(sig_bytes.as_slice()).map_err(|e| {
+            FrostError::VerificationFailed(format!("invalid BIP-340 signature encoding: {}", e))
+        })?;
 
-        // Ensure non-zero digest for valid Schnorr share commitment
-        if digest.iter().all(|&b| b == 0) {
-            return Err(FrostError::VerificationFailed(
-                "Invalid Schnorr commitment digest".to_string(),
-            ));
-        }
+        // Perform cryptographic BIP-340 Schnorr signature verification over message_hash
+        verifying_key
+            .verify_raw(&msg_bytes, &signature)
+            .map_err(|e| {
+                FrostError::VerificationFailed(format!(
+                    "BIP-340 Schnorr signature verification failed: {}",
+                    e
+                ))
+            })?;
 
         Ok(FrostVerificationResponse {
             protocol_id: FROST_VERIFIER_ID.to_string(),
@@ -172,15 +188,24 @@ impl FrostVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use k256::schnorr::SigningKey;
 
     #[test]
-    fn test_frost_verification_valid_payload() {
+    fn test_frost_verification_valid_bip340_signature() {
         let verifier = FrostVerifier::new();
+
+        let signing_key = SigningKey::from_bytes(&[0x01u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+
+        let msg_bytes = [0x42u8; 32];
+        let aux_rand = [0x01u8; 32];
+        let signature = signing_key.sign_raw(&msg_bytes, &aux_rand).unwrap();
+
         let payload = FrostVerificationPayload {
             protocol_id: FROST_VERIFIER_ID.to_string(),
-            message_hash: "00".repeat(32),
-            group_public_key: "02".to_string() + &"01".repeat(32),
-            signature: "03".repeat(64),
+            message_hash: hex::encode(msg_bytes),
+            group_public_key: hex::encode(verifying_key.to_bytes()),
+            signature: hex::encode(signature.to_bytes()),
             threshold: 3,
             participant_count: 5,
             participant_ids: vec![1, 2, 3, 4, 5],
@@ -190,6 +215,38 @@ mod tests {
         assert!(res.is_valid);
         assert_eq!(res.threshold, 3);
         assert_eq!(res.participant_count, 5);
+        assert_eq!(res.message_hash, hex::encode(msg_bytes));
+    }
+
+    #[test]
+    fn test_frost_verification_invalid_signature_bytes() {
+        let verifier = FrostVerifier::new();
+
+        let signing_key = SigningKey::from_bytes(&[0x01u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+
+        let msg_bytes = [0x42u8; 32];
+        let bad_sig_bytes = [0x01u8; 64];
+
+        let payload = FrostVerificationPayload {
+            protocol_id: FROST_VERIFIER_ID.to_string(),
+            message_hash: hex::encode(msg_bytes),
+            group_public_key: hex::encode(verifying_key.to_bytes()),
+            signature: hex::encode(bad_sig_bytes),
+            threshold: 3,
+            participant_count: 5,
+            participant_ids: vec![1, 2, 3, 4, 5],
+        };
+
+        let err = verifier.verify_signature(&payload).unwrap_err();
+        match err {
+            FrostError::VerificationFailed(reason) => {
+                assert!(
+                    reason.contains("signature verification failed") || reason.contains("invalid")
+                );
+            }
+            other => panic!("expected VerificationFailed, got {:?}", other),
+        }
     }
 
     #[test]
