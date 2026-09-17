@@ -8,6 +8,7 @@
 
 pub mod frost;
 pub mod op_cat;
+pub mod x402;
 pub mod zkcp;
 
 pub use frost::{
@@ -15,6 +16,9 @@ pub use frost::{
     FROST_VERIFIER_ID,
 };
 pub use op_cat::{OpCatCovenantPayload, OpCatCovenantVerifier, OpCatError, OP_CAT_COVENANT_ID};
+pub use x402::{
+    X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
+};
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
 
 use lib_conxian_core::control_model::{
