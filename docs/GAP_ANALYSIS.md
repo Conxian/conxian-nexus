@@ -24,6 +24,8 @@ This document maps identified security holes, protocol gaps, and active research
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active REST Endpoint (v0.4.23)** |
 | **CON-70** | ZKML Verifier Circuit-Key Contract Verification | 8 | 6 | **P1** | **Completed (v0.4.23)** |
+| **CON-44** | BNS & Identity Resolution Service & Unit Test Coverage | 8 | 3 | **P1** | **In Progress (v0.4.23)** |
+| **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **In Progress (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -95,3 +97,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: ZKML REST endpoint returned service unavailable when model keys were missing, without circuit-key Groth16 proof verification execution.
 - **Status**: **Completed (v0.4.23)**. Configured ZKML base64 verifying key resolution (`ZKML_VK_B64_*`), input commitment hex extraction, and Groth16 ZKCP verifier execution yielding signed attestations.
 - **Code**: `src/api/zkml.rs`
+
+### 2.14 Identity Resolution & Analytics API Verification (CON-44 / NEXUS-ANALYTICS)
+- **Gap**: Identity resolution (BNS, ENS, WorldID) and analytics endpoints had zero unit test coverage in the core library test suite.
+- **Status**: **In Progress (v0.4.23)**. Unit test coverage being added for BNS name lookup error handling, ENS resolution, WorldID security fallbacks, unsupported protocol validation, and analytics metric parameter filtering.
+- **Code**: `src/api/identity.rs`, `src/api/analytics.rs`
