@@ -277,7 +277,9 @@ mod tests {
             protocol: "UNKNOWN".to_string(),
         };
 
-        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        let res = resolve_identity_handler(State(state), Query(req))
+            .await
+            .into_response();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 
@@ -289,7 +291,9 @@ mod tests {
             protocol: "WorldID".to_string(),
         };
 
-        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        let res = resolve_identity_handler(State(state), Query(req))
+            .await
+            .into_response();
         assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
     }
 
@@ -301,7 +305,9 @@ mod tests {
             protocol: "WorldID".to_string(),
         };
 
-        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        let res = resolve_identity_handler(State(state), Query(req))
+            .await
+            .into_response();
         assert_eq!(res.status(), StatusCode::NOT_IMPLEMENTED);
     }
 }
