@@ -228,3 +228,80 @@ use axum::Router;
 pub fn identity_routes() -> Router<AppState> {
     Router::new().route("/resolve", get(resolve_identity_handler))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::rest::AppState;
+    use crate::config::Config;
+    use crate::executor::NexusExecutor;
+    use crate::state::NexusState;
+    use crate::storage::tableland::TablelandAdapter;
+    use crate::storage::Storage;
+    use axum::extract::{Query, State};
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    fn mock_app_state(worldid_app_id: &str) -> AppState {
+        let mut config = Config::default_test();
+        config.worldid_app_id = worldid_app_id.to_string();
+        let config = Arc::new(config);
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let nexus_state = Arc::new(NexusState::new());
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            crate::executor::rgb::RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "test".to_string()));
+
+        AppState {
+            config,
+            storage,
+            nexus_state,
+            executor,
+            oracle: None,
+            tableland,
+            kwil: None,
+            nostr: None,
+            gateway_url: None,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resolve_identity_unsupported_protocol() {
+        let state = mock_app_state("");
+        let req = IdentityResolveRequest {
+            name: "alice.btc".to_string(),
+            protocol: "UNKNOWN".to_string(),
+        };
+
+        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_identity_worldid_missing_app_id() {
+        let state = mock_app_state("");
+        let req = IdentityResolveRequest {
+            name: "alice".to_string(),
+            protocol: "WorldID".to_string(),
+        };
+
+        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        assert_eq!(res.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_identity_worldid_not_implemented() {
+        let state = mock_app_state("app_12345");
+        let req = IdentityResolveRequest {
+            name: "alice".to_string(),
+            protocol: "WorldID".to_string(),
+        };
+
+        let res = resolve_identity_handler(State(state), Query(req)).await.into_response();
+        assert_eq!(res.status(), StatusCode::NOT_IMPLEMENTED);
+    }
+}

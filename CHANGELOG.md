@@ -3,6 +3,7 @@
 ## [0.4.23] - 2026-08-18
 
 ### Added
+- **CON-44 & NEXUS-ANALYTICS Unit Test Coverage Expansion**: Added unit test suites to `src/api/identity.rs` and `src/api/analytics.rs` testing BNS/ENS name lookup handlers, WorldID missing configuration fallbacks, unsupported protocol parameter validation, non-STX asset parameter rejection, and invalid analytics metric filtering.
 - **CON-70 ZKML Circuit-Key Verifier Execution**: Enabled Groth16 ZKCP verifier execution for ZKML compliance proofs (`src/api/zkml.rs`) with base64 key loading and hex commitment verification.
 - **Verification REST API Expansion**: Added `/v1/verify/zkcp` and `/v1/verify/op-cat` REST endpoints in `src/api/rest.rs` and documented schemas in `docs/openapi.yaml`.
 - **CON-1303 OP_CAT Recursive Covenants & Taproot Introspection Verifier**: Implemented `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting script element concatenation simulation, max element bounds checking (≤ 520 bytes), recursion depth limits (≤ 16), and vault script state hash verification for Bitcoin.

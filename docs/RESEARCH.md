@@ -129,3 +129,12 @@ This document establishes the official research map, cryptographic specification
   1. **Stack Concatenation Simulation**: Simulates `OP_CAT` execution by popping two top stack elements, concatenating $x_1 \parallel x_2$, checking max element bounds ($\le 520$ bytes), and pushing result back.
   2. **Recursion Depth Bounds**: Restricts state tree depth to $\le 16$ levels to prevent stack overflow or expensive script execution loops.
   3. **Script Hash State Verification**: Computes SHA-256 state commitment hash across resulting stack elements and optional target `scriptPubKey` to enforce vault spending covenant constraints.
+
+## 9. Identity & Analytics Test Suite Candidate (CON-44 / NEXUS-ANALYTICS)
+- **Primary Domain**: BNS/ENS Identity Resolution (`src/api/identity.rs`) and On-Chain Metrics (`src/api/analytics.rs`).
+- **Impact Score**: 8/10
+- **Effort Score**: 3/10
+- **Candidate Status**: **Selected for Production Initialization (v0.4.23)**.
+- **Specification**:
+  1. Add comprehensive unit tests for `resolve_identity_handler` covering BNS (404 / 502 / 200 paths), ENS, empty/missing WorldID app IDs, and bad protocol parameters.
+  2. Add unit tests for `get_metrics_handler` testing input validation, invalid asset rejection (e.g. non-STX assets), day parameter clamping, and unsupported metric names.
