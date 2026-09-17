@@ -27,6 +27,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-44** | BNS & Identity Resolution Service & Unit Test Coverage | 8 | 3 | **P1** | **Completed (v0.4.23)** |
 | **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **Completed (v0.4.23)** |
 | **CON-803** | x402 Settlement Routing Policy & DLC Bond Verification Unit Tests | 8 | 3 | **P1** | **Completed (v0.4.23)** |
+| **CON-804** | x402 V2 Settlement Rail Verifier (AWS Bedrock AgentCore Payments) | 9 | 4 | **P1** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -108,3 +109,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: External settlement trigger routing policy metadata validation and DLC bond Oracle attestation verification were missing cryptographic verification.
 - **Status**: **Completed (v0.4.23)**. Upgraded `src/api/dlc.rs` to execute cryptographic BIP-340 Schnorr signature verification for DLC Oracle attestations over 32-byte SHA-256 digests (`verify_dlc_oracle_attestation`), implemented CET outcome calculation (`/v1/dlc/cet/verify`), and added unit test coverage for CIPS, SPFS, SWIFT, PAPSS, and BRICS sanctions-risk classification.
 - **Code**: `src/api/settlement.rs`, `src/api/dlc.rs`
+
+### 2.16 x402 V2 Settlement Rail Verifier (CON-804 / x402 V2)
+- **Gap**: Native HTTP 402 agentic payment verification, Schnorr payment signatures, and satoshi commitment challenge verification were not implemented for glass node settlement rails.
+- **Status**: **Completed (v0.4.23)**. Implemented `X402PaymentVerifier` in `src/verification/x402.rs` supporting x402 V2 authorization payload parsing, cryptographic BIP-340 Schnorr signature verification over SHA-256 canonical payload digests, satoshi bounds validation, challenge expiration checks, replay protection nonces, and `/v1/settlement/x402/verify` REST endpoint.
+- **Code**: `src/verification/x402.rs`, `src/api/settlement.rs`

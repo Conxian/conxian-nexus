@@ -671,6 +671,73 @@ paths:
       responses:
         '201':
           description: Created
+  /v1/settlement/x402/verify:
+    post:
+      summary: Verify x402 V2 HTTP payment authorization proof
+      description: Cryptographically verifies x402 V2 payment challenges, Schnorr payment signatures, satoshi amounts, expiration bounds, and replay protection nonces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - protocol_id
+                - scheme
+                - network
+                - amount_sats
+                - payer
+                - payee
+                - nonce
+                - timestamp
+                - expires_at
+                - public_key
+                - signature
+              properties:
+                protocol_id:
+                  type: string
+                  example: "x402-v2-settlement-verifier"
+                scheme:
+                  type: string
+                  example: "x402"
+                network:
+                  type: string
+                  example: "bitcoin_mainnet"
+                amount_sats:
+                  type: integer
+                  format: int64
+                  example: 50000
+                payer:
+                  type: string
+                  example: "bc1qpayer123456789"
+                payee:
+                  type: string
+                  example: "bc1qpayee987654321"
+                nonce:
+                  type: string
+                  example: "nonce_1234567890abcdef"
+                timestamp:
+                  type: integer
+                  format: int64
+                  example: 1750000000
+                expires_at:
+                  type: integer
+                  format: int64
+                  example: 1750003600
+                public_key:
+                  type: string
+                  example: "02abc..."
+                signature:
+                  type: string
+                  example: "3045..."
+                payment_hash:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Payment authorization proof verified successfully
+        "400":
+          description: Invalid payment proof or cryptographic signature verification failed
   /v1/settlement/trigger:
     post:
       summary: Trigger external settlement

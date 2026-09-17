@@ -1,5 +1,5 @@
-//! [CON-162] External Settlement Trigger Module.
-//! Handles ISO 20022, PAPSS, and BRICS triggers for TEE-verified proposals.
+//! [CON-162] External Settlement Trigger & x402 V2 Settlement Rail Verification Module.
+//! Handles ISO 20022, PAPSS, BRICS triggers, and x402 V2 payment proof verification.
 
 use crate::api::rest::AppState;
 use crate::storage::kwil::{KwilSettlementLogCommitment, KwilSettlementProposalCommitment};
@@ -477,10 +477,26 @@ pub fn validate_routing_policy_metadata(
     })
 }
 
-/// [CON-162] Handles external settlement triggers.
-/// Verifies TEE attestation and initiates a 144-block time-lock proposal.
+/// [CON-162 / CON-804] Router for external settlement triggers and x402 V2 payment verification.
 pub fn settlement_routes() -> Router<AppState> {
-    Router::new().route("/trigger", post(settlement_trigger_handler))
+    Router::new()
+        .route("/trigger", post(settlement_trigger_handler))
+        .route("/x402/verify", post(verify_x402_settlement_handler))
+}
+
+/// [CON-804] Verifies x402 V2 HTTP payment authorization proofs.
+pub async fn verify_x402_settlement_handler(
+    Json(payload): Json<crate::verification::X402PaymentPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::X402PaymentVerifier::new();
+    match verifier.verify_payment_proof(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "is_valid": false })),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn settlement_trigger_handler(
