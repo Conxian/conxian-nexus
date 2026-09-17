@@ -105,6 +105,6 @@ This document maps identified security holes, protocol gaps, and active research
 - **Code**: `src/api/identity.rs`, `src/api/analytics.rs`
 
 ### 2.15 External Settlement Routing Policy & DLC Bond Verification (CON-803 / NEXUS-SETTLEMENT-DLC)
-- **Gap**: External settlement trigger routing policy metadata validation and DLC bond coupon height calculations lacked granular unit test coverage.
-- **Status**: **Completed (v0.4.23)**. Comprehensive unit tests added for CIPS, SPFS, SWIFT, PAPSS, and BRICS sanctions-risk classification, routing policy enforcement blocks, and DLC coupon height edge cases.
+- **Gap**: External settlement trigger routing policy metadata validation and DLC bond Oracle attestation verification were missing cryptographic verification.
+- **Status**: **Completed (v0.4.23)**. Upgraded `src/api/dlc.rs` to execute cryptographic BIP-340 Schnorr signature verification for DLC Oracle attestations over 32-byte SHA-256 digests (`verify_dlc_oracle_attestation`), implemented CET outcome calculation (`/v1/dlc/cet/verify`), and added unit test coverage for CIPS, SPFS, SWIFT, PAPSS, and BRICS sanctions-risk classification.
 - **Code**: `src/api/settlement.rs`, `src/api/dlc.rs`

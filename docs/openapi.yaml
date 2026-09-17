@@ -607,6 +607,49 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/dlc/cet/verify:
+    post:
+      summary: Verify DLC Contract Execution Transaction (CET) Outcome & Oracle Attestation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dlc_contract_id, oracle_pubkey, attestation_signature, outcome_value, total_principal_sbtc]
+              properties:
+                dlc_contract_id:
+                  type: string
+                oracle_pubkey:
+                  type: string
+                attestation_signature:
+                  type: string
+                outcome_value:
+                  type: integer
+                total_principal_sbtc:
+                  type: integer
+      responses:
+        "200":
+          description: CET outcome verified and payout calculated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dlc_contract_id:
+                    type: string
+                  verified:
+                    type: boolean
+                  cet_status:
+                    type: string
+                  payout_sbtc_investor:
+                    type: integer
+                  payout_sbtc_issuer:
+                    type: integer
+        "400":
+          description: Malformed request payload
+        "422":
+          description: Invalid Oracle attestation signature
   /v1/dlc/bond:
     post:
       summary: Create DLC bond

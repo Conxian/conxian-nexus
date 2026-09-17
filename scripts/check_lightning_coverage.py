@@ -26,12 +26,13 @@ SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
         (11, 59),  # collector filtering + key parsing + dedup/bridge decisions
     ],
     "src/api/dlc.rs": [
-        (25, 54),  # request validation + announcement/signing helpers
-        (65, 76),  # deterministic invalid-request branch
+        (45, 113),  # request validation + announcement/signing + attestation verifier
+        (122, 134), # create_dlc_bond_handler invalid-request branch
+        (193, 210), # verify_dlc_cet_outcome_handler invalid-request branch
     ],
     "src/api/rest.rs": [
         (36, 50),   # AppState struct
-        (159, 163), # DLC route wiring
+        (204, 204), # DLC route wiring
     ],
     "src/executor/lightning.rs": [
         (1, 140),  # failure taxonomy + state machine + intent models
