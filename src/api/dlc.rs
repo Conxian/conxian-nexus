@@ -311,4 +311,12 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    #[test]
+    fn test_calculate_next_coupon_height_edge_cases() {
+        assert_eq!(calculate_next_coupon_height(0), 0);
+        assert_eq!(calculate_next_coupon_height(9), 0);
+        assert_eq!(calculate_next_coupon_height(10), 1);
+        assert_eq!(calculate_next_coupon_height(14400), 1440);
+    }
 }

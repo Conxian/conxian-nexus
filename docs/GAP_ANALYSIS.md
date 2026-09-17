@@ -24,8 +24,9 @@ This document maps identified security holes, protocol gaps, and active research
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
 | **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active REST Endpoint (v0.4.23)** |
 | **CON-70** | ZKML Verifier Circuit-Key Contract Verification | 8 | 6 | **P1** | **Completed (v0.4.23)** |
-| **CON-44** | BNS & Identity Resolution Service & Unit Test Coverage | 8 | 3 | **P1** | **In Progress (v0.4.23)** |
-| **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **In Progress (v0.4.23)** |
+| **CON-44** | BNS & Identity Resolution Service & Unit Test Coverage | 8 | 3 | **P1** | **Completed (v0.4.23)** |
+| **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **Completed (v0.4.23)** |
+| **CON-803** | x402 Settlement Routing Policy & DLC Bond Verification Unit Tests | 8 | 3 | **P1** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -100,5 +101,10 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.14 Identity Resolution & Analytics API Verification (CON-44 / NEXUS-ANALYTICS)
 - **Gap**: Identity resolution (BNS, ENS, WorldID) and analytics endpoints had zero unit test coverage in the core library test suite.
-- **Status**: **In Progress (v0.4.23)**. Unit test coverage being added for BNS name lookup error handling, ENS resolution, WorldID security fallbacks, unsupported protocol validation, and analytics metric parameter filtering.
+- **Status**: **Completed (v0.4.23)**. Unit test coverage added for BNS name lookup error handling, ENS resolution, WorldID security fallbacks, unsupported protocol validation, and analytics metric parameter filtering in PR #299.
 - **Code**: `src/api/identity.rs`, `src/api/analytics.rs`
+
+### 2.15 External Settlement Routing Policy & DLC Bond Verification (CON-803 / NEXUS-SETTLEMENT-DLC)
+- **Gap**: External settlement trigger routing policy metadata validation and DLC bond coupon height calculations lacked granular unit test coverage.
+- **Status**: **Completed (v0.4.23)**. Comprehensive unit tests added for CIPS, SPFS, SWIFT, PAPSS, and BRICS sanctions-risk classification, routing policy enforcement blocks, and DLC coupon height edge cases.
+- **Code**: `src/api/settlement.rs`, `src/api/dlc.rs`
