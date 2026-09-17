@@ -22,7 +22,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **Hole 1.2** | Authenticated Redis & Enclave Isolation | 7 | 4 | **P2** | **Completed (v0.4.18)** |
 | **Hole 2.1** | Hardware Enclave Certificate Chain Verification | 8 | 5 | **P1** | **Completed (v0.4.23)** |
 | **G-43** | Babylon Staking Adapter (CON-1312) | 7 | 5 | **P2** | **Completed** |
-| **CON-1302** | FROST Threshold Signatures | 8 | 6 | **P1** | **Active REST Endpoint (v0.4.23)** |
+| **CON-1302** | FROST Threshold Signatures (BIP-340 Schnorr Cryptographic Verifier) | 8 | 6 | **P1** | **Production Cryptographic Verifier (v0.4.23)** |
 | **CON-70** | ZKML Verifier Circuit-Key Contract Verification | 8 | 6 | **P1** | **Completed (v0.4.23)** |
 | **CON-44** | BNS & Identity Resolution Service & Unit Test Coverage | 8 | 3 | **P1** | **Completed (v0.4.23)** |
 | **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **Completed (v0.4.23)** |
@@ -71,7 +71,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.8 FROST Threshold Signatures (CON-1302)
 - **Gap**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration requiring cooperative subset coordination and threshold bounds enforcement.
-- **Status**: **Active REST Endpoint (v0.4.23)**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs` and active REST verification endpoint `/v1/verify/frost` in `src/api/rest.rs` (`src/verification/frost.rs`) for threshold Schnorr signature share and commitment verification.
+- **Status**: **Production Cryptographic Verifier (v0.4.23)**. Multi-sig vault abstraction indistinguishable on-chain. Integrates with ROAST orchestrator in `src/orchestrator/roast.rs` and active REST verification endpoint `/v1/verify/frost` in `src/api/rest.rs`. Refactored `src/verification/frost.rs` to execute cryptographic BIP-340 Schnorr signature verification using `k256::schnorr::VerifyingKey` over secp256k1.
 - **Code**: `src/orchestrator/roast.rs`
 
 ### 2.9 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
