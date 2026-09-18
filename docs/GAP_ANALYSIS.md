@@ -126,3 +126,9 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Storage layer required distributed transactional lock primitives for multi-node execution safety and fail-closed consume-once idempotency conformance.
 - **Status**: **Completed (v0.4.23)**. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
 - **Code**: `migrations/20260912000000_idempotency_locks.sql`, `src/storage/idempotency.rs`, `tests/idempotency_conformance.rs`
+
+
+### 2.18 CSPRNG OTP Generation Hardening (CON-OTP)
+- **Gap**: OTP generation used `Uuid::new_v4().as_u128() % 1_000_000` modulo arithmetic, which was predictable and lacked cryptographic randomness.
+- **Status**: **Completed (v0.4.23)**. Upgraded `issue_otp()` in `src/api/admin.rs` to use cryptographically secure random generation via `rand::rng().random_range(0..1_000_000)` (`rand` v0.10) and added unit test coverage in `src/api/admin.rs`.
+- **Code**: `src/api/admin.rs`
