@@ -13,8 +13,8 @@ This document maps identified security holes, protocol gaps, and active research
 | **NIP-005 (EVM)** | EVM Merkle Patricia Trie (MPT) Cryptographic Verification | 9 | 6 | **P1** | **Upgraded (v0.4.23)** |
 | **NIP-005 (Cosmos)** | Cosmos IBC Tendermint Header Cryptographic Verification | 9 | 6 | **P1** | **Upgraded (v0.4.23)** |
 | **NIP-005 (Solana)** | Solana Ed25519 & Transaction Multi-Chain Adapter | 8 | 5 | **P1** | **Upgraded Phase 2 (v0.4.23)** |
-| **NIP-005 (Sui)** | Sui Move Object State Proof & Transaction Verification Adapter | 8 | 5 | **P1** | **Completed (v0.4.23)** |
-| **NIP-005 (Aptos)** | Aptos Jellyfish Merkle Tree State Proof Verification Adapter | 8 | 5 | **P1** | **Completed (v0.4.23)** |
+| **NIP-005 (Sui)** | Sui Move Object State Proof & Transaction Verification Adapter & REST API | 8 | 5 | **P1** | **Active REST Endpoint (v0.4.23)** |
+| **NIP-005 (Aptos)** | Aptos Jellyfish Merkle Tree State Proof Verification Adapter & REST API | 8 | 5 | **P1** | **Active REST Endpoint (v0.4.23)** |
 | **CON-1200** | Stacks Clarity 4 & sBTC Protocol Adapter Upgrade | 8 | 5 | **P1** | **Upgraded Phase 2 (v0.4.23)** |
 | **CON-1304** | Fedimint Blinded Mint e-Cash Proof Verification & Double-Spend Check | 8 | 5 | **P1** | **Completed Phase 2 (v0.4.23)** |
 | **G-09** | BIP-322 Universal Message Signing (CON-1266) | 7 | 4 | **P1** | **Completed** |
@@ -52,8 +52,8 @@ This document maps identified security holes, protocol gaps, and active research
   - **Cosmos (v0.4.23)**: Base64 header payload decoding, SHA-256 digest validation, and height progression checks (`src/executor/cosmos.rs`).
   - **Solana (v0.4.23 Upgrade)**: Ed25519 signature checks, fee payer base58 public key validation, slot progression, and transaction digest commitment (`src/executor/solana.rs`).
   - **Stacks / sBTC (v0.4.23 Upgrade)**: Stacks address prefix (`SP`/`ST`) validation, 0x-hex tx_id verification, sBTC amount bounds enforcement, duplicate transaction detection, and SQLx PostgreSQL persistence (`src/executor/stacks.rs`).
-  - **Sui (v0.4.23 Production Adapter)**: BCS transaction certificate validation, checkpoint sequence bounds, Move object digest hashing, and quorum signature validation (`src/executor/sui.rs`).
-  - **Aptos (v0.4.23 Production Adapter)**: Ledger version checks, JMT accumulator root validation, SHA-3-256 proof node hash commitments, and AptosBFT signature verification (`src/executor/aptos.rs`).
+  - **Sui (v0.4.23 Active REST Endpoint)**: BCS transaction certificate validation, checkpoint sequence bounds, Move object digest hashing, quorum signature validation (`src/executor/sui.rs`), and `/v1/verify/sui` HTTP REST endpoint (`src/api/rest.rs`).
+  - **Aptos (v0.4.23 Active REST Endpoint)**: Ledger version checks, JMT accumulator root validation, SHA-3-256 proof node hash commitments, AptosBFT signature verification (`src/executor/aptos.rs`), and `/v1/verify/aptos` HTTP REST endpoint (`src/api/rest.rs`).
 - **Code**: `src/executor/evm.rs`, `src/executor/cosmos.rs`, `src/executor/solana.rs`, `src/executor/stacks.rs`, `src/executor/sui.rs`, `src/executor/aptos.rs`, `src/executor/bitvm_groth16.rs`
 
 ### 2.4 SRL-1 Recovery (Hole 3.1)

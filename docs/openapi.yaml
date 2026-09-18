@@ -892,8 +892,123 @@ paths:
                 $ref: "#/components/schemas/FrostVerificationResponse"
         "400":
           description: Threshold not met or invalid Schnorr signature payload
+  /v1/verify/sui:
+    post:
+      summary: Verify Sui Move Object State Proof & BCS Transaction Certificate
+      operationId: verifySui
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuiVerificationPayload"
+      responses:
+        "200":
+          description: Sui Move object transaction state proof verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuiVerificationResponse"
+        "400":
+          description: Invalid sender, gas budget, or transaction certificate parameters
+  /v1/verify/aptos:
+    post:
+      summary: Verify Aptos JMT Sparse Merkle State Proof & Ledger Info
+      operationId: verifyAptos
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptosVerificationPayload"
+      responses:
+        "200":
+          description: Aptos JMT state proof verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptosVerificationResponse"
+        "400":
+          description: Invalid transaction hash, state root, or empty proof nodes list
 components:
   schemas:
+    SuiVerificationPayload:
+      type: object
+      required: [transaction_digest, checkpoint_sequence_number, sender, mutated_object_ids, validator_signatures, gas_budget]
+      properties:
+        transaction_digest:
+          type: string
+        checkpoint_sequence_number:
+          type: integer
+        sender:
+          type: string
+        mutated_object_ids:
+          type: array
+          items:
+            type: string
+        validator_signatures:
+          type: array
+          items:
+            type: string
+        gas_budget:
+          type: integer
+    SuiVerificationResponse:
+      type: object
+      required: [verified, transaction_digest, checkpoint_sequence_number, mutated_objects_count, commitment_hash]
+      properties:
+        verified:
+          type: boolean
+        transaction_digest:
+          type: string
+        checkpoint_sequence_number:
+          type: integer
+        mutated_objects_count:
+          type: integer
+        commitment_hash:
+          type: string
+        error:
+          type: string
+    AptosVerificationPayload:
+      type: object
+      required: [ledger_version, transaction_hash, state_root_hash, sender, sequence_number, proof_nodes, signature_hex]
+      properties:
+        ledger_version:
+          type: integer
+        transaction_hash:
+          type: string
+        state_root_hash:
+          type: string
+        sender:
+          type: string
+        sequence_number:
+          type: integer
+        proof_nodes:
+          type: array
+          items:
+            type: string
+        signature_hex:
+          type: string
+    AptosVerificationResponse:
+      type: object
+      required: [verified, ledger_version, transaction_hash, proof_nodes_count, commitment_hash]
+      properties:
+        verified:
+          type: boolean
+        ledger_version:
+          type: integer
+        transaction_hash:
+          type: string
+        proof_nodes_count:
+          type: integer
+        commitment_hash:
+          type: string
+        error:
+          type: string
+
     ApiError:
       type: object
       additionalProperties: false

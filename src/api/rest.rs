@@ -879,6 +879,58 @@ pub fn verify_routes() -> Router<AppState> {
         .route("/zkcp", post(verify_zkcp))
         .route("/op-cat", post(verify_op_cat))
         .route("/frost", post(verify_frost))
+        .route("/sui", post(verify_sui))
+        .route("/aptos", post(verify_aptos))
+}
+
+async fn verify_sui(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::executor::sui::SuiVerificationPayload>,
+) -> impl IntoResponse {
+    match state
+        .executor
+        .sui_adapter
+        .verify_transaction(&payload)
+        .await
+    {
+        Ok(res) => {
+            if res.verified {
+                (StatusCode::OK, Json(res)).into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, Json(res)).into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string(), "verified": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_aptos(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::executor::aptos::AptosVerificationPayload>,
+) -> impl IntoResponse {
+    match state
+        .executor
+        .aptos_adapter
+        .verify_transaction(&payload)
+        .await
+    {
+        Ok(res) => {
+            if res.verified {
+                (StatusCode::OK, Json(res)).into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, Json(res)).into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string(), "verified": false })),
+        )
+            .into_response(),
+    }
 }
 
 async fn verify_frost(
@@ -1019,6 +1071,61 @@ mod verify_endpoint_tests {
         let req = Request::builder()
             .method("POST")
             .uri("/v1/verify/frost")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_sui_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::executor::sui::SuiVerificationPayload {
+            transaction_digest: "G3qZp...".to_string(),
+            checkpoint_sequence_number: 45001920,
+            sender: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
+            mutated_object_ids: vec!["0xabc123...".to_string()],
+            validator_signatures: vec!["sig_val_1...".to_string()],
+            gas_budget: 10000000,
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/sui")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_aptos_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::executor::aptos::AptosVerificationPayload {
+            ledger_version: 120491000,
+            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                .to_string(),
+            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                .to_string(),
+            sender: "0x0000000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
+            sequence_number: 42,
+            proof_nodes: vec!["0xnode1...".to_string()],
+            signature_hex: "0xsig...".to_string(),
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/aptos")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(
                 serde_json::to_vec(&payload).unwrap(),
