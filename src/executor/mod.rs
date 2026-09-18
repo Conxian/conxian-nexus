@@ -212,7 +212,9 @@ impl NexusExecutor {
 
                 // If an expected enclave measurement is provided, check structural measurement hash format
                 if let Some(expected_measurement) = &request.expected_enclave_measurement {
-                    if expected_measurement.len() != 64 || hex::decode(expected_measurement).is_err() {
+                    if expected_measurement.len() != 64
+                        || hex::decode(expected_measurement).is_err()
+                    {
                         return Err(EnclaveVerificationError::MeasurementMismatch);
                     }
                 }
