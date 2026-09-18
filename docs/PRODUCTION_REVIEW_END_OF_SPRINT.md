@@ -36,7 +36,7 @@
 ### 2. SECURITY - OTP Implementation Vulnerable
 | File | Line | Issue |
 |------|------|-------|
-| `src/api/admin.rs` | 203-215 | UUID used for OTP generation (not cryptographically random) |
+| `src/api/admin.rs` | 203-215 | **RESOLVED (v0.4.23)** Upgraded to `rand::rng().random_range(0..1_000_000)` CSPRNG |
 | `src/api/admin.rs` | 827-828 | OTP plaintext stored in memory unencrypted |
 | `src/api/admin.rs` | 974-975 | OTP plaintext returned in HTTP response |
 

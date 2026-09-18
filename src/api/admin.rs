@@ -9,6 +9,7 @@ use axum::{
 };
 use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
 use lib_conxian_core::deployment::{VerificationOutcome, VerificationResult};
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -203,8 +204,8 @@ fn issue_claim_view_token() -> String {
 }
 
 fn issue_otp() -> String {
-    let u = Uuid::new_v4().as_u128();
-    format!("{:06}", u % 1_000_000)
+    let n = rand::rng().random_range(0..1_000_000);
+    format!("{:06}", n)
 }
 
 fn service_base(headers: &HeaderMap) -> String {
@@ -1019,6 +1020,17 @@ async fn view_claim_otp(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn test_issue_otp_format_and_randomness() {
+        let otp1 = issue_otp();
+        let otp2 = issue_otp();
+        assert_eq!(otp1.len(), 6);
+        assert_eq!(otp2.len(), 6);
+        assert!(otp1.chars().all(|c| c.is_ascii_digit()));
+        assert!(otp2.chars().all(|c| c.is_ascii_digit()));
+    }
+
     use super::*;
 
     #[test]
