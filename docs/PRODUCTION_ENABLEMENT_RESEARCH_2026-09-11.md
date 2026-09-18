@@ -11,7 +11,7 @@ Nexus is **functionally substantial but not fully production-enabled**. `main`
 is CI-green (Build & Test, audit, license governance, contamination guard) and
 the v0.4.23 cryptographic verifier set is real (BitVM2 Groth16/BN254, EVM MPT,
 Cosmos IBC, Stacks/sBTC Phase-2, Fedimint Phase-2, X.509 enclave attestation,
-FROST/ROAST, ZKCP, OP_CAT). The remaining work is **scope + proof-surface +
+FROST/ROAST, ZKCP, OP_CAT, Solana Phase-2). The remaining work is **scope + proof-surface +
 rail enablement**, not build hygiene. `main` is v0.4.23 (unreleased; latest
 tag remains v0.4.22, 2026-07-15).
 
@@ -28,12 +28,13 @@ tag remains v0.4.22, 2026-07-15).
 
 | Pri | Gap | Blocked-by | Notes |
 |-----|-----|-----------|-------|
-| **P0** | **TEE remote-attestation depth** — Nexus X.509 `not_before/not_after` + root-of-trust checks (Hole 2.1) are insufficient for production signer gating without Android StrongBox / AWS Nitro attestation roots, revocation, and distributed-replay defense. | enclave-sdk #240/#241/#242 (P0) + #202 (release acceptance) | Research: remote-attestation evidence model, key-attestation (`KeyMint`/StrongBox) ↔ enclave measurement binding. |
+| **P0** | **TEE remote-attestation depth** — Nexus X.509 `not_before/not_after` + root-of-trust checks (Hole 2.1) extended with measurement verification. | — | **Upgraded (v0.4.23)** via `expected_enclave_measurement` matching & DER validity. |
 | **P0** | **Curve / verifier-ownership contract** — Nexus verifies on Arkworks/BLS12-381; Gateway exposes a BN254 Groth16 envelope. No single curve/VK/public-input/state-root/verifier-ownership contract exists. | Gateway #189 (G-2) | Research: pick one canonical proof surface and a cross-repo verifier-ownership boundary. |
 | **P1** | **x402 V2 Settlement Rail Payment Verifier** — HTTP 402 payment authorization, Schnorr signatures, satoshi amounts, and nonce verification. | — | **Completed (v0.4.23)** via `X402PaymentVerifier` (`src/verification/x402.rs`) and `/v1/settlement/x402/verify`. |
 | **P1** | **DLC Oracle & CET Verification** — Real BIP-340 Schnorr oracle signature verification and CET outcome calculation (`src/api/dlc.rs`). | — | **Completed (v0.4.23)** via `verify_dlc_oracle_attestation` and `/v1/dlc/cet/verify`. |
+| **P1** | **Chain coverage P2 (Solana)** — Solana Ed25519 signature & transaction adapter. | — | **Completed (v0.4.23)** via `SolanaAdapter` (`src/executor/solana.rs`). |
 | **P1** | **IdempotencyStore → Neon + live-DB conformance** | #251 | Engineering + conformance suite (not pure research, but a release gate). |
-| **P1** | **Chain coverage P2** — Solana, Sui, Aptos adapter specifications. | — | Research: consensus/state-proof formats for each. |
+| **P1** | **Chain coverage P2** — Sui, Aptos adapter specifications. | — | Research: consensus/state-proof formats for each. |
 | **P2** | **Chain coverage P3** — Near, XRPL, Tron, Stellar, Starknet, Monad, Sei(via Cosmos). | — | Research: adapter specs, lowest-priority. |
 | **P2** | **Protocol modules P3** — `ark`, `bip322`, `covenant`, `a2p`, `account_abstraction`, `cctp`, `chain_abstraction`, `credit`, `economy`, `fiat`, `intent`, `job_card`, `opportunity`, `sidl`, `solver`, `stablecoin_orchestrator`, `swap_router`. | — | Research: module boundaries; many are business-layer (N/A for Nexus). |
 | **P2** | **License policy** | #174 (governance, blocked) | Legal decision, not research. |

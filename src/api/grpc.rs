@@ -438,6 +438,7 @@ impl NexusService for NexusGrpcService {
             priority: 0,
             timestamp,
             attestation_certificate: None,
+            expected_enclave_measurement: None,
         };
 
         match self.executor.validate_transaction(&exec_req).await {
