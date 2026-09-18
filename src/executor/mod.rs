@@ -5,6 +5,7 @@ pub mod evm;
 pub mod fedimint;
 pub mod lightning;
 pub mod rgb;
+pub mod solana;
 pub mod stacks;
 
 use crate::storage::Storage;
@@ -72,6 +73,9 @@ pub struct ExecutionRequest {
     /// When present, the executor verifies it before processing the request.
     #[serde(default)]
     pub attestation_certificate: Option<Vec<u8>>,
+    /// Optional expected enclave measurement hash (SHA-256 hex) for remote attestation validation.
+    #[serde(default)]
+    pub expected_enclave_measurement: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -92,6 +96,7 @@ pub struct NexusExecutor {
     pub evm_adapter: evm::EVMAdapter,
     pub cosmos_adapter: cosmos::CosmosAdapter,
     pub stacks_adapter: stacks::StacksAdapter,
+    pub solana_adapter: solana::SolanaAdapter,
     /// When true, execution requests without attestation certificates are rejected.
     /// Defaults to false (soft enforcement) and should be true in production.
     pub require_attestation: bool,
@@ -109,6 +114,7 @@ impl NexusExecutor {
         let cosmos_adapter = cosmos::CosmosAdapter::new(storage.clone());
         let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
         let fedimint_adapter = fedimint::FedimintAdapter::new(storage.clone());
+        let solana_adapter = solana::SolanaAdapter::new(storage.clone());
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
@@ -119,6 +125,7 @@ impl NexusExecutor {
             cosmos_adapter,
             stacks_adapter,
             fedimint_adapter,
+            solana_adapter,
             require_attestation: false,
         }
     }
@@ -202,6 +209,13 @@ impl NexusExecutor {
                 // TEE root or that it matches the expected enclave measurement.
                 let _parsed_cert = X509Certificate::from_der(raw_der)
                     .map_err(|_| EnclaveVerificationError::InvalidCertificate)?;
+
+                // If an expected enclave measurement is provided, check structural measurement hash format
+                if let Some(expected_measurement) = &request.expected_enclave_measurement {
+                    if expected_measurement.len() != 64 || hex::decode(expected_measurement).is_err() {
+                        return Err(EnclaveVerificationError::MeasurementMismatch);
+                    }
+                }
 
                 // Fail closed: no trusted attestation backend (root-of-trust +
                 // measurement comparison) is configured yet. A date-valid X.509
@@ -319,6 +333,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 1,
             attestation_certificate: None,
+            expected_enclave_measurement: None,
         };
         let serialized = serde_json::to_string(&req).unwrap();
         let deserialized: ExecutionRequest = serde_json::from_str(&serialized).unwrap();
@@ -351,6 +366,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: None,
+            expected_enclave_measurement: None,
         };
 
         assert!(executor.verify_attestation(&req).is_ok());
@@ -367,6 +383,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: None,
+            expected_enclave_measurement: None,
         };
 
         assert_eq!(
@@ -386,6 +403,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: Some(vec![1, 2, 3, 4, 5]),
+            expected_enclave_measurement: None,
         };
 
         assert_eq!(
@@ -409,6 +427,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+            expected_enclave_measurement: None,
         };
 
         match executor.verify_attestation(&req) {
@@ -431,6 +450,7 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+            expected_enclave_measurement: None,
         };
 
         let err = executor.submit(req).await.unwrap_err();
