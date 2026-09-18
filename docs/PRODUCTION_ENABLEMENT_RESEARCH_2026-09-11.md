@@ -34,7 +34,7 @@ tag remains v0.4.22, 2026-07-15).
 | **P1** | **DLC Oracle & CET Verification** — Real BIP-340 Schnorr oracle signature verification and CET outcome calculation (`src/api/dlc.rs`). | — | **Completed (v0.4.23)** via `verify_dlc_oracle_attestation` and `/v1/dlc/cet/verify`. |
 | **P1** | **Chain coverage P2 (Solana)** — Solana Ed25519 signature & transaction adapter. | — | **Completed (v0.4.23)** via `SolanaAdapter` (`src/executor/solana.rs`). |
 | **P1** | **IdempotencyStore → Neon + live-DB conformance** | #251 | Engineering + conformance suite (not pure research, but a release gate). |
-| **P1** | **Chain coverage P2** — Sui, Aptos adapter specifications. | — | Research: consensus/state-proof formats for each. |
+| **P1** | **Chain coverage P2 (Sui & Aptos Move Verification)** — Sui & Aptos Move object / JMT proof verification REST endpoints. | — | **Completed (v0.4.23)** via `SuiAdapter` (`src/executor/sui.rs`), `AptosAdapter` (`src/executor/aptos.rs`), `/v1/verify/sui`, and `/v1/verify/aptos`. |
 | **P2** | **Chain coverage P3** — Near, XRPL, Tron, Stellar, Starknet, Monad, Sei(via Cosmos). | — | Research: adapter specs, lowest-priority. |
 | **P2** | **Protocol modules P3** — `ark`, `bip322`, `covenant`, `a2p`, `account_abstraction`, `cctp`, `chain_abstraction`, `credit`, `economy`, `fiat`, `intent`, `job_card`, `opportunity`, `sidl`, `solver`, `stablecoin_orchestrator`, `swap_router`. | — | Research: module boundaries; many are business-layer (N/A for Nexus). |
 | **P2** | **License policy** | #174 (governance, blocked) | Legal decision, not research. |
