@@ -57,3 +57,27 @@ tag remains v0.4.22, 2026-07-15).
 - Nexus observes and proves; it does **not** execute (Gateway's domain).
 - No DeFi protocol rebuilding; use existing rails (x402, Wormhole, NTT).
 - `conxian_ui` is the only deprecated surface; keep protocol-neutral adaptors.
+
+## 5. Move-Based Multi-Chain Adapter Specifications (Sui & Aptos - P1 Enablement)
+
+### 5.1 Sui Multi-Chain Verification Adapter Specification
+- **Consensus & State Proof Model**: Sui uses Narwhal/Bullshark DAG consensus with Move Object structural state proofs.
+- **Verification Pipeline**:
+  1. **Transaction & Effects Certificate**: Validate BCS-encoded transaction effects certificate containing execution status, gas summary, and mutated Move object digests.
+  2. **Authority Quorum Signature**: Verify BLS12-381 threshold signatures from >= 2/3 + 1 weighted Sui validator set epoch state.
+  3. **Object State Root Verification**: Verify Move Object ID and version digest commitment against checkpoint state root hash.
+
+### 5.2 Aptos Multi-Chain Verification Adapter Specification
+- **Consensus & State Proof Model**: Aptos uses AptosBFT (HotStuff variant) with Jellyfish Merkle Tree (JMT) sparse Merkle state proofs.
+- **Verification Pipeline**:
+  1. **LedgerInfo With Signatures**: Validate BCS-encoded `LedgerInfo` containing epoch, block height, transaction accumulator root, and aggregated BLS12-381 validator signatures.
+  2. **Jellyfish Merkle Proof**: Verify account resource / Move module state commitment against `LedgerInfo` transaction accumulator root using SHA-3-256 JMT proof nodes.
+
+## 6. BitVM3 Garbled-Circuit Fraud Proof Evolution Roadmap
+- **Challenge Cost Reduction**: Evolve from BN254 Groth16 (BitVM2) toward BitVM3 garbled circuits to reduce on-chain fraud proof challenge size from ~100KB to ~200 bytes.
+- **Adapter Modular Boundary**: Retain BN254 Groth16 as fail-closed legacy verification layer while abstracting `BitvmAdapter` to support garbled-circuit gate commitment inspection and fast-dispute assertion paths.
+
+## 7. IdempotencyStore Neon PostgreSQL Conformance Specification (#251)
+- **Target Schema**: SQLx table `idempotency_locks` (`key VARCHAR PRIMARY KEY`, `owner VARCHAR`, `created_at TIMESTAMPTZ`, `expires_at TIMESTAMPTZ`, `payload JSONB`).
+- **Atomic Operations**: `INSERT INTO idempotency_locks ... ON CONFLICT (key) DO UPDATE` with TTL expiration evaluation and row-level locking (`FOR UPDATE`).
+- **Live Conformance Gate**: Add integration test suite running against Neon PostgreSQL (`neondb`) testing concurrent lock contention, stale lock recovery, and multi-node idempotency guarantees.

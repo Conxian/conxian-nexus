@@ -157,3 +157,15 @@ This document establishes the official research map, cryptographic specification
   1. **x402 V2 Authorization Envelope**: Parses `X402PaymentPayload` containing protocol ID `x402-v2-settlement-verifier`, payment scheme (`x402`, `lightning_bolt11`, `exact_sats`, `eip712`, `schnorr_taproot`), network, satoshi amount, payer/payee identities, replay protection nonce (min length 16), epoch timestamps, public key, and signature.
   2. **Cryptographic BIP-340 Schnorr Signature Verification**: Computes SHA-256 digest over canonical payload string `x402:v2:{scheme}:{network}:{amount_sats}:{payer}:{payee}:{nonce}:{timestamp}` and verifies 64-byte Schnorr signature against 32-byte XOnly or 33-byte SEC1 public key using `k256::schnorr::VerifyingKey`.
   3. **REST API Endpoint**: Exposes `/v1/settlement/x402/verify` returning `X402VerificationResponse` with issued authorization token `x402:v2:<nonce>:<digest>`.
+
+## 12. Move-Based Multi-Chain Adapters (Sui & Aptos - P1 Research)
+
+### 12.1 Sui Verification Adapter Architecture
+- **Verification Target**: BCS-encoded transaction certificates and Move Object digests.
+- **Cryptographic Primitives**: BLS12-381 aggregate validator signatures over Sui epoch state.
+- **Audit Persistence**: `sui_verified_transactions` SQLx table storing checkpoint sequence numbers, transaction digests, and mutated object hashes.
+
+### 12.2 Aptos Verification Adapter Architecture
+- **Verification Target**: Jellyfish Merkle Tree (JMT) proof nodes against `LedgerInfo` accumulator roots.
+- **Cryptographic Primitives**: SHA-3-256 state hashing and AptosBFT BLS12-381 multi-signatures.
+- **Audit Persistence**: `aptos_verified_transactions` SQLx table storing ledger version, state root hash, and resource change digests.

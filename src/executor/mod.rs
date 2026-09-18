@@ -1,3 +1,4 @@
+pub mod aptos;
 pub mod bitvm_groth16;
 pub mod canonical_bitvm;
 pub mod cosmos;
@@ -7,6 +8,7 @@ pub mod lightning;
 pub mod rgb;
 pub mod solana;
 pub mod stacks;
+pub mod sui;
 
 use crate::storage::Storage;
 use chrono::{DateTime, Utc};
@@ -97,6 +99,8 @@ pub struct NexusExecutor {
     pub cosmos_adapter: cosmos::CosmosAdapter,
     pub stacks_adapter: stacks::StacksAdapter,
     pub solana_adapter: solana::SolanaAdapter,
+    pub sui_adapter: sui::SuiAdapter,
+    pub aptos_adapter: aptos::AptosAdapter,
     /// When true, execution requests without attestation certificates are rejected.
     /// Defaults to false (soft enforcement) and should be true in production.
     pub require_attestation: bool,
@@ -115,6 +119,8 @@ impl NexusExecutor {
         let stacks_adapter = stacks::StacksAdapter::new(storage.clone());
         let fedimint_adapter = fedimint::FedimintAdapter::new(storage.clone());
         let solana_adapter = solana::SolanaAdapter::new(storage.clone());
+        let sui_adapter = sui::SuiAdapter::new(storage.clone());
+        let aptos_adapter = aptos::AptosAdapter::new(storage.clone());
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
@@ -126,6 +132,8 @@ impl NexusExecutor {
             stacks_adapter,
             fedimint_adapter,
             solana_adapter,
+            sui_adapter,
+            aptos_adapter,
             require_attestation: false,
         }
     }
