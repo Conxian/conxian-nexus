@@ -881,6 +881,7 @@ pub fn verify_routes() -> Router<AppState> {
         .route("/frost", post(verify_frost))
         .route("/sui", post(verify_sui))
         .route("/aptos", post(verify_aptos))
+        .route("/bitvm3", post(verify_bitvm3))
 }
 
 async fn verify_sui(
@@ -903,6 +904,24 @@ async fn verify_sui(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": e.to_string(), "verified": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_bitvm3(
+    Json(payload): Json<crate::executor::bitvm3::Bitvm3VerificationPayload>,
+) -> impl IntoResponse {
+    match crate::executor::bitvm3::Bitvm3Verifier::verify_fraud_proof(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(err) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": {
+                    "code": "bitvm3_verification_rejected",
+                    "message": err.to_string(),
+                }
+            })),
         )
             .into_response(),
     }
@@ -1126,6 +1145,69 @@ mod verify_endpoint_tests {
         let req = Request::builder()
             .method("POST")
             .uri("/v1/verify/aptos")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_bitvm3_endpoint_success() {
+        use tower::ServiceExt;
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let gate_id: u32 = 1;
+        let nonce = hex::encode([1u8; 32]);
+        let l0 = hex::encode([2u8; 32]);
+        let l1 = hex::encode([3u8; 32]);
+        let claimed_out = hex::encode([4u8; 32]);
+
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(gate_id.to_be_bytes());
+        hasher.update(hex::decode(&nonce).unwrap());
+        hasher.update(hex::decode(&l0).unwrap());
+        hasher.update(hex::decode(&l1).unwrap());
+        hasher.update(hex::decode(&claimed_out).unwrap());
+        let entry_hash = hex::encode(hasher.finalize());
+
+        let payload = crate::executor::bitvm3::Bitvm3VerificationPayload {
+            circuit_id: "test-bitvm3-circuit".to_string(),
+            challenge_nonce: nonce,
+            gate_commitments: vec![crate::executor::bitvm3::GateCommitment {
+                gate_id,
+                gate_type: crate::executor::bitvm3::Bitvm3GateType::And,
+                garbled_table_hashes: vec![entry_hash],
+            }],
+            dispute: crate::executor::bitvm3::DisputeAssertion {
+                disputed_gate_id: gate_id,
+                input_labels: vec![
+                    crate::executor::bitvm3::WireLabel {
+                        wire_id: 1,
+                        label: l0,
+                        value: true,
+                    },
+                    crate::executor::bitvm3::WireLabel {
+                        wire_id: 2,
+                        label: l1,
+                        value: true,
+                    },
+                ],
+                claimed_output_label: crate::executor::bitvm3::WireLabel {
+                    wire_id: 3,
+                    label: claimed_out,
+                    value: false, // AND(true, true) is true => false is Fraud!
+                },
+                expected_output_digest: hex::encode([9u8; 32]),
+            },
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/bitvm3")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(
                 serde_json::to_vec(&payload).unwrap(),

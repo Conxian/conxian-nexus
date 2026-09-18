@@ -87,5 +87,5 @@ tag remains v0.4.22, 2026-07-15).
 | Candidate | Description | Impact (1-10) | Feasibility (1-10) | Security (1-10) | Readiness (1-10) | Total Score | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **Candidate A (#251)** | **Idempotency Locks & Neon PostgreSQL Conformance** (`idempotency_locks` SQL table, `acquire_lock`, `release_lock`, `extend_lock`, `get_lock` APIs, unit & integration conformance suite) | 9 | 10 | 9 | 10 | **38/40** | **Completed (v0.4.23)** |
-| **Candidate B** | **BitVM3 Garbled-Circuit Fraud Proof Interface Evolution** (Modular abstraction for garbled-circuit gate commitment inspection) | 8 | 7 | 8 | 7 | **30/40** | Research Mapped |
+| **Candidate B (BitVM3)** | **BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion** (Garbled table gate commitments, wire label verification, dispute assertion evaluation, REST API `/v1/verify/bitvm3`) | 9 | 8 | 9 | 9 | **35/40** | **Completed (v0.4.23)** |
 | **Candidate C** | **Cross-Repo Proof Surface & Verifier Ownership Contract Alignment** (Standardized cross-repo proof envelope schema between Nexus and Gateway) | 8 | 6 | 8 | 6 | **28/40** | Research Mapped |

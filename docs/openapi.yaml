@@ -934,6 +934,27 @@ paths:
                 $ref: "#/components/schemas/AptosVerificationResponse"
         "400":
           description: Invalid transaction hash, state root, or empty proof nodes list
+  /v1/verify/bitvm3:
+    post:
+      summary: Verify BitVM3 Garbled-Circuit Fraud Proof Dispute Assertion
+      operationId: verifyBitvm3
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Bitvm3VerificationPayload"
+      responses:
+        "200":
+          description: BitVM3 garbled-circuit fraud proof dispute result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bitvm3VerificationResponse"
+        "422":
+          description: Invalid or unprocessable fraud proof assertion
 components:
   schemas:
     SuiVerificationPayload:
@@ -1325,4 +1346,33 @@ components:
         participant_count:
           type: integer
         message_hash:
+          type: string
+
+    Bitvm3VerificationPayload:
+      type: object
+      required: [circuit_id, challenge_nonce, gate_commitments, dispute]
+      properties:
+        circuit_id:
+          type: string
+        challenge_nonce:
+          type: string
+        gate_commitments:
+          type: array
+          items:
+            type: object
+        dispute:
+          type: object
+    Bitvm3VerificationResponse:
+      type: object
+      required: [is_valid_fraud_proof, circuit_id, disputed_gate_id, proof_digest, message]
+      properties:
+        is_valid_fraud_proof:
+          type: boolean
+        circuit_id:
+          type: string
+        disputed_gate_id:
+          type: integer
+        proof_digest:
+          type: string
+        message:
           type: string

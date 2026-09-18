@@ -1,4 +1,5 @@
 pub mod aptos;
+pub mod bitvm3;
 pub mod bitvm_groth16;
 pub mod canonical_bitvm;
 pub mod cosmos;

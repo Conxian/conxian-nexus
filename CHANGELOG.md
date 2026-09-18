@@ -3,6 +3,7 @@
 ## [0.4.23] - 2026-08-18
 
 ### Added
+- Added BitVM3 Garbled-Circuit Fraud Proof Verifier (`src/executor/bitvm3.rs`) and `/v1/verify/bitvm3` REST API endpoint for ~200B fast-dispute assertions.
 - **CON-804 x402 V2 Settlement Rail Payment Verifier**: Implemented `X402PaymentVerifier` in `src/verification/x402.rs` and exposed `/v1/settlement/x402/verify` REST endpoint for HTTP 402 payment authorization proofs, Schnorr payment signatures, satoshi amounts, expiration bounds, and replay protection nonces.
 - **CON-803 DLC Oracle Attestation Verification & CET Outcome Endpoint**: Upgraded `src/api/dlc.rs` to include cryptographic BIP-340 Schnorr signature verification for DLC Oracles and added `/v1/dlc/cet/verify` REST endpoint for CET outcome verification and payout calculation.
 - **CON-44 & NEXUS-ANALYTICS Unit Test Coverage Expansion**: Added unit test suites to `src/api/identity.rs` and `src/api/analytics.rs` testing BNS/ENS name lookup handlers, WorldID missing configuration fallbacks, unsupported protocol parameter validation, non-STX asset parameter rejection, and invalid analytics metric filtering.
