@@ -180,3 +180,14 @@ This document establishes the official research map, cryptographic specification
   - `release_lock`: Deletes lock record matching `key` and `owner`.
   - `get_lock`: Retrieves current lock state and payload metadata.
 - **Status**: **Completed (v0.4.23)** in `src/storage/idempotency.rs` and `migrations/20260912000000_idempotency_locks.sql`.
+
+
+## 13. BitVM3 Garbled-Circuit Fraud Proof Verifier (Candidate B)
+- **Primary Domain**: BitVM3 Garbled Circuit Fraud Dispute Verification (`src/executor/bitvm3.rs`) and `/v1/verify/bitvm3` REST API endpoint (`src/api/rest.rs`).
+- **Impact Score**: 9/10
+- **Effort Score**: 6/10
+- **Candidate Status**: **Completed & Initialized in Production Code (v0.4.23)**.
+- **Specification & Architecture**:
+  1. **Garbled Circuit Commitments**: Inspects `GateCommitment` entries (`And`, `Xor`, `Nand` gate types) and verifies garbled table hashes using SHA-256 over `gate_id || challenge_nonce || label0 || label1 || claimed_output_label`.
+  2. **Equivocation & Dispute Assertion**: Evaluates expected gate output logic against input wire labels and verifies if the prover's claimed output label or value equivocates. If fraud is detected, issues a signed `Bitvm3VerificationResponse` proving fraud on-chain with a ~200B dispute assertion.
+  3. **REST API Endpoint**: Exposes `/v1/verify/bitvm3` accepting `Bitvm3VerificationPayload` and returning `Bitvm3VerificationResponse`.

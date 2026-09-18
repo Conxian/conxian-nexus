@@ -32,6 +32,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-803** | x402 Settlement Routing Policy & DLC Bond Verification Unit Tests | 8 | 3 | **P1** | **Completed (v0.4.23)** |
 | **CON-804** | x402 V2 Settlement Rail Verifier (AWS Bedrock AgentCore Payments) | 9 | 4 | **P1** | **Completed (v0.4.23)** |
 | **#251** | IdempotencyStore Neon Transactional Locks & Conformance | 9 | 3 | **P1** | **Completed (v0.4.23)** |
+| **BitVM3** | BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion | 9 | 6 | **P0** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -132,3 +133,9 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: OTP generation used `Uuid::new_v4().as_u128() % 1_000_000` modulo arithmetic, which was predictable and lacked cryptographic randomness.
 - **Status**: **Completed (v0.4.23)**. Upgraded `issue_otp()` in `src/api/admin.rs` to use cryptographically secure random generation via `rand::rng().random_range(0..1_000_000)` (`rand` v0.10) and added unit test coverage in `src/api/admin.rs`.
 - **Code**: `src/api/admin.rs`
+
+
+### 2.19 BitVM3 Garbled-Circuit Fraud Proof Verifier
+- **Gap**: Transitioning from 100KB Groth16 proofs to 200B garbled-circuit fraud dispute assertions on Bitcoin L1.
+- **Status**: **Completed (v0.4.23)**. Implemented `Bitvm3Verifier` in `src/executor/bitvm3.rs` providing gate commitment verification, wire label evaluation, garbled table hash checks, equivocation dispute assertions, and `/v1/verify/bitvm3` REST API endpoint.
+- **Code**: `src/executor/bitvm3.rs`, `src/api/canonical_bitvm.rs`

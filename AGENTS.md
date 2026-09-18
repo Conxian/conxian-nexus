@@ -23,7 +23,7 @@ Bitcoin/EVM/Cosmos —→ sync module —→ MMR state roots —→ REST/gRPC AP
 |--------|---------|--------|
 | `nexus-sync` | Multi-chain ingestion, reorg handling (BTC/EVM/Cosmos) | Active |
 | `nexus-state` | MMR state root commitments, persistence, Redis + PostgreSQL | Active |
-| `nexus-executor` | Protocol adapters: BitVM2, RGB, Stacks, Lightning, Fedimint, EVM, Cosmos | Active |
+| `nexus-executor` | Protocol adapters: BitVM2, BitVM3, RGB, Stacks, Lightning, Fedimint, EVM, Cosmos | Active |
 | `nexus-safety` | Drift monitoring, SRL-1 Lightning resilience layer | Active |
 | `api` | REST + gRPC surfaces for proofs, event feeds, identity, settlement, ZKML, DLC, ERP | Active |
 | `storage` | Tableland + Kwil adapters for MMR node persistence | Active |
