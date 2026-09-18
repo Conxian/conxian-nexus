@@ -31,6 +31,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **NEXUS-ANALYTICS** | On-Chain Analytics & Data Metrics Unit Test Coverage | 7 | 3 | **P2** | **Completed (v0.4.23)** |
 | **CON-803** | x402 Settlement Routing Policy & DLC Bond Verification Unit Tests | 8 | 3 | **P1** | **Completed (v0.4.23)** |
 | **CON-804** | x402 V2 Settlement Rail Verifier (AWS Bedrock AgentCore Payments) | 9 | 4 | **P1** | **Completed (v0.4.23)** |
+| **#251** | IdempotencyStore Neon Transactional Locks & Conformance | 9 | 3 | **P1** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 
@@ -120,3 +121,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Native HTTP 402 agentic payment verification, Schnorr payment signatures, and satoshi commitment challenge verification were not implemented for glass node settlement rails.
 - **Status**: **Completed (v0.4.23)**. Implemented `X402PaymentVerifier` in `src/verification/x402.rs` supporting x402 V2 authorization payload parsing, cryptographic BIP-340 Schnorr signature verification over SHA-256 canonical payload digests, satoshi bounds validation, challenge expiration checks, replay protection nonces, and `/v1/settlement/x402/verify` REST endpoint.
 - **Code**: `src/verification/x402.rs`, `src/api/settlement.rs`
+
+### 2.17 Idempotency Locks & Neon PostgreSQL Conformance (#251)
+- **Gap**: Storage layer required distributed transactional lock primitives for multi-node execution safety and fail-closed consume-once idempotency conformance.
+- **Status**: **Completed (v0.4.23)**. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
+- **Code**: `migrations/20260912000000_idempotency_locks.sql`, `src/storage/idempotency.rs`, `tests/idempotency_conformance.rs`

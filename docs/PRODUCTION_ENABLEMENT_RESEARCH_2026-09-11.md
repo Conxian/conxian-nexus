@@ -33,7 +33,7 @@ tag remains v0.4.22, 2026-07-15).
 | **P1** | **x402 V2 Settlement Rail Payment Verifier** — HTTP 402 payment authorization, Schnorr signatures, satoshi amounts, and nonce verification. | — | **Completed (v0.4.23)** via `X402PaymentVerifier` (`src/verification/x402.rs`) and `/v1/settlement/x402/verify`. |
 | **P1** | **DLC Oracle & CET Verification** — Real BIP-340 Schnorr oracle signature verification and CET outcome calculation (`src/api/dlc.rs`). | — | **Completed (v0.4.23)** via `verify_dlc_oracle_attestation` and `/v1/dlc/cet/verify`. |
 | **P1** | **Chain coverage P2 (Solana)** — Solana Ed25519 signature & transaction adapter. | — | **Completed (v0.4.23)** via `SolanaAdapter` (`src/executor/solana.rs`). |
-| **P1** | **IdempotencyStore → Neon + live-DB conformance** | #251 | Engineering + conformance suite (not pure research, but a release gate). |
+| **P1** | **IdempotencyStore → Neon + live-DB conformance** | #251 | **Completed (v0.4.23)** via `idempotency_locks` table (`20260912000000_idempotency_locks.sql`), atomic lock API (`acquire_lock`, `release_lock`, `extend_lock`, `get_lock`), and live-DB conformance suite in `tests/idempotency_conformance.rs`. |
 | **P1** | **Chain coverage P2 (Sui & Aptos Move Verification)** — Sui & Aptos Move object / JMT proof verification REST endpoints. | — | **Completed (v0.4.23)** via `SuiAdapter` (`src/executor/sui.rs`), `AptosAdapter` (`src/executor/aptos.rs`), `/v1/verify/sui`, and `/v1/verify/aptos`. |
 | **P2** | **Chain coverage P3** — Near, XRPL, Tron, Stellar, Starknet, Monad, Sei(via Cosmos). | — | Research: adapter specs, lowest-priority. |
 | **P2** | **Protocol modules P3** — `ark`, `bip322`, `covenant`, `a2p`, `account_abstraction`, `cctp`, `chain_abstraction`, `credit`, `economy`, `fiat`, `intent`, `job_card`, `opportunity`, `sidl`, `solver`, `stablecoin_orchestrator`, `swap_router`. | — | Research: module boundaries; many are business-layer (N/A for Nexus). |
@@ -77,7 +77,15 @@ tag remains v0.4.22, 2026-07-15).
 - **Challenge Cost Reduction**: Evolve from BN254 Groth16 (BitVM2) toward BitVM3 garbled circuits to reduce on-chain fraud proof challenge size from ~100KB to ~200 bytes.
 - **Adapter Modular Boundary**: Retain BN254 Groth16 as fail-closed legacy verification layer while abstracting `BitvmAdapter` to support garbled-circuit gate commitment inspection and fast-dispute assertion paths.
 
-## 7. IdempotencyStore Neon PostgreSQL Conformance Specification (#251)
-- **Target Schema**: SQLx table `idempotency_locks` (`key VARCHAR PRIMARY KEY`, `owner VARCHAR`, `created_at TIMESTAMPTZ`, `expires_at TIMESTAMPTZ`, `payload JSONB`).
-- **Atomic Operations**: `INSERT INTO idempotency_locks ... ON CONFLICT (key) DO UPDATE` with TTL expiration evaluation and row-level locking (`FOR UPDATE`).
-- **Live Conformance Gate**: Add integration test suite running against Neon PostgreSQL (`neondb`) testing concurrent lock contention, stale lock recovery, and multi-node idempotency guarantees.
+## 7. IdempotencyStore Neon PostgreSQL Conformance Specification (#251) — COMPLETED (v0.4.23)
+- **Target Schema**: SQLx table `idempotency_locks` (`key VARCHAR(512) PRIMARY KEY`, `owner VARCHAR(256) NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `expires_at TIMESTAMPTZ NOT NULL`, `payload JSONB`).
+- **Atomic Operations**: Implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` in `src/storage/idempotency.rs` using atomic `ON CONFLICT DO UPDATE` queries with TTL expiration evaluation, owner isolation, and row-level locking.
+- **Live Conformance Gate**: Verified via `tests/idempotency_conformance.rs` (9 passing integration tests) covering consume-once, batch rollback, anti-rollback high-water clock, lock lifecycle, 32-worker contention, and expired lock re-acquisition.
+
+## 8. Multi-Criteria Candidate Scoring Matrix (v0.4.23 Research Evaluation)
+
+| Candidate | Description | Impact (1-10) | Feasibility (1-10) | Security (1-10) | Readiness (1-10) | Total Score | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Candidate A (#251)** | **Idempotency Locks & Neon PostgreSQL Conformance** (`idempotency_locks` SQL table, `acquire_lock`, `release_lock`, `extend_lock`, `get_lock` APIs, unit & integration conformance suite) | 9 | 10 | 9 | 10 | **38/40** | **Completed (v0.4.23)** |
+| **Candidate B** | **BitVM3 Garbled-Circuit Fraud Proof Interface Evolution** (Modular abstraction for garbled-circuit gate commitment inspection) | 8 | 7 | 8 | 7 | **30/40** | Research Mapped |
+| **Candidate C** | **Cross-Repo Proof Surface & Verifier Ownership Contract Alignment** (Standardized cross-repo proof envelope schema between Nexus and Gateway) | 8 | 6 | 8 | 6 | **28/40** | Research Mapped |

@@ -1,8 +1,8 @@
 //! Live-DB conformance suite for [`IdempotencyStore`].
 //!
 //! Mirrors the enclave SDK's backend-neutral `ReplayStore` conformance suite,
-//! adapted to the Nexus consume-once contract. Every case requires a live
-//! PostgreSQL database and is skipped when `DATABASE_URL` is unset.
+//! adapted to the Nexus consume-once contract and transactional idempotency locks (#251).
+//! Every case requires a live PostgreSQL database and is skipped when `DATABASE_URL` is unset.
 
 use chrono::{Duration, Utc};
 use conxian_nexus::storage::idempotency::{ConsumeOutcome, IdempotencyError, IdempotencyStore};
@@ -27,13 +27,13 @@ async fn connect(url: &str) -> IdempotencyStore {
     IdempotencyStore::new(pool)
 }
 
-/// Clear both tables so each case runs against an isolated, re-runnable state.
+/// Clear all idempotency tables so each case runs against an isolated, re-runnable state.
 async fn reset(url: &str) {
     let pool = PgPoolOptions::new()
         .connect(url)
         .await
         .expect("failed to connect to DATABASE_URL");
-    sqlx::query("TRUNCATE idempotency_records, idempotency_high_water")
+    sqlx::query("TRUNCATE idempotency_records, idempotency_high_water, idempotency_locks")
         .execute(&pool)
         .await
         .expect("failed to reset conformance tables");
@@ -306,5 +306,126 @@ async fn conformance_contention() {
     assert_ne!(
         committed_a, committed_b,
         "exactly one overlapping batch commits"
+    );
+}
+
+/// 8. Idempotency lock lifecycle and owner-based release/extension (#251).
+#[tokio::test]
+async fn conformance_lock_lifecycle() {
+    let Some(url) = database_url() else {
+        eprintln!("skipping: DATABASE_URL unset");
+        return;
+    };
+    let _guard = SUITE_LOCK.lock().await;
+    reset(&url).await;
+    let store = connect(&url).await;
+
+    let payload = serde_json::json!({"node_id": "nexus-worker-01", "step": "settlement"});
+
+    // 1. Acquire lock
+    assert!(
+        store
+            .acquire_lock("lock.lifecycle.1", "worker-1", 60, Some(payload.clone()))
+            .await
+            .unwrap(),
+        "first acquisition should succeed"
+    );
+
+    // 2. Read lock status
+    let lock_info = store
+        .get_lock("lock.lifecycle.1")
+        .await
+        .unwrap()
+        .expect("lock record should exist");
+    assert_eq!(lock_info.owner, "worker-1");
+    assert_eq!(lock_info.payload.as_ref(), Some(&payload));
+
+    // 3. Second worker attempts acquisition while lock is active -> rejected
+    assert!(
+        !store
+            .acquire_lock("lock.lifecycle.1", "worker-2", 60, None)
+            .await
+            .unwrap(),
+        "second worker should be rejected"
+    );
+
+    // 4. Owner extends lock
+    assert!(
+        store
+            .extend_lock("lock.lifecycle.1", "worker-1", 120)
+            .await
+            .unwrap(),
+        "owner extension should succeed"
+    );
+
+    // 5. Non-owner extension attempt -> rejected
+    assert!(
+        !store
+            .extend_lock("lock.lifecycle.1", "worker-2", 120)
+            .await
+            .unwrap(),
+        "non-owner extension should be rejected"
+    );
+
+    // 6. Non-owner release attempt -> rejected
+    assert!(
+        !store
+            .release_lock("lock.lifecycle.1", "worker-2")
+            .await
+            .unwrap(),
+        "non-owner release should be rejected"
+    );
+
+    // 7. Owner release
+    assert!(
+        store
+            .release_lock("lock.lifecycle.1", "worker-1")
+            .await
+            .unwrap(),
+        "owner release should succeed"
+    );
+
+    // 8. Re-acquisition by worker-2 after release
+    assert!(
+        store
+            .acquire_lock("lock.lifecycle.1", "worker-2", 60, None)
+            .await
+            .unwrap(),
+        "re-acquisition after release should succeed"
+    );
+}
+
+/// 9. Lock contention: 32 concurrent workers competing for the same lock key (#251).
+#[tokio::test(flavor = "multi_thread")]
+async fn conformance_lock_contention() {
+    let Some(url) = database_url() else {
+        eprintln!("skipping: DATABASE_URL unset");
+        return;
+    };
+    let _guard = SUITE_LOCK.lock().await;
+    reset(&url).await;
+    let store = Arc::new(connect(&url).await);
+
+    let mut handles = Vec::new();
+    for i in 0..32 {
+        let store = store.clone();
+        let owner = format!("worker-{i}");
+        handles.push(tokio::spawn(async move {
+            store
+                .acquire_lock("lock.contention.1", &owner, 30, None)
+                .await
+                .unwrap()
+        }));
+    }
+
+    let mut acquired_count = 0usize;
+    for handle in handles {
+        if handle.await.unwrap() {
+            acquired_count += 1;
+        }
+    }
+    assert_eq!(
+        acquired_count, 1,
+        "exactly one worker must acquire the active lock"
     );
 }

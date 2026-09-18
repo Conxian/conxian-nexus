@@ -169,3 +169,14 @@ This document establishes the official research map, cryptographic specification
 - **Verification Target**: Jellyfish Merkle Tree (JMT) proof nodes against `LedgerInfo` accumulator roots.
 - **Cryptographic Primitives**: SHA-3-256 state hashing and AptosBFT BLS12-381 multi-signatures.
 - **Audit Persistence**: `aptos_verified_transactions` SQLx table storing ledger version, state root hash, and resource change digests.
+
+## 5. Transactional Idempotency Locks & Distributed Conformance (#251)
+
+### 5.1 Architecture & Schema
+- **Target Schema**: `idempotency_locks` (`key VARCHAR(512) PRIMARY KEY`, `owner VARCHAR(256) NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `expires_at TIMESTAMPTZ NOT NULL`, `payload JSONB`).
+- **Atomic Operations**:
+  - `acquire_lock`: Executes conditional `INSERT ... ON CONFLICT (key) DO UPDATE` with `WHERE idempotency_locks.expires_at <= now() OR idempotency_locks.owner = EXCLUDED.owner`, guaranteeing strict single-worker ownership during lock duration.
+  - `extend_lock`: Atomic duration extension for existing unexpired lock owned by caller.
+  - `release_lock`: Deletes lock record matching `key` and `owner`.
+  - `get_lock`: Retrieves current lock state and payload metadata.
+- **Status**: **Completed (v0.4.23)** in `src/storage/idempotency.rs` and `migrations/20260912000000_idempotency_locks.sql`.
