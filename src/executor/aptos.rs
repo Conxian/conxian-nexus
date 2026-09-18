@@ -51,7 +51,8 @@ impl AptosAdapter {
         &self,
         payload: &AptosVerificationPayload,
     ) -> anyhow::Result<AptosVerificationResponse> {
-        if payload.transaction_hash.trim().is_empty() || !payload.transaction_hash.starts_with("0x") {
+        if payload.transaction_hash.trim().is_empty() || !payload.transaction_hash.starts_with("0x")
+        {
             return Ok(AptosVerificationResponse {
                 verified: false,
                 ledger_version: payload.ledger_version,
@@ -135,9 +136,12 @@ mod tests {
         let adapter = make_test_adapter();
         let payload = AptosVerificationPayload {
             ledger_version: 120491000,
-            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
-            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string(),
-            sender: "0x0000000000000000000000000000000000000000000000000000000000000001".to_string(),
+            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                .to_string(),
+            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                .to_string(),
+            sender: "0x0000000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
             sequence_number: 42,
             proof_nodes: vec!["0xnode1...".to_string(), "0xnode2...".to_string()],
             signature_hex: "0xsig...".to_string(),
@@ -155,9 +159,12 @@ mod tests {
         let adapter = make_test_adapter();
         let payload = AptosVerificationPayload {
             ledger_version: 120491000,
-            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string(),
-            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321".to_string(),
-            sender: "0x0000000000000000000000000000000000000000000000000000000000000001".to_string(),
+            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                .to_string(),
+            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                .to_string(),
+            sender: "0x0000000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
             sequence_number: 42,
             proof_nodes: vec![],
             signature_hex: "0xsig...".to_string(),
@@ -165,6 +172,9 @@ mod tests {
 
         let res = adapter.verify_transaction(&payload).await.unwrap();
         assert!(!res.verified);
-        assert!(res.error.unwrap().contains("proof_nodes list cannot be empty"));
+        assert!(res
+            .error
+            .unwrap()
+            .contains("proof_nodes list cannot be empty"));
     }
 }

@@ -137,7 +137,8 @@ mod tests {
         let payload = SuiVerificationPayload {
             transaction_digest: "G3qZp...".to_string(),
             checkpoint_sequence_number: 45001920,
-            sender: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string(),
+            sender: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
             mutated_object_ids: vec!["0xabc123...".to_string()],
             validator_signatures: vec!["sig_val_1...".to_string(), "sig_val_2...".to_string()],
             gas_budget: 10000000,
