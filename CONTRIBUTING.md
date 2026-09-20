@@ -25,16 +25,29 @@ For Dependabot PRs, dependencies are grouped and auto-merged weekly when checks 
 To set up your local environment for development:
 
 1. **Environment**: Copy `.env.example` to `.env` and configure your local PostgreSQL and Redis connection strings.
-2. **Database**: Run migrations using `sqlx-cli` or ensure your local Postgres matches the schema in `migrations/`.
-3. **Tests**: Run `cargo test` to verify your changes. Some integration tests may skip if local infrastructure (Postgres/Redis) is unavailable.
-4. **Boundary Check**: Run `./scripts/check_production_boundary.sh` to ensure no testnet principals are introduced.
+2. **Database**: Run migrations using `sqlx-cli` or ensure your local Postgres matches the schema in `migrations/`:
+   ```bash
+   cargo install sqlx-cli --no-default-features --features postgres
+   sqlx migrate run
+   ```
+3. **Build & Test**: Run workspace compilation and test suites:
+   ```bash
+   cargo build --workspace
+   cargo test --workspace
+   ```
+4. **Hygiene & Boundary Checks**: Run contamination guard, dependency checks, and production boundary checks:
+   ```bash
+   python3 scripts/verify_contamination_guard.py
+   ./scripts/check_production_boundary.sh
+   python3 scripts/check_dependency_declarations.py
+   ```
 
 ## Coding Standards
 
 - Follow standard Rust formatting (`cargo fmt`).
 - Ensure all public functions have doc comments.
 - Maintain high test coverage for new logic.
-- **Do not commit source code dumps, audit logs, or temporary artifacts**. Check `.gitignore` for current patterns.
+- **Do not commit secrets, private SSH/TLS keys, source code dumps, audit logs, web build outputs (`.next/`, `dist/`, `build/`), temporary artifacts, or Python build/cache outputs** (`__pycache__`, `.pytest_cache`, `.coverage`). Check `.gitignore` and `.dockerignore` for current ignore patterns.
 
 ## Governance Support Routing
 
@@ -48,6 +61,8 @@ Changes to governance-sensitive files require CODEOWNERS review:
 - `CODEOWNERS`
 - `SECURITY.md`
 - `SUPPORT.md`
+- `docs/RELEASE.md`
+- `CHANGELOG.md`
 - `.github/ISSUE_TEMPLATE/**`
 - `.github/PULL_REQUEST_TEMPLATE*`
 - `.github/workflows/**`

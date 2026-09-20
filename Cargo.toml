@@ -1,8 +1,8 @@
 [package]
 name = "conxian-nexus"
-version = "0.4.22"
+version = "0.4.23"
 license = "BUSL-1.1"
-rust-version = "1.82"
+rust-version = "1.98.1"
 edition = "2021"
 
 [dependencies]
@@ -19,10 +19,12 @@ chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 base64 = "0.23"
 sha2 = "0.11"
+sha3 = "0.12"
+x509-cert = "0.3"
 hmac = "0.13"
 rand = "0.10"
 hex = "0.4"
-lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "6187bf6227f302988cc69962ed8b12ea6758f2cd", features = ["enclave"] }
+lib-conxian-core = { git = "https://github.com/Conxian/lib-conxian-core", rev = "b85625f7be8c77f9b656e32442f43e02eca77f1e" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy = "0.15"
@@ -41,8 +43,8 @@ opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "tokio"] }
 tracing-opentelemetry = "0.33"
 uuid = { version = "1.23.0", features = ["v4"] }
-nostr-sdk = "0.44"
-k256 = { version = "0.14.0", features = ["ecdsa", "sha256"] }
+nostr-sdk = "0.45"
+k256 = { version = "0.14.0", features = ["ecdsa", "sha256", "schnorr"] }
 ark-groth16 = "0.6.0"
 ark-serialize = "0.6.0"
 ark-bn254 = "0.6.0"
@@ -51,6 +53,7 @@ ark-ff = "0.6.0"
 ark-relations = "0.6.0"
 ark-std = "0.6.0"
 thiserror = "2.0"
+rustls = { version = "0.23", features = ["ring"] }
 # HTTP security headers (built-in with axum/tower-http)
 
 [build-dependencies]

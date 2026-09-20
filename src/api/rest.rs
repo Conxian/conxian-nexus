@@ -209,9 +209,13 @@ pub fn app_router(
         .nest("/v1/cosmos", cosmos_routes())
         .nest("/v1/stacks", stacks_routes())
         .nest("/v1/rgb", rgb_routes())
+        .nest("/v1/verify", verify_routes())
         .layer(cors)
         .layer(rate_limit)
         .layer(compression)
+        .layer(axum::middleware::from_fn(
+            crate::api::security::apply_security_headers,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -530,7 +534,7 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    async fn test_router_with_state(
+    pub(crate) async fn test_router_with_state(
         enabled: bool,
         rgb_mode: RGBRolloutMode,
         known_contracts: HashSet<String>,
@@ -837,5 +841,380 @@ mod tests {
             Some(tx_id.as_str())
         );
         assert_eq!(payload.get("pos").and_then(Value::as_u64), Some(0));
+    }
+
+    #[tokio::test]
+    async fn test_security_headers_middleware() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let headers = response.headers();
+        assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
+        assert_eq!(headers.get("X-Content-Type-Options").unwrap(), "nosniff");
+        assert_eq!(headers.get("X-XSS-Protection").unwrap(), "0");
+        assert_eq!(
+            headers.get("Referrer-Policy").unwrap(),
+            "strict-origin-when-cross-origin"
+        );
+        assert_eq!(
+            headers.get("Strict-Transport-Security").unwrap(),
+            "max-age=31536000; includeSubDomains; preload"
+        );
+    }
+}
+
+pub fn verify_routes() -> Router<AppState> {
+    Router::new()
+        .route("/zkcp", post(verify_zkcp))
+        .route("/op-cat", post(verify_op_cat))
+        .route("/frost", post(verify_frost))
+        .route("/sui", post(verify_sui))
+        .route("/aptos", post(verify_aptos))
+        .route("/bitvm3", post(verify_bitvm3))
+}
+
+async fn verify_sui(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::executor::sui::SuiVerificationPayload>,
+) -> impl IntoResponse {
+    match state
+        .executor
+        .sui_adapter
+        .verify_transaction(&payload)
+        .await
+    {
+        Ok(res) => {
+            if res.verified {
+                (StatusCode::OK, Json(res)).into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, Json(res)).into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string(), "verified": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_bitvm3(
+    Json(payload): Json<crate::executor::bitvm3::Bitvm3VerificationPayload>,
+) -> impl IntoResponse {
+    match crate::executor::bitvm3::Bitvm3Verifier::verify_fraud_proof(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(err) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({
+                "error": {
+                    "code": "bitvm3_verification_rejected",
+                    "message": err.to_string(),
+                }
+            })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_aptos(
+    State(state): State<AppState>,
+    Json(payload): Json<crate::executor::aptos::AptosVerificationPayload>,
+) -> impl IntoResponse {
+    match state
+        .executor
+        .aptos_adapter
+        .verify_transaction(&payload)
+        .await
+    {
+        Ok(res) => {
+            if res.verified {
+                (StatusCode::OK, Json(res)).into_response()
+            } else {
+                (StatusCode::BAD_REQUEST, Json(res)).into_response()
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "error": e.to_string(), "verified": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_frost(
+    Json(payload): Json<crate::verification::FrostVerificationPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::FrostVerifier::new();
+    match verifier.verify_signature(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "is_valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_zkcp(
+    Json(payload): Json<crate::verification::ZkcpProofPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::ZkcpVerifier::new();
+    match verifier.verify_proof(&payload) {
+        Ok(valid) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "valid": valid, "circuit_id": payload.circuit_id })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_op_cat(
+    Json(payload): Json<crate::verification::OpCatCovenantPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::OpCatCovenantVerifier::new();
+    match verifier.verify_covenant(&payload) {
+        Ok(valid) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "valid": valid, "domain_id": payload.domain_id })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod verify_endpoint_tests {
+    use super::tests::test_router_with_state;
+    use crate::executor::rgb::RGBRolloutMode;
+    use axum::http::{Request, StatusCode};
+    use sha2::Digest;
+    use std::collections::HashSet;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn test_verify_zkcp_endpoint_bad_request() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::verification::ZkcpProofPayload {
+            circuit_id: "invalid_circuit".to_string(),
+            hash_commitment: "00".repeat(32),
+            verifying_key_bytes: vec![1, 2, 3],
+            proof_bytes: vec![1, 2, 3],
+            public_inputs: vec![],
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/zkcp")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_verify_op_cat_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let elem1 = "01020304";
+        let elem2 = "05060708";
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(hex::decode(elem1).unwrap());
+        hasher.update(hex::decode(elem2).unwrap());
+        let expected_hash = hex::encode(hasher.finalize());
+
+        let payload = crate::verification::OpCatCovenantPayload {
+            domain_id: crate::verification::OP_CAT_COVENANT_ID.to_string(),
+            stack: vec![elem1.to_string(), elem2.to_string()],
+            expected_state_hash: expected_hash,
+            recursion_depth: 1,
+            target_script_pubkey: None,
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/op-cat")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_frost_endpoint_success() {
+        use k256::schnorr::SigningKey;
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let signing_key = SigningKey::from_bytes(&[0x01u8; 32].into()).unwrap();
+        let verifying_key = signing_key.verifying_key();
+        let msg_bytes = [0x42u8; 32];
+        let aux_rand = [0x01u8; 32];
+        let signature = signing_key.sign_raw(&msg_bytes, &aux_rand).unwrap();
+
+        let payload = crate::verification::FrostVerificationPayload {
+            protocol_id: crate::verification::FROST_VERIFIER_ID.to_string(),
+            message_hash: hex::encode(msg_bytes),
+            group_public_key: hex::encode(verifying_key.to_bytes()),
+            signature: hex::encode(signature.to_bytes()),
+            threshold: 3,
+            participant_count: 5,
+            participant_ids: vec![1, 2, 3, 4, 5],
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/frost")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_sui_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::executor::sui::SuiVerificationPayload {
+            transaction_digest: "G3qZp...".to_string(),
+            checkpoint_sequence_number: 45001920,
+            sender: "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                .to_string(),
+            mutated_object_ids: vec!["0xabc123...".to_string()],
+            validator_signatures: vec!["sig_val_1...".to_string()],
+            gas_budget: 10000000,
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/sui")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_aptos_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::executor::aptos::AptosVerificationPayload {
+            ledger_version: 120491000,
+            transaction_hash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+                .to_string(),
+            state_root_hash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+                .to_string(),
+            sender: "0x0000000000000000000000000000000000000000000000000000000000000001"
+                .to_string(),
+            sequence_number: 42,
+            proof_nodes: vec!["0xnode1...".to_string()],
+            signature_hex: "0xsig...".to_string(),
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/aptos")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_bitvm3_endpoint_success() {
+        use tower::ServiceExt;
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let gate_id: u32 = 1;
+        let nonce = hex::encode([1u8; 32]);
+        let l0 = hex::encode([2u8; 32]);
+        let l1 = hex::encode([3u8; 32]);
+        let claimed_out = hex::encode([4u8; 32]);
+
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(gate_id.to_be_bytes());
+        hasher.update(hex::decode(&nonce).unwrap());
+        hasher.update(hex::decode(&l0).unwrap());
+        hasher.update(hex::decode(&l1).unwrap());
+        hasher.update(hex::decode(&claimed_out).unwrap());
+        let entry_hash = hex::encode(hasher.finalize());
+
+        let payload = crate::executor::bitvm3::Bitvm3VerificationPayload {
+            circuit_id: "test-bitvm3-circuit".to_string(),
+            challenge_nonce: nonce,
+            gate_commitments: vec![crate::executor::bitvm3::GateCommitment {
+                gate_id,
+                gate_type: crate::executor::bitvm3::Bitvm3GateType::And,
+                garbled_table_hashes: vec![entry_hash],
+            }],
+            dispute: crate::executor::bitvm3::DisputeAssertion {
+                disputed_gate_id: gate_id,
+                input_labels: vec![
+                    crate::executor::bitvm3::WireLabel {
+                        wire_id: 1,
+                        label: l0,
+                        value: true,
+                    },
+                    crate::executor::bitvm3::WireLabel {
+                        wire_id: 2,
+                        label: l1,
+                        value: true,
+                    },
+                ],
+                claimed_output_label: crate::executor::bitvm3::WireLabel {
+                    wire_id: 3,
+                    label: claimed_out,
+                    value: false, // AND(true, true) is true => false is Fraud!
+                },
+                expected_output_digest: hex::encode([9u8; 32]),
+            },
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/bitvm3")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

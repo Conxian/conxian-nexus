@@ -415,7 +415,7 @@ mod tests {
         let mut request = build_test_request();
         let tx_ids = vec!["tx-001".to_string(), "tx-002".to_string()];
         let action = "DISBURSE_YIELD";
-        let secret = "prod-shared-secret";
+        let secret = "test-shared-secret";
 
         sign_test_request(&mut request, action, &tx_ids, secret);
 

@@ -131,3 +131,68 @@ pub async fn get_metrics_handler(
         data: values,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::rest::AppState;
+    use crate::config::Config;
+    use crate::executor::NexusExecutor;
+    use crate::state::NexusState;
+    use crate::storage::tableland::TablelandAdapter;
+    use crate::storage::Storage;
+    use axum::extract::{Query, State};
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    fn mock_app_state() -> AppState {
+        let config = Arc::new(Config::default_test());
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let nexus_state = Arc::new(NexusState::new());
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            crate::executor::rgb::RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "test".to_string()));
+
+        AppState {
+            config,
+            storage,
+            nexus_state,
+            executor,
+            oracle: None,
+            tableland,
+            kwil: None,
+            nostr: None,
+            gateway_url: None,
+            http_client: reqwest::Client::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_metrics_rejects_non_stx_asset() {
+        let state = mock_app_state();
+        let params = AnalyticsParams {
+            asset: Some("BTC".to_string()),
+            metric: "tx_count".to_string(),
+            days: Some(7),
+        };
+
+        let result = get_metrics_handler(State(state), Query(params)).await;
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_get_metrics_rejects_invalid_metric() {
+        let state = mock_app_state();
+        let params = AnalyticsParams {
+            asset: Some("STX".to_string()),
+            metric: "invalid_metric_name".to_string(),
+            days: Some(7),
+        };
+
+        let result = get_metrics_handler(State(state), Query(params)).await;
+        assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+}

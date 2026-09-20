@@ -24,6 +24,16 @@ impl OracleService {
         }
     }
 
+    /// Returns the compressed secp256k1 public key of the Oracle signer.
+    pub fn signer_public_key(&self) -> String {
+        self.aggregator.signer_public_key()
+    }
+
+    /// Returns the Stacks address hash (HASH160 of the public key) of the signer.
+    pub fn signer_stacks_address(&self) -> String {
+        self.aggregator.signer_stacks_address()
+    }
+
     pub async fn run(&self) -> anyhow::Result<()> {
         tracing::info!("Starting OracleService...");
         let mut interval = time::interval(Duration::from_secs(60));

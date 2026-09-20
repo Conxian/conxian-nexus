@@ -38,6 +38,49 @@ impl TrustedBitcoinHeightProvider for UnavailableBitcoinHeightProvider {
     }
 }
 
+/// A Bitcoin height provider that derives the current height from a Stacks node's
+/// `/v2/info` endpoint, which includes the `burn_block_height` (Bitcoin block height).
+pub struct StacksBitcoinHeightProvider {
+    rpc_url: String,
+    client: reqwest::Client,
+}
+
+impl StacksBitcoinHeightProvider {
+    pub fn new(rpc_url: String) -> Self {
+        Self {
+            rpc_url: rpc_url.trim_end_matches('/').to_string(),
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+impl TrustedBitcoinHeightProvider for StacksBitcoinHeightProvider {
+    fn current_height(&self) -> BoxFuture<'_, Result<u64, TrustedHeightError>> {
+        Box::pin(async move {
+            let url = format!("{}/v2/info", self.rpc_url);
+            let resp = self
+                .client
+                .get(&url)
+                .timeout(std::time::Duration::from_secs(10))
+                .send()
+                .await
+                .map_err(|_| TrustedHeightError::Unavailable)?;
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|_| TrustedHeightError::Unavailable)?;
+            let height = body
+                .get("burn_block_height")
+                .and_then(|v| v.as_u64())
+                .ok_or(TrustedHeightError::Unavailable)?;
+            if height == 0 {
+                return Err(TrustedHeightError::Invalid);
+            }
+            Ok(height)
+        })
+    }
+}
+
 pub trait CanonicalBitvmReceiptStore: Send + Sync {
     fn persist_immutable(
         &self,
