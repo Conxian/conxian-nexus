@@ -41,6 +41,16 @@ impl OracleAggregator {
         }
     }
 
+    /// Returns the compressed secp256k1 public key of the Oracle signer.
+    pub fn signer_public_key(&self) -> String {
+        self.wallet.public_key()
+    }
+
+    /// Returns the Stacks address hash (HASH160 of the public key) of the signer.
+    pub fn signer_stacks_address(&self) -> String {
+        self.wallet.stacks_address_hash()
+    }
+
     pub async fn fetch_universal_fx(
         &self,
     ) -> Result<PppState, Box<dyn std::error::Error + Send + Sync>> {
