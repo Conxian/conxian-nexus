@@ -12,7 +12,8 @@ import unittest
 
 CHECKER = Path(__file__).with_name("check_dependency_declarations.py").resolve()
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "6187bf6227f302988cc69962ed8b12ea6758f2cd"
+CORE_REV = "b85625f7be8c77f9b656e32442f43e02eca77f1e"
+CORE_REV_MUTATED = CORE_REV[:-1] + ("1" if CORE_REV[-1] == "0" else "0")
 CORE_SOURCE = f"git+{CORE_URL}?rev={CORE_REV}#{CORE_REV}"
 CORE_DECLARATION = f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV}" }}'
 
@@ -23,7 +24,7 @@ def lock(core_entries: str | None = None) -> str:
             f"""
             [[package]]
             name = "lib-conxian-core"
-            version = "0.3.0"
+            version = "0.3.3"
             source = "{CORE_SOURCE}"
             """
         )
@@ -144,7 +145,7 @@ class CheckerTest(unittest.TestCase):
         core_cases = {
             f'lib-conxian-core = {{ git = "https://example.com/core", rev = "{CORE_REV}" }}': "git must be exactly",
             f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "6187bf6" }}': "rev must be the exact full SHA",
-            f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV[:-1]}0" }}': "rev must be the exact full SHA",
+            f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV_MUTATED}" }}': "rev must be the exact full SHA",
             f'lib-conxian-core = {{ git = "{CORE_URL}", branch = "main" }}': "branch declarations are prohibited",
             f'lib-conxian-core = {{ git = "{CORE_URL}", tag = "v0.3.0" }}': "tag declarations are prohibited",
             f'core-alias = {{ package = "lib-conxian-core", git = "{CORE_URL}", rev = "{CORE_REV}" }}': "renamed, duplicate, or non-root Core",
@@ -188,8 +189,8 @@ class CheckerTest(unittest.TestCase):
         self.assertIn("Cargo.lock", missing_lock.stderr)
         self.assert_fails(manifest(), "package array is missing", cargo_lock="")
         self.assert_fails(manifest(), "malformed or unreadable TOML", cargo_lock="not = [toml")
-        wrong_version = lock().replace('version = "0.3.0"', 'version = "0.3.1"')
-        self.assert_fails(manifest(), "version must be exactly 0.3.0", cargo_lock=wrong_version)
+        wrong_version = lock().replace('version = "0.3.3"', 'version = "0.3.0"')
+        self.assert_fails(manifest(), "version must be exactly 0.3.3", cargo_lock=wrong_version)
         wrong_source = lock().replace(CORE_SOURCE, "registry+https://github.com/rust-lang/crates.io-index")
         self.assert_fails(manifest(), "source must be exactly", cargo_lock=wrong_source)
         duplicate_lock = lock() + lock().split("version = 4\n", 1)[1]

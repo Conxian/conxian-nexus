@@ -23,14 +23,14 @@ Bitcoin/EVM/Cosmos —→ sync module —→ MMR state roots —→ REST/gRPC AP
 |--------|---------|--------|
 | `nexus-sync` | Multi-chain ingestion, reorg handling (BTC/EVM/Cosmos) | Active |
 | `nexus-state` | MMR state root commitments, persistence, Redis + PostgreSQL | Active |
-| `nexus-executor` | Protocol adapters: BitVM2, RGB, Stacks, Lightning, Fedimint, EVM, Cosmos | Active |
+| `nexus-executor` | Protocol adapters: BitVM2, BitVM3, RGB, Stacks, Lightning, Fedimint, EVM, Cosmos | Active |
 | `nexus-safety` | Drift monitoring, SRL-1 Lightning resilience layer | Active |
 | `api` | REST + gRPC surfaces for proofs, event feeds, identity, settlement, ZKML, DLC, ERP | Active |
 | `storage` | Tableland + Kwil adapters for MMR node persistence | Active |
 
 ## Protocol Coverage — SDK → Nexus Alignment
 
-The Conxius Enclave SDK (`lib-conclave-sdk` v0.3.1) defines the canonical 42-chain AssetRegistry and 46 protocol modules. Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
+The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.17) defines the canonical 42-chain AssetRegistry and 43 protocol modules (25 blockchain + 18 infrastructure). Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
 
 ### Chain Coverage (42 SDK chains → Nexus observation status)
 
@@ -133,7 +133,7 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.3.1) defines the canonical 42-cha
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.82+, edition 2021
+- **MSRV**: Rust 1.98.1, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
@@ -146,26 +146,60 @@ The Conxius Enclave SDK (`lib-conclave-sdk` v0.3.1) defines the canonical 42-cha
 - **lib-conxian-core**: Shared protocol primitives (git dependency, pinned rev)
 - **conxius-enclave-sdk**: Hardware enclave (optional, via lib-conxian-core `enclave` feature)
 
-### SDK Module Usage (Session 48 — Aug 2026)
+### Core Module Usage (Session 58 — Aug 2026)
 
-Nexus re-exports canonical Core types via `compat::core_bridge::core_types`:
+Nexus consumes `lib-conxian-core` (v0.3.3, exact git rev `b85625f`) directly through three module boundaries. The legacy `compat::core_bridge::core_types` re-export shim was removed in PR #259 — Nexus now imports canonical types straight from their source modules:
 
-| SDK Module | Re-exported Types |
-|------------|-------------------|
-| control_model | Chain, ChainFamily, TrustTier, BridgeSystem, FinalityClass, VerificationClass |
-| signing | SignerCapabilities, SigningAlgorithm, SigningTarget |
-| verifier | ChainId, ProtocolVerifier, ProofVerificationRequest/Result, TransactionFinalityStatus, VerifierCapabilities |
-| anchoring | AnchoringPublisher, AnchoringReceipt, AnchoringRequest, TablelandAnchoringPublisher, OnChainAnchoringPublisher |
-| bitcoin::taproot | P2TR validation, control blocks, witness programs |
-| bitcoin::bip322 | BIP-322 message signing/verification |
-| protocol::dlc | DLC contract types |
-| protocol::frost | FROST DKG types |
-| protocol::covenant | Bitcoin covenant types |
-| protocol::intent | Cross-chain intent types |
-| lightning | LightningAdapter trait |
-| adapters | Chain adapter abstraction layer |
+| Core module | Nexus consumer | Types used |
+|-------------|----------------|------------|
+| control_model | `src/verification/mod.rs` | Chain, ChainFamily, RiskProfile, RiskTarget, OverallRiskStatus, RiskProfileError, canonical risk-profile set |
+| verifier | `src/verification/mod.rs` | ChainId |
+| enclave | `src/executor/mod.rs` | AttestationCertificate |
+| deployment | `src/api/admin.rs` | VerificationResult, VerificationOutcome |
+
+`src/compat/core_bridge.rs` is Nexus-owned secp256k1 signing + HASH160 (k256/ripemd/sha2) — it does not depend on Core.
 - **conxian-gateway**: Downstream consumer of Nexus proofs
 - **conxius-enclave-sdk**: SDK defines canonical chain registry — Nexus aligns observation coverage
+
+### Session 48 — Enhancement Implementation Complete
+
+All 7 market enhancement phases implemented. Documentation in conxian_market@39136c0:
+
+| Doc | Covers | Relevant Nexus Role |
+|-----|--------|---------------------|
+| `SETTLEMENT_RAILS.md` | 6 rails cataloged | Execution attestation for Managed+ tiers |
+| `monitoring.md` | sBTC, Fedimint, Babylon health | Nexus provides attestation data for metrics |
+| `sla_bounty_system.md` | CJCS gap cards, reputation | Enclave attestation gates auto-bounty execution |
+| `trust_tier_pricing.md` | Tier detection, SLA templates | Nexus `ExecutionRequest` carries TrustTier (PR #196) |
+
+> Nexus enclave attestation (PR #196) is the gating mechanism for Managed/Strict tier auto-execution.
+> See `conxian_market/docs/knowledge_base/trust_tier_pricing.md` §2 for tier detection flow.
+
+## Session 67 (2026-09-20) — Oracle signer hardening + multi-chain drift detection
+
+Completed the Oracle-worker signer hardening and drift/Lightning coverage that PR
+#312 (auto-merged earlier today) only partially delivered. Landed as **PR #313**
+(approved by `admin-conxian-labs`).
+
+- **`src/compat/core_bridge.rs`** — `Wallet::from_private_key_bytes` now rejects
+  empty and all-zero keys; added `Wallet::is_mock()` backed by a single
+  `MOCK_PRIVATE_KEY_BYTES` constant (scalar `1`). Tests:
+  `empty_and_zeroed_private_keys_are_rejected`, `is_mock_is_true_only_for_the_canonical_mock_key`.
+- **`src/oracle/aggregator.rs` + `src/oracle/mod.rs`** — exposed
+  `signer_public_key()` and `signer_stacks_address()` on both layers.
+- **`src/main.rs`** — Oracle startup rejects mock/ephemeral signers unless
+  `ORACLE_ALLOW_MOCK_KEY=1`; logs the verified non-ephemeral signer pubkey +
+  Stacks address (warn on mock). Signer-verification tests expanded
+  (`enabled_oracle_rejects_mock_signer_when_flag_unset`,
+  `enabled_oracle_accepts_explicit_mock_signer_when_flag_set`,
+  `enabled_oracle_accepts_valid_non_mock_signer`).
+- **`src/safety/mod.rs`** — added `MAX_DRIFT_BLOCKS` (`2`) + `drift_exceeded()`
+  (strict `> 2` blocks); `check_and_trigger_sovereign_handoff` now routes through
+  it. Added unit tests for threshold arithmetic.
+- **`tests/safety_drift_test.rs`** (new) — 7 integration tests for multi-chain
+  drift detection beyond 2 blocks.
+- CI green: rustfmt, clippy `-D warnings`, `cargo test --workspace`, Lightning
+  coverage ≥90%, Bitcoin coverage ≥92%.
 
 ## License
 BUSL-1.1 (Business Source License 1.1). Change Date: 2030-01-01. Change License: GPL-3.0-or-later.
@@ -175,6 +209,15 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
 © 2026 Conxian Foundation. Code is Law.
 
 ## Session State (2026-08-01)
+
+### v0.4.23 — lib-conxian-core pinned to v0.3.3 release tag
+- Bumped `lib-conxian-core` git rev `134e6f48` → `b85625f` (the `v0.3.3` release commit). The direct-source policy prohibits `tag` declarations, so the pin stays an exact full-SHA `rev`.
+- Dependency-policy rev synced in `scripts/check_dependency_declarations.py`, `scripts/test_check_dependency_declarations.py`, and `scripts/generate_compliance_artifacts.sh` (version `0.3.2` → `0.3.3`).
+
+### v0.4.23 — lib-conxian-core pinned to latest main (Session 58)
+- Bumped `lib-conxian-core` git rev `60e92aa` → `134e6f48` (Session 58: full non-SDK capacity, public `validate_evidence_binding`, `core_types`/`compat` canonical re-exports).
+- Graph stays yanked-crate-free (no secp256k1 0.32.0-beta.2 / bitcoin 0.33.0-beta); SDK capability surface enabled via `lib-conxian-core` `full-sdk` (enclave-sdk v2.0.17, yanked-crate-free).
+- Dependency-policy rev synced in `scripts/check_dependency_declarations.py`, `scripts/test_check_dependency_declarations.py`, and `scripts/generate_compliance_artifacts.sh`.
 
 ### v0.4.23 — Session 48: Billing Tiers + CI Pass
 - PR [#203](https://github.com/Conxian/conxian-nexus/pull/203) merged: paid tiers with LN upgrade flow (CON-24)
@@ -191,3 +234,10 @@ See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
   - SigningTarget, SigningAlgorithm, SignerCapabilities
 - Existing tag `v0.4.22` preserved (version unchanged)
 - Dependency review config added to allow Core license
+
+### v0.4.23 — Full Research & System Baseline Audit Cycle
+- Conducted full cross-repo system review, dependency verification, and gap scorecard audit.
+- Updated `docs/GAP_ANALYSIS.md` and `docs/RESEARCH.md` mapping all missing research areas and initializing best candidate specifications:
+  - Candidate 1: FROST Threshold Signature Productionization (`CON-1302` in `src/orchestrator/roast.rs`).
+  - Candidate 2: ZKCP Pre-Image Circuit Verification (`CON-1313` / `G-50` in `lib-conxian-core`).
+- Verified build and test suite readiness under Rust 1.98.1.

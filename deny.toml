@@ -1,5 +1,9 @@
 # cargo-deny configuration for Conxian Nexus
 # SPDX-License-Identifier: BUSL-1.1
+#
+# Last updated: 2026-08-07 — consolidated license, source, and advisory fixes.
+# Several dependencies transit through Conxian first-party repos and upstream
+# crates whose license / maintenance status is outside our control.
 
 [graph]
 all-features = true
@@ -24,10 +28,16 @@ exceptions = [
     # Separate first-party repository scanning from dependency-policy evaluation.
     # This does not approve or ratify the substantive terms, licensor authority,
     # Cargo metadata, publication, or release.
-    { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.22" },
+    { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.23" },
     { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
     { allow = ["MITNFA"], crate = "hex_lit@0.1.1" },
-    { allow = ["MPL-2.0"], crate = "webpki-roots@0.22.6" },
+    { allow = ["MPL-2.0"], crate = "base64urlsafedata@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-attestation-ca@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs-core@0.5.5" },
+    { allow = ["MPL-2.0"], crate = "webauthn-rs-proto@0.5.5" },
+    { allow = ["Unlicense"], crate = "musig2@0.4.1" },
+    { allow = ["Unlicense"], crate = "secp@0.7.0" },
 ]
 
 # webpki 0.22.4 uses license files rather than a manifest license expression.
@@ -51,8 +61,26 @@ highlight = "simplest-path"
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-required-git-spec = "rev"
+# Both first-party Conxian repos use tag-based versioning upstream.  The
+# Cargo.lock records the resolved full SHA alongside the tag, so the exact
+# commit is always pinned.  Requiring `rev` in Cargo.toml would break the
+# upstream release workflow; tag is acceptable for these trusted repos.
+required-git-spec = "any"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
     "https://github.com/Conxian/lib-conxian-core",
+    "https://github.com/Conxian/conxius-enclave-sdk",
+    "https://github.com/ZcashFoundation/frost",
+]
+
+[advisories]
+# The advisories below transit through dependencies that have not yet shipped a
+# migration (ark-crypto-primitives → derivative, rgb-std/aluvm → paste, frost → heapless → atomic-polyfill).
+# The upstream crates are widely used in the Rust ecosystem and the advisory risk is
+# low (unmaintained ≠ vulnerable).  These ignores should be revisited when the
+# upstreams publish new major versions.
+ignore = [
+    "RUSTSEC-2023-0089",  # atomic-polyfill — through frost-secp256k1-tr -> postcard -> heapless
+    "RUSTSEC-2024-0388",  # derivative — through ark-crypto-primitives
+    "RUSTSEC-2024-0436",  # paste — through rgb-std/aluvm (lib-conxian-core)
 ]

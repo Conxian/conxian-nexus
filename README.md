@@ -8,7 +8,7 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Status
 
-**Active development (v0.4.19).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
+**Active development (v0.4.23).** Production intent exists. Nexus is currently being hardened for Tier 1 multi-chain monitoring as per ADR-006 and implementing the SRL-1 Lightning Resilience layer.
 
 ## Audience
 
@@ -61,9 +61,9 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Rust 1.82+, PostgreSQL 15, and Redis 7
+- Rust 1.98.1 (MSRV), PostgreSQL 15, and Redis 7
 
-### Setup
+### Setup & Local Development
 
 1.  **Environment Configuration**:
     Copy the example environment file and configure your secrets:
@@ -86,6 +86,31 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
     sqlx migrate run
     ```
 
+3.  **Local Build & Test**:
+    Build the workspace binaries and execute the unit and integration test suite:
+    ```bash
+    cargo build --workspace
+    cargo test --workspace
+    ```
+
+4.  **Running the Node**:
+    Start the Nexus node directly using Cargo:
+    ```bash
+    cargo run
+    ```
+
+5.  **Verifying Service Health & Proof APIs**:
+    Probe the local REST API server to verify node status and verification endpoints:
+    ```bash
+    # Node health check
+    curl -f http://localhost:8080/health
+
+    # Verification endpoint inspection
+    curl -X POST http://localhost:8080/v1/verify/zkcp \
+      -H "Content-Type: application/json" \
+      -d '{"proof": "...", "public_inputs": "..."}'
+    ```
+
 ### Quick Start (Docker)
 
 If you prefer using Docker, you can start the entire stack (including Postgres and Redis) with:
@@ -96,15 +121,28 @@ docker-compose up --build
 
 For more detailed setup instructions, including production hardening, see the [Operator Guide](./docs/PRD.md).
 
-## Policies
+## Policies & Release Guidance
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)
 - [SUPPORT.md](./SUPPORT.md)
+- [RELEASE.md](./docs/RELEASE.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 - [CODEOWNERS](./.github/CODEOWNERS)
 - [REPO_OWNERSHIP.md](./docs/REPO_OWNERSHIP.md)
 - [LICENSE](./LICENSE)
+
+## Support Expectations & Escalation SLA Matrix
+
+As a sovereign, non-custodial infrastructure component, Conxian Nexus operates on a fail-closed model. Public support expectations and escalation paths are strictly codified as follows:
+
+| Severity Level | Definition | Response Target | Resolution Target | Escalation Path |
+|---|---|---|---|---|
+| **L3 - Critical** | Network downtime, TEE/Enclave attestation failures, or potential security vulnerabilities. | < 2 Hours | < 12 Hours | Email to `security@conxian-labs.com` / PGP-encrypted dispatch to lead maintainers. |
+| **L2 - Major** | Multi-chain adapter synchronization drift (> 2 blocks) triggering Safety Mode, or SRL-1 payment recovery blocks. | < 6 Hours | < 24 Hours | Technical Issue template on GitHub / routing via `@Conxian/security-team`. |
+| **L1 - Minor** | Local configuration, documentation ambiguity, non-breaking CLI issues, or API telemetry updates. | < 24 Hours | < 48 Hours | General Support template on GitHub / routing to community maintainers. |
+
+All issues are routed and prioritized according to the administrative registry in [CODEOWNERS](./.github/CODEOWNERS). Technical compliance is managed under the policies described in [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md).
 
 ## Contact
 

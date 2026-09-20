@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.23] - 2026-08-18
+
+### Added
+- Added BitVM3 Garbled-Circuit Fraud Proof Verifier (`src/executor/bitvm3.rs`) and `/v1/verify/bitvm3` REST API endpoint for ~200B fast-dispute assertions.
+- **CON-804 x402 V2 Settlement Rail Payment Verifier**: Implemented `X402PaymentVerifier` in `src/verification/x402.rs` and exposed `/v1/settlement/x402/verify` REST endpoint for HTTP 402 payment authorization proofs, Schnorr payment signatures, satoshi amounts, expiration bounds, and replay protection nonces.
+- **CON-803 DLC Oracle Attestation Verification & CET Outcome Endpoint**: Upgraded `src/api/dlc.rs` to include cryptographic BIP-340 Schnorr signature verification for DLC Oracles and added `/v1/dlc/cet/verify` REST endpoint for CET outcome verification and payout calculation.
+- **CON-44 & NEXUS-ANALYTICS Unit Test Coverage Expansion**: Added unit test suites to `src/api/identity.rs` and `src/api/analytics.rs` testing BNS/ENS name lookup handlers, WorldID missing configuration fallbacks, unsupported protocol parameter validation, non-STX asset parameter rejection, and invalid analytics metric filtering.
+- **CON-70 ZKML Circuit-Key Verifier Execution**: Enabled Groth16 ZKCP verifier execution for ZKML compliance proofs (`src/api/zkml.rs`) with base64 key loading and hex commitment verification.
+- **Verification REST API Expansion**: Added `/v1/verify/zkcp` and `/v1/verify/op-cat` REST endpoints in `src/api/rest.rs` and documented schemas in `docs/openapi.yaml`.
+- **CON-1303 OP_CAT Recursive Covenants & Taproot Introspection Verifier**: Implemented `OpCatCovenantVerifier` in `src/verification/op_cat.rs` supporting script element concatenation simulation, max element bounds checking (≤ 520 bytes), recursion depth limits (≤ 16), and vault script state hash verification for Bitcoin.
+- **CON-1313 Zero-Knowledge Contingent Payments (ZKCP) SHA-256 Pre-Image Verifier**: Implemented `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 pre-image proof verification on BN254 curve (`ark-groth16` and `ark-bn254`).
+- **CON-1302 FROST Threshold Signatures & ROAST Orchestrator Integration**: Integrated `FrostSigningContext` into `src/orchestrator/roast.rs` supporting 2-round Schnorr threshold signing, participant timeout and fault isolation, cooperative subset selection, and BIP-340 Schnorr signature aggregation.
+- **Hole 2.1 Hardware Enclave X.509 DER Certificate Verification**: Upgraded `src/executor/mod.rs` to parse X.509 DER attestation certificates using `x509-cert`, enforce validity window bounds (`not_before` / `not_after`), and reject invalid or expired attestation envelopes.
+- **CON-1304 Fedimint Phase 2 Cryptographic Audit**: Implemented Fedimint e-cash blinded mint proof verification in `src/executor/fedimint.rs`, including prefix checks (`fed:`, `fed1:`), payload length validation, SHA-256 nonce hash derivation, double-spend detection against PostgreSQL, and audit persistence (`migrations/20260818000000_fedimint_mint_audit.sql`).
+- **NIP-005 Phase 2 Cryptographic Verification**: Upgraded EVM (MPT receipt proof Keccak-256 root matching) and Cosmos (IBC Tendermint base64 header SHA-256 digest computation) adapters to full cryptographic verification.
+- **CON-24 B2B Paid Subscription Tiers**: Implemented `Free`, `Pro`, and `Enterprise` subscription tiers with feature-gating for DLC, ZKML, Tableland, and canonical BitVM (`src/api/billing/mod.rs`).
+- **Lightning Network Tier Upgrades**: Added `/billing/upgrade` and `/billing/verify-payment` REST endpoints to facilitate automated tier upgrades settled via Lightning Network invoices.
+- **CON-1533 BitVM Groth16 Research Salvage**: Salvaged BitVM Groth16 research artifacts into unit test coverage and verifier integration.
+
+### Changed
+- Synchronized repository documentation (`docs/GAP_ANALYSIS.md`, `docs/RESEARCH.md`, and `CHANGELOG.md`) with v0.4.23 implementation state.
+
 ## [0.4.22] - 2026-07-15
 
 ### Changed
@@ -55,5 +77,3 @@
 - **Hole 4.1**: Expanded MEV audit logging with full transaction payloads and sequencer priority metadata.
 - **NIP-004**: Cryptographic dual-signature verification for release approvals and governance.
 - **NIP-007**: Safety Mode enforcement in the submission path.
-
-[Output truncated for brevity]

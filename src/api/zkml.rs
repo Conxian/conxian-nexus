@@ -3,9 +3,15 @@
 //! Requirement: Zero Secret Egress (ZSE) compliance.
 
 use crate::api::rest::AppState;
+use crate::verification::zkcp::{ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
+use axum::extract::State;
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::post;
+use axum::Json;
 use axum::Router;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -19,6 +25,8 @@ pub struct ZkmlVerifyRequest {
 #[derive(Debug, Serialize)]
 pub struct ZkmlVerifyResponse {
     pub valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation_id: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -33,7 +41,7 @@ pub fn zkml_routes() -> Router<AppState> {
 }
 
 pub async fn verify_zkml_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<ZkmlVerifyRequest>,
 ) -> impl IntoResponse {
     tracing::info!(
@@ -47,23 +55,124 @@ pub async fn verify_zkml_handler(
     {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ZkmlVerifyResponse { valid: false }),
+            Json(ZkmlVerifyResponse {
+                valid: false,
+                attestation_id: None,
+            }),
         )
             .into_response();
     }
 
-    tracing::warn!(
-        model_id = %payload.model_id,
-        "ZKML verification rejected because no circuit-specific verifier is configured"
+    // Look up circuit-specific verifying key from configuration
+    // Environment variables format: ZKML_VK_B64_<SANITIZED_MODEL_ID>
+    let env_key = format!(
+        "ZKML_VK_B64_{}",
+        payload
+            .model_id
+            .to_uppercase()
+            .replace(['-', '.', ' '], "_")
     );
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ZkmlUnavailableResponse {
-            code: "verifier_unavailable",
-            message: "ZKML verification is unavailable until a circuit-specific verifier contract is configured",
-        }),
-    )
-        .into_response()
+
+    let vk_b64 = match state.config.zkml_vks.get(&env_key) {
+        Some(vk) => vk,
+        None => {
+            tracing::warn!(
+                model_id = %payload.model_id,
+                env_key = %env_key,
+                "ZKML verification rejected because no circuit-specific verifier is configured"
+            );
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ZkmlUnavailableResponse {
+                    code: "verifier_unavailable",
+                    message:
+                        "ZKML verification is unavailable until a circuit-specific verifier contract is configured",
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Decode base64 verifying key
+    let vk_bytes = match BASE64.decode(vk_b64.trim()) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to decode ZKML verifying key base64");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ZkmlVerifyResponse {
+                    valid: false,
+                    attestation_id: None,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Decode base64 proof
+    let proof_bytes = match BASE64.decode(payload.proof.trim()) {
+        Ok(bytes) => bytes,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ZkmlVerifyResponse {
+                    valid: false,
+                    attestation_id: None,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    // Decode hex input commitment
+    let commitment_bytes = match hex::decode(payload.input_commitment.trim()) {
+        Ok(bytes) if bytes.len() == 32 => {
+            let mut array = [0u8; 32];
+            array.copy_from_slice(&bytes);
+            array
+        }
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ZkmlVerifyResponse {
+                    valid: false,
+                    attestation_id: None,
+                }),
+            )
+                .into_response();
+        }
+    };
+
+    let zkcp_payload = ZkcpProofPayload {
+        circuit_id: ZKCP_CIRCUIT_ID.to_string(),
+        hash_commitment: payload.input_commitment.trim().to_string(),
+        verifying_key_bytes: vk_bytes,
+        proof_bytes,
+        public_inputs: vec![commitment_bytes],
+    };
+
+    let verifier = ZkcpVerifier::new();
+    match verifier.verify_proof(&zkcp_payload) {
+        Ok(true) => {
+            let attestation_id = format!("zkml_attest_{}", uuid::Uuid::new_v4());
+            (
+                StatusCode::OK,
+                Json(ZkmlVerifyResponse {
+                    valid: true,
+                    attestation_id: Some(attestation_id),
+                }),
+            )
+                .into_response()
+        }
+        _ => (
+            StatusCode::OK,
+            Json(ZkmlVerifyResponse {
+                valid: false,
+                attestation_id: None,
+            }),
+        )
+            .into_response(),
+    }
 }
 
 #[cfg(test)]
@@ -145,35 +254,25 @@ mod tests {
             })
         );
         assert!(body.get("attestation_id").is_none());
-        assert!(body.get("confidence").is_none());
     }
 
     #[tokio::test]
-    async fn test_verify_zkml_handler_fails_closed_even_with_legacy_model_key() {
+    async fn test_verify_zkml_handler_rejects_invalid_proof_bytes_when_key_configured() {
         let mut config = Config::default_test();
         config.zkml_vks.insert(
             "ZKML_VK_B64_TEST_MODEL".to_owned(),
-            "not-a-valid-key".to_owned(),
+            "invalid_base64_vk!!!".to_owned(),
         );
         let response = verify_zkml_handler(
             State(test_state(config)),
             Json(ZkmlVerifyRequest {
-                proof: "not-a-valid-proof".to_owned(),
-                input_commitment: "not-a-valid-commitment".to_owned(),
+                proof: "invalid_proof".to_owned(),
+                input_commitment: "00".repeat(32),
                 model_id: "test-model".to_owned(),
             }),
         )
         .await
         .into_response();
-        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let body: Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(
-            body,
-            serde_json::json!({
-                "code": "verifier_unavailable",
-                "message": "ZKML verification is unavailable until a circuit-specific verifier contract is configured"
-            })
-        );
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 }

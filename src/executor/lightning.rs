@@ -139,6 +139,7 @@ impl LightningResilienceAdapter {
             (Recovering, _) => true,
             (Failed, Some(Transient)) if intent.retry_count < 3 => true,
             (Failed, Some(MppPartial)) => true,
+            (Failed, Some(Indeterminate)) => true,
             (Pending, _) => {
                 let age = Utc::now() - intent.created_at;
                 age.num_seconds() > 300 // 5 minutes
