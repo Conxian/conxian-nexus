@@ -47,7 +47,14 @@ where
     }
 
     match load_wallet() {
-        Ok(wallet) => Ok(Some(wallet)),
+        Ok(wallet) => {
+            if wallet.is_mock() && !allow_mock_key {
+                anyhow::bail!(
+                    "Diagnostic Error: {ENV_ORACLE_ENABLED}=1 resolved a mock/ephemeral Oracle signer key, which is forbidden for production. Configure a persistent, non-ephemeral signer in {ENV_CONXIAN_PRIVATE_KEY_HEX} (or legacy {ENV_NEXUS_PRIVATE_KEY}). For local development only, set {ENV_ORACLE_ALLOW_MOCK_KEY}=1 to allow the mock signer."
+                )
+            }
+            Ok(Some(wallet))
+        }
         Err(err) => {
             if allow_mock_key {
                 let mock_wallet = Wallet::mock();
@@ -212,12 +219,26 @@ async fn main() -> anyhow::Result<()> {
         let wallet = load_oracle_wallet_with(true, config.oracle_allow_mock_key, Wallet::new)?
             .expect("enabled Oracle always returns an injected wallet");
 
-        Some(Arc::new(OracleService::new(
+        let service = Arc::new(OracleService::new(
             storage.clone(),
             endpoint_url,
             contract_principal,
             wallet,
-        )))
+        ));
+        if config.oracle_allow_mock_key {
+            tracing::warn!(
+                "Oracle worker started with a MOCK signer (pubkey: {}, stacks address: {}). Do not use in production.",
+                service.signer_public_key(),
+                service.signer_stacks_address()
+            );
+        } else {
+            tracing::info!(
+                "Oracle worker started with verified non-ephemeral signer (pubkey: {}, stacks address: {})",
+                service.signer_public_key(),
+                service.signer_stacks_address()
+            );
+        }
+        Some(service)
     } else {
         None
     };
@@ -432,7 +453,7 @@ mod tests {
 
     fn fixed_wallet() -> Wallet {
         let mut key = [0_u8; 32];
-        key[31] = 1;
+        key[31] = 2; // scalar 2: a valid, non-mock signer
         Wallet::from_private_key_bytes(&key).expect("fixed test key")
     }
 
@@ -444,14 +465,33 @@ mod tests {
     }
 
     #[test]
-    fn enabled_oracle_accepts_valid_signer() {
+    fn enabled_oracle_accepts_valid_non_mock_signer() {
         let wallet = load_oracle_wallet_with(true, false, || Ok(fixed_wallet()))
             .expect("enabled Oracle signer")
             .expect("wallet");
+        assert!(!wallet.is_mock());
         assert_eq!(
             wallet.public_key(),
-            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+            Wallet::from_private_key_bytes(&{
+                let mut key = [0_u8; 32];
+                key[31] = 2;
+                key
+            })
+            .expect("valid key")
+            .public_key()
         );
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_mock_signer_when_flag_unset() {
+        let error = load_oracle_wallet_with(true, false, || Ok(Wallet::mock()))
+            .err()
+            .expect("mock signer rejected when flag unset");
+        let msg = error.to_string();
+        assert!(msg.contains("Diagnostic Error"));
+        assert!(msg.contains("mock"));
+        assert!(msg.contains("CONXIAN_PRIVATE_KEY_HEX"));
+        assert!(msg.contains("ORACLE_ALLOW_MOCK_KEY"));
     }
 
     #[test]
@@ -483,6 +523,18 @@ mod tests {
         let wallet = load_oracle_wallet_with(true, true, || anyhow::bail!("missing private key"))
             .expect("mock signer generated")
             .expect("wallet");
+        assert_eq!(
+            wallet.public_key(),
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
+    }
+
+    #[test]
+    fn enabled_oracle_accepts_explicit_mock_signer_when_flag_set() {
+        let wallet = load_oracle_wallet_with(true, true, || Ok(Wallet::mock()))
+            .expect("mock signer allowed when flag set")
+            .expect("wallet");
+        assert!(wallet.is_mock());
         assert_eq!(
             wallet.public_key(),
             "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"

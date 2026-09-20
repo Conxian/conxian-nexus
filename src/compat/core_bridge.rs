@@ -21,6 +21,14 @@ use sha2::{Digest, Sha256};
 pub const ENV_CONXIAN_PRIVATE_KEY_HEX: &str = "CONXIAN_PRIVATE_KEY_HEX";
 pub const ENV_NEXUS_PRIVATE_KEY: &str = "NEXUS_PRIVATE_KEY";
 
+/// Deterministic "mock" signer used only for local development. Its private key
+/// is the well-known scalar `1` and must never be used as a production signer.
+const MOCK_PRIVATE_KEY_BYTES: [u8; 32] = {
+    let mut key = [0_u8; 32];
+    key[31] = 1;
+    key
+};
+
 #[derive(Clone)]
 pub struct Wallet {
     signing_key: SigningKey,
@@ -32,9 +40,16 @@ impl Wallet {
     }
 
     pub fn mock() -> Self {
-        let mut key = [0_u8; 32];
-        key[31] = 1;
-        Self::from_private_key_bytes(&key).expect("canonical mock private key")
+        Self::from_private_key_bytes(&MOCK_PRIVATE_KEY_BYTES).expect("canonical mock private key")
+    }
+
+    /// Returns `true` if this wallet uses the deterministic mock/known signer.
+    ///
+    /// The mock signer is the publicly-known scalar `1` and is only safe for
+    /// local development. Oracle-worker startup rejects it unless mock keys are
+    /// explicitly allowed.
+    pub fn is_mock(&self) -> bool {
+        self.signing_key.to_bytes().as_slice() == MOCK_PRIVATE_KEY_BYTES.as_slice()
     }
 
     fn from_env_with<F>(read_env: F) -> anyhow::Result<Self>
@@ -61,6 +76,12 @@ impl Wallet {
     }
 
     pub fn from_private_key_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        if bytes.is_empty() {
+            anyhow::bail!("private key is empty (0 bytes)");
+        }
+        if bytes.iter().all(|&byte| byte == 0) {
+            anyhow::bail!("private key is zeroed (all-zero bytes are not a valid signer)");
+        }
         let signing_key = SigningKey::from_slice(bytes).with_context(|| "invalid private key")?;
         Ok(Self { signing_key })
     }
@@ -299,5 +320,34 @@ mod tests {
             error.to_string(),
             "missing private key env var: set CONXIAN_PRIVATE_KEY_HEX (or legacy NEXUS_PRIVATE_KEY)"
         );
+    }
+
+    #[test]
+    fn is_mock_is_true_only_for_the_canonical_mock_key() {
+        assert!(Wallet::mock().is_mock());
+        // scalar-1 is, by definition, the canonical mock key.
+        assert!(Wallet::from_private_key_bytes(&private_key_one())
+            .expect("valid key")
+            .is_mock());
+
+        let mut other = [0_u8; 32];
+        other[31] = 2;
+        assert!(!Wallet::from_private_key_bytes(&other)
+            .expect("valid key")
+            .is_mock());
+    }
+
+    #[test]
+    fn empty_and_zeroed_private_keys_are_rejected() {
+        let empty_err = Wallet::from_private_key_bytes(&[])
+            .err()
+            .expect("empty key rejected");
+        assert!(empty_err.to_string().contains("empty"));
+
+        let zeroed = [0_u8; 32];
+        let zeroed_err = Wallet::from_private_key_bytes(&zeroed)
+            .err()
+            .expect("zeroed key rejected");
+        assert!(zeroed_err.to_string().contains("zeroed"));
     }
 }
