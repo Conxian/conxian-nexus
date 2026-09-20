@@ -5,7 +5,8 @@ use conxian_nexus::compat::core_bridge::{
     Wallet, ENV_CONXIAN_PRIVATE_KEY_HEX, ENV_NEXUS_PRIVATE_KEY,
 };
 use conxian_nexus::config::{
-    Config, ENV_ORACLE_ALLOW_MOCK_KEY, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
+    Config, ENV_ORACLE_ALLOW_MOCK_KEY, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED,
+    ENV_ORACLE_ENDPOINT_URL,
 };
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::executor::{
@@ -467,9 +468,10 @@ mod tests {
 
     #[test]
     fn enabled_oracle_rejects_invalid_signer_with_diagnostic() {
-        let error = load_oracle_wallet_with(true, false, || Wallet::from_private_key_hex("not-hex"))
-            .err()
-            .expect("invalid signer rejected");
+        let error =
+            load_oracle_wallet_with(true, false, || Wallet::from_private_key_hex("not-hex"))
+                .err()
+                .expect("invalid signer rejected");
         let msg = error.to_string();
         assert!(msg.contains("Diagnostic Error"));
         assert!(msg.contains("CONXIAN_PRIVATE_KEY_HEX"));
