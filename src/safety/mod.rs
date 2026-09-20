@@ -34,15 +34,27 @@ pub async fn is_safety_mode_active(storage: &Storage) -> anyhow::Result<bool> {
 }
 
 impl NexusSafety {
+    /// Default maximum allowed drift (in blocks) before safety mode is triggered.
+    pub const MAX_DRIFT_BLOCKS: u64 = 2;
+
     /// Creates a new safety monitor with a default max drift of 2 blocks.
     pub fn new(storage: Arc<Storage>, rpc_url: String, gateway_url: Option<String>) -> Self {
         Self {
             storage,
-            max_drift: 2,
+            max_drift: Self::MAX_DRIFT_BLOCKS,
             rpc_url,
             gateway_url,
             http_client: Client::new(),
         }
+    }
+
+    /// Returns `true` when `delta` exceeds the allowed `max_drift` threshold.
+    ///
+    /// The threshold is strict: drift of exactly `max_drift` blocks is still
+    /// considered healthy; only drift strictly greater than `max_drift`
+    /// (i.e. `> 2` blocks under the default) triggers safety mode.
+    pub fn drift_exceeded(delta: u64, max_drift: u64) -> bool {
+        delta > max_drift
     }
 
     /// Runs the heartbeat monitor loop.
@@ -127,7 +139,7 @@ impl NexusSafety {
 
         let delta = Self::calculate_drift(current_burn_height, processed_height);
 
-        if delta > self.max_drift {
+        if Self::drift_exceeded(delta, self.max_drift) {
             tracing::error!(
                 "Sovereign Handoff Triggered! Delta: {} blocks (L1: {}, Local: {})",
                 delta,
@@ -259,6 +271,50 @@ mod tests {
         assert_eq!(NexusSafety::calculate_drift(100, 98), 2);
         assert_eq!(NexusSafety::calculate_drift(100, 102), 0);
         assert_eq!(NexusSafety::calculate_drift(100, 100), 0);
+        // Never underflow when the local height is ahead of the L1 tip.
+        assert_eq!(NexusSafety::calculate_drift(0, 5), 0);
+        assert_eq!(NexusSafety::calculate_drift(2, 200), 0);
+    }
+
+    #[test]
+    fn test_drift_threshold_at_default_max_drift() {
+        // Healthy: drift within or exactly at the 2-block threshold.
+        assert!(!NexusSafety::drift_exceeded(
+            0,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        assert!(!NexusSafety::drift_exceeded(
+            1,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        assert!(!NexusSafety::drift_exceeded(
+            2,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        // Triggered: drift strictly greater than 2 blocks.
+        assert!(NexusSafety::drift_exceeded(
+            3,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        assert!(NexusSafety::drift_exceeded(
+            4,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        assert!(NexusSafety::drift_exceeded(
+            10,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+        assert!(NexusSafety::drift_exceeded(
+            999,
+            NexusSafety::MAX_DRIFT_BLOCKS
+        ));
+    }
+
+    #[test]
+    fn test_drift_threshold_respects_custom_max_drift() {
+        assert!(!NexusSafety::drift_exceeded(5, 5));
+        assert!(NexusSafety::drift_exceeded(6, 5));
+        assert!(NexusSafety::drift_exceeded(1, 0));
     }
 }
 
