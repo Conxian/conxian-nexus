@@ -31,6 +31,12 @@ impl Wallet {
         Self::from_env_with(|name| std::env::var(name))
     }
 
+    pub fn mock() -> Self {
+        let mut key = [0_u8; 32];
+        key[31] = 1;
+        Self::from_private_key_bytes(&key).expect("canonical mock private key")
+    }
+
     fn from_env_with<F>(read_env: F) -> anyhow::Result<Self>
     where
         F: Fn(&str) -> Result<String, std::env::VarError>,
@@ -165,6 +171,19 @@ mod tests {
         let mut key = [0_u8; 32];
         key[31] = 2;
         hex::encode(key)
+    }
+
+    #[test]
+    fn mock_wallet_returns_valid_canonical_key() {
+        let wallet = Wallet::mock();
+        assert_eq!(
+            wallet.public_key(),
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
+        assert_eq!(
+            wallet.stacks_address_hash(),
+            "751e76e8199196d454941c45d1b3a323f1433bd6"
+        );
     }
 
     #[test]
