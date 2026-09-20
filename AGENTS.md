@@ -175,6 +175,32 @@ All 7 market enhancement phases implemented. Documentation in conxian_market@391
 > Nexus enclave attestation (PR #196) is the gating mechanism for Managed/Strict tier auto-execution.
 > See `conxian_market/docs/knowledge_base/trust_tier_pricing.md` §2 for tier detection flow.
 
+## Session 67 (2026-09-20) — Oracle signer hardening + multi-chain drift detection
+
+Completed the Oracle-worker signer hardening and drift/Lightning coverage that PR
+#312 (auto-merged earlier today) only partially delivered. Landed as **PR #313**
+(approved by `admin-conxian-labs`).
+
+- **`src/compat/core_bridge.rs`** — `Wallet::from_private_key_bytes` now rejects
+  empty and all-zero keys; added `Wallet::is_mock()` backed by a single
+  `MOCK_PRIVATE_KEY_BYTES` constant (scalar `1`). Tests:
+  `empty_and_zeroed_private_keys_are_rejected`, `is_mock_is_true_only_for_the_canonical_mock_key`.
+- **`src/oracle/aggregator.rs` + `src/oracle/mod.rs`** — exposed
+  `signer_public_key()` and `signer_stacks_address()` on both layers.
+- **`src/main.rs`** — Oracle startup rejects mock/ephemeral signers unless
+  `ORACLE_ALLOW_MOCK_KEY=1`; logs the verified non-ephemeral signer pubkey +
+  Stacks address (warn on mock). Signer-verification tests expanded
+  (`enabled_oracle_rejects_mock_signer_when_flag_unset`,
+  `enabled_oracle_accepts_explicit_mock_signer_when_flag_set`,
+  `enabled_oracle_accepts_valid_non_mock_signer`).
+- **`src/safety/mod.rs`** — added `MAX_DRIFT_BLOCKS` (`2`) + `drift_exceeded()`
+  (strict `> 2` blocks); `check_and_trigger_sovereign_handoff` now routes through
+  it. Added unit tests for threshold arithmetic.
+- **`tests/safety_drift_test.rs`** (new) — 7 integration tests for multi-chain
+  drift detection beyond 2 blocks.
+- CI green: rustfmt, clippy `-D warnings`, `cargo test --workspace`, Lightning
+  coverage ≥90%, Bitcoin coverage ≥92%.
+
 ## License
 BUSL-1.1 (Business Source License 1.1). Change Date: 2030-01-01. Change License: GPL-3.0-or-later.
 See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
