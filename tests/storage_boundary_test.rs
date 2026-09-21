@@ -54,4 +54,34 @@ mod tests {
         }
         env::remove_var("NEXUS_ALLOW_UNSAFE_DB");
     }
+
+    #[tokio::test]
+    async fn test_new_lazy_boundary_check() {
+        let res = Storage::new_lazy("postgres://localhost/db", "redis://remote.com@6379");
+        if let Err(e) = res {
+            let error_msg = e.to_string();
+            if error_msg.contains("Production boundary violation") {
+                println!(
+                    "Confirmed: Production boundary violation triggered for new_lazy PostgreSQL."
+                );
+            }
+        } else if !cfg!(debug_assertions) {
+            panic!("Storage::new_lazy should succeed only in debug mode without overrides");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_from_config_lazy_boundary_check_override() {
+        env::set_var("NEXUS_ALLOW_UNSAFE_DB", "1");
+        let mut config = conxian_nexus::config::Config::default_test();
+        config.database_url = "postgres://localhost/db".to_string();
+        config.redis_url = "redis://user:pass@remote.com:6379".to_string();
+
+        let res = Storage::from_config_lazy(&config);
+        assert!(
+            res.is_ok(),
+            "Storage::from_config_lazy with override should succeed"
+        );
+        env::remove_var("NEXUS_ALLOW_UNSAFE_DB");
+    }
 }

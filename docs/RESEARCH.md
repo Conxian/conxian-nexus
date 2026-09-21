@@ -1,54 +1,193 @@
-# Conxian Nexus Research & Improvement Proposals (Updated July 2026)
+# Conxian Nexus: Research & Architectural Evolution Plan (v0.4.23)
 
-## 1. Multi-Chain Interoperability (NIP-005)
+This document establishes the official research map, cryptographic specifications, and engineering boundaries for the Conxian Nexus platform.
 
-### 1.1 Bitcoin & BitVM2
-- **Concept**: Optimistic bridge research for trust-minimized Bitcoin L2s.
-- **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. The legacy `BitVMAdapter` is no longer active. Production verification remains unavailable pending an approved trusted Bitcoin-height source and reviewed production circuit/verifying-key artifacts.
+## 1. Multi-Chain Cryptographic Proof Verification
 
-### 1.2 Cosmos & IBC
-- **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication protocol.
-- **Implementation Path**: Utilize `ibc-rs` for Tendermint light client verification.
-- **Status**: Phase 2 (Cryptographic Verification) active in v0.4.23.
+### 1.1 BitVM2 Groth16 State Transition Verification
+- **Concept**: Verification of Groth16 zero-knowledge proofs for BitVM2 optimistic state transitions on Bitcoin.
+- **Implementation Path**: Real cryptographic verification of SNARK proofs against verified verifying keys using `ark-groth16` and BN254 curve in `src/executor/bitvm_groth16.rs`.
+- **Status**: The canonical BN254 boundary uses `ark-groth16` in `bitvm_groth16`, composed by `canonical_bitvm` for trusted-key lookup, height validation, audit persistence, and HTTP handling. Real cryptographic verification of Groth16 SNARK proofs against verified verifying keys is active.
 
-### 1.3 EVM Merkle Patricia Trie (MPT)
-- **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root.
-- **Implementation Path**: Use `trie_db` for MPT verification.
-- **Status**: Phase 2 (Cryptographic Verification) active in v0.4.23.
+### 1.2 Cosmos & IBC Header Verification
+- **Concept**: Trust-minimized cross-chain state proofs using the Inter-Blockchain Communication (IBC) protocol and Tendermint header validation.
+- **Implementation Path**: Decodes base64 Tendermint client update headers, computes SHA-256 header payload digests, and enforces strict block height progression (`latest_height > trusted_height`) with persistent audit logging in `cosmos_verified_client_updates`.
+- **Status**: **Upgraded to Cryptographic Verification (v0.4.23)** in `src/executor/cosmos.rs`.
+
+### 1.3 EVM Merkle Patricia Trie (MPT) Receipt Proof Verification
+- **Concept**: Verifying that a transaction receipt belongs to a specific block's receipt root via Merkle Patricia Trie (MPT) node hash chain verification.
+- **Implementation Path**: Parses hex-encoded proof nodes and receipt roots, verifies that node 0 Keccak-256 hash equals `receipt_root`, verifies parent-child hash linkages across the branch, and persists audit state in `evm_verified_receipts`.
+- **Status**: **Upgraded to Cryptographic Verification (v0.4.23)** in `src/executor/evm.rs`.
+
+### 1.4 Stacks & sBTC Integration (CON-1200)
+- **Concept**: Stacks 2.5/3.0 SIP alignment with passkey-based WebAuthn SECP256R1 authentication, contract bytecode hash verification, and sBTC peg-in/peg-out transaction verification.
+- **Implementation Path**:
+  - **Phase 1**: Structural validation of transaction IDs and positive sBTC amounts.
+  - **Phase 2 (v0.4.23 Upgrade)**:
+    1. Cryptographic validation of Stacks mainnet (`SP`) and testnet (`ST`) c32/bech32 address prefixes and length constraints.
+    2. Strict 0x-prefixed 32-byte transaction ID format verification.
+    3. Positive sBTC satoshi amount bounds and valid block height enforcement.
+    4. SQLx PostgreSQL persistence in `stacks_verified_transactions` table with duplicate transaction detection and immutable audit logging.
+- **Status**: **Upgraded to Phase 2 Cryptographic Audit & Database Persistence (v0.4.23)** in `src/executor/stacks.rs`.
 
 ## 2. Admin & Governance Hardening
 
 ### 2.1 Cryptographic Dual-Signatures (NIP-004)
-- **Status**: **COMPLETED v0.4.17**. Secp256k1 verification active for all write/governance endpoints.
+- **Status**: **COMPLETED v0.4.17**. Secp256k1 signature verification active for all write/governance endpoints using `k256`.
 
 ### 2.2 Admin Token Hardening (NIP-006)
-- **Status**: **COMPLETED v0.4.18**.
-- **Implementation**: Replaced static bearer token with a scoped credential pool (API Keys) issued via Dual-Signature login (`/admin/v1/login`). Scoped keys are prioritized; static fallback is restricted and flagged.
+- **Status**: **COMPLETED v0.4.18**. Replaced static bearer token with a scoped credential pool (API Keys) issued via Dual-Signature login (`/admin/v1/login`). Scoped keys are prioritized; static fallback is restricted and flagged in production.
 
 ## 3. Resilience & Failure Modes
 
 ### 3.1 SRL-1 Recovery Triggers (Hole 3.1)
-- **Status**: **COMPLETED v0.4.18**.
-- **Implementation**: Automatic recovery actions (Retry, Split-Recovery, Reconciliation) active via `AutonomousOrchestrator`.
+- **Status**: **COMPLETED v0.4.18**. Automatic recovery actions (Retry for transient errors, Split-Recovery for MPP failures, Reconciliation for indeterminate states) active via `AutonomousOrchestrator`.
 
-## 4. Smart Contract Language Evolution
-- **Clarity 4**: Transitioning to passkey-based auth and on-chain contract hashes.
-  - *Reference*: [Stacks 2.5/3.0 SIPs](https://github.com/stacksgov/sips)
+## 4. Smart Contract Language & Enclave Evolution
 
-## 5. Sovereign Persistence
-- **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated Redis in release builds.
-- **Tableland/Kwil**: Decentralized relational storage for audit trails and state commitments.
+### 4.1 Clarity 4 & Stacks Integration (CON-1200)
+- **Concept**: Stacks Clarity 4 contract verification and sBTC threshold transaction consensus.
+- **Status**: **Phase 2 Cryptographic Audit & Persistence Active** in `src/executor/stacks.rs`.
 
-## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304)
+### 4.2 Hardware Enclave Attestation Verification (Hole 2.1)
+- **Concept**: Hardware-backed X.509 attestation certificate verification for confidential execution requests originating from TEE enclaves.
+- **Specification & Design**:
+  1. Parse X.509 DER certificates submitted with `ExecutionRequest` payloads.
+  2. Verify attestation certificate chain against hardware root-of-trust (Intel SGX / AMD SEV-SNP).
+  3. Validate enclave measurement hashes against authorized workload measurements.
+  4. Enforce strict certificate validity window checks (`not_before` / `not_after`).
+- **Status**: **Upgraded to X.509 DER Cryptographic Verification (v0.4.23)** in `src/executor/mod.rs`. Decodes raw DER payloads using `x509-cert`, verifies certificate validity windows (`not_before` / `not_after`), and enforces strict attestation checks when `require_attestation` is set.
 
-### 6.1 FROST Threshold Signatures (CON-1302)
-- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures.
-- **Application**: Multi-sig vaults indistinguishable from single-sig on-chain.
+## 5. Sovereign Persistence & Storage Boundaries
+- **Hole 1.2 (Redis Auth)**: **COMPLETED v0.4.18**. Enforced authenticated remote Redis connections in production release builds.
+- **Tableland & Kwil**: Decentralized relational storage adapters for audit trails, state commitments, and sovereign OLTP persistence.
 
-### 6.2 OP_CAT Recursive Covenants (CON-1303)
-- **Concept**: BIP-347 proposes restoring `OP_CAT` to Bitcoin.
-- **Nexus Role**: Monitor OP_CAT-enabled spending conditions.
+## 6. Emerging Research Areas (CON-1302, CON-1303, CON-1304, CON-1313)
 
-### 6.3 Fedimint Community Liquidity (CON-1304)
-- **Concept**: Federated blinded mints issuing e-cash.
-- **Integration**: Federation Adapter using `fedimint-client` (Phase 1 Complete).
+### 6.1 Zero-Knowledge Contingent Payments (CON-1313 / G-50)
+- **Concept**: Fair exchange of digital goods and secrets against Bitcoin/Lightning payments using SNARK SHA-256 pre-image circuit verification.
+- **Cryptographic Pipeline**:
+  1. Seller constructs a SHA-256 pre-image circuit using `ark-groth16` proving key.
+  2. Buyer verifies Groth16 SNARK proof that hash `H(s) = Y` matches the payment HTLC hash condition.
+  3. Upon payment settlement on Bitcoin/Lightning, the secret pre-image `s` is extracted from the transaction input.
+- **Status**: **Active REST Endpoint (v0.4.23)** via `ZkcpVerifier` in `src/verification/zkcp.rs` supporting Groth16 SNARK SHA-256 preimage proof verification on BN254 curve.
+
+### 6.2 FROST Threshold Signatures (CON-1302)
+- **Concept**: Flexible Round-Optimized Schnorr Threshold Signatures for Taproot multi-party orchestration without revealing threshold policy structure on-chain.
+- **Protocol Specification**:
+  1. Two-round threshold signing protocol generating standard BIP-340 Schnorr signatures.
+  2. Integrates with ROAST (Robust Threshold Schnorr) orchestrator (`src/orchestrator/roast.rs`) for fault-tolerant participant set management:
+     - **Round 1 (Commitments)**: Collect participant nonce commitments within `commit_timeout`.
+     - **Filter & Exclude**: Exclude timed-out or faulty participants while verifying active candidates count >= `threshold`.
+     - **Round 2 (Shares & Aggregation)**: Dispatch signing package to cooperative subset and aggregate signature shares.
+     - **Fault Isolation**: Flag faulty nodes persistently across rounds; allow timed-out nodes to rejoin on round retries up to `max_retries`.
+  3. Indistinguishable on-chain from single-key Taproot key-path spending.
+- **Status**: **Production Cryptographic Verifier (v0.4.23)** via `FrostVerifier` in `src/verification/frost.rs` and `/v1/verify/frost` REST endpoint in `src/api/rest.rs`. Performs real cryptographic BIP-340 Schnorr signature verification over secp256k1 using `k256::schnorr::VerifyingKey` integrated with ROAST orchestrator in `src/orchestrator/roast.rs`.
+
+### 6.3 OP_CAT Recursive Covenants (CON-1303 / BIP-347)
+- **Concept**: Taproot script execution with OP_CAT covenant tree verification for vault spending restrictions and recursive contract state machines.
+- **Execution Model**:
+  1. Concatenates script elements using OP_CAT to construct transaction introspective checks.
+  2. Enforces stack element size limit (`MAX_STACK_ELEMENT_SIZE` = 520 bytes) and max recursion depth limit (`MAX_RECURSION_DEPTH` = 16).
+  3. Verifies combined script state hash commitments against expected vault covenant policy hashes on Bitcoin L1.
+- **Status**: **Active REST Endpoint (v0.4.23)** via `OpCatCovenantVerifier` in `src/verification/op_cat.rs`.
+
+### 6.4 Fedimint Community Liquidity & e-Cash Verification (CON-1304)
+- **Concept**: Federated blind signatures issuing untraceable e-cash for community privacy pools.
+- **Status**: **Phase 2 Cryptographic Audit Completed (v0.4.23)** in `src/executor/fedimint.rs`. Verifies blinded mint proofs, derives SHA-256 nonce digests, checks double-spending against `fedimint_verified_proofs` in SQLx, and logs immutable audit records.
+
+## 7. Production Alignment & Settlement Infrastructure (v0.4.23)
+
+### 7.1 Lightning Billing Settlement & BOLT11 Encodings (CON-24)
+- **Architecture**: B2B Subscription tier upgrades (`/api/billing/upgrade` and `/api/billing/verify-payment`) generate standard canonical `lnbc` BOLT11 payment requests.
+- **Verification Path**: Pending upgrade invoices map `invoice_id -> (api_key, target_tier, amount_sats)` inside Redis with 3600s TTL. Payment verification inspects persistent settlement state and migrates the API key tier (`apikey:<api_key>` field `tier`).
+
+### 7.2 gRPC Production Authorization & Storage Validation
+- **Architecture**: gRPC authentication via `grpc_auth_interceptor` and `NexusGrpcService::check_auth`.
+- **Enforcement Path**: Rejects unauthenticated metadata, enforces key length bounds (>= 16 chars), fails closed on Redis connection drops, and performs production credential lookup against Redis (`apikey:<api_key>`).
+
+## 8. Best Candidate Initialization Specifications
+
+### 8.1 Candidate 1: FROST Threshold Signature Productionization (CON-1302)
+- **Primary Domain**: Schnorr Taproot Threshold Signing (`src/orchestrator/roast.rs`)
+- **Impact Score**: 9/10
+- **Effort Score**: 6/10
+- **Candidate Status**: **Production Cryptographic Verifier (v0.4.23)**
+
+### 8.2 Candidate 2: ZKCP Pre-Image Circuit Verification (CON-1313 / G-50)
+- **Primary Domain**: Zero-Knowledge Contingent Payments (`src/verification/zkcp.rs`)
+- **Impact Score**: 8/10
+- **Effort Score**: 7/10
+- **Candidate Status**: **Production Cryptographic Verifier (v0.4.23)**
+
+### 8.3 Candidate 3: OP_CAT Recursive Covenant Verifier (CON-1303 / BIP-347)
+- **Primary Domain**: Bitcoin Taproot Covenants (`src/verification/op_cat.rs`)
+- **Impact Score**: 8/10
+- **Effort Score**: 7/10
+- **Candidate Status**: **Production Cryptographic Verifier (v0.4.23)**
+- **Architecture & Implementation Matrix**:
+  1. **Stack Concatenation Simulation**: Simulates `OP_CAT` execution by popping two top stack elements, concatenating $x_1 \parallel x_2$, checking max element bounds ($\le 520$ bytes), and pushing result back.
+  2. **Recursion Depth Bounds**: Restricts state tree depth to $\le 16$ levels to prevent stack overflow or expensive script execution loops.
+  3. **Script Hash State Verification**: Computes SHA-256 state commitment hash across resulting stack elements and optional target `scriptPubKey` to enforce vault spending covenant constraints.
+
+## 9. Identity & Analytics Test Suite Candidate (CON-44 / NEXUS-ANALYTICS)
+- **Primary Domain**: BNS/ENS Identity Resolution (`src/api/identity.rs`) and On-Chain Metrics (`src/api/analytics.rs`).
+- **Impact Score**: 8/10
+- **Effort Score**: 3/10
+- **Candidate Status**: **Completed (v0.4.23)** in PR #299.
+- **Specification**:
+  1. Add comprehensive unit tests for `resolve_identity_handler` covering BNS (404 / 502 / 200 paths), ENS, empty/missing WorldID app IDs, and bad protocol parameters.
+  2. Add unit tests for `get_metrics_handler` testing input validation, invalid asset rejection (e.g. non-STX assets), day parameter clamping, and unsupported metric names.
+
+## 10. External Settlement & DLC Bond Verification Candidate (CON-803 / NEXUS-SETTLEMENT-DLC)
+- **Primary Domain**: Settlement Routing Policy Enforcement (`src/api/settlement.rs`) and DLC Bond Lifecycle (`src/api/dlc.rs`).
+- **Impact Score**: 8/10
+- **Effort Score**: 3/10
+- **Candidate Status**: **Completed for Production Initialization (v0.4.23)**.
+- **Specification**:
+  1. Unit tests for `validate_routing_policy_metadata` covering CIPS/SPFS/SWIFT sanctions-risk normalization, unapproved bridge system rejections, T4 trust tier blocks, verification class mismatches, and missing required metadata fields.
+  2. Unit tests for `calculate_next_coupon_height` in `src/api/dlc.rs` for edge case block height intervals.
+
+## 11. x402 V2 Settlement Rail Payment Verifier Candidate (CON-804 / x402 V2)
+- **Primary Domain**: x402 V2 Payment Proof Verification (`src/verification/x402.rs`) and Settlement REST Route (`src/api/settlement.rs`).
+- **Impact Score**: 9/10
+- **Effort Score**: 4/10
+- **Candidate Status**: **Completed & Initialized in Production Code (v0.4.23)**.
+- **Specification & Architecture**:
+  1. **x402 V2 Authorization Envelope**: Parses `X402PaymentPayload` containing protocol ID `x402-v2-settlement-verifier`, payment scheme (`x402`, `lightning_bolt11`, `exact_sats`, `eip712`, `schnorr_taproot`), network, satoshi amount, payer/payee identities, replay protection nonce (min length 16), epoch timestamps, public key, and signature.
+  2. **Cryptographic BIP-340 Schnorr Signature Verification**: Computes SHA-256 digest over canonical payload string `x402:v2:{scheme}:{network}:{amount_sats}:{payer}:{payee}:{nonce}:{timestamp}` and verifies 64-byte Schnorr signature against 32-byte XOnly or 33-byte SEC1 public key using `k256::schnorr::VerifyingKey`.
+  3. **REST API Endpoint**: Exposes `/v1/settlement/x402/verify` returning `X402VerificationResponse` with issued authorization token `x402:v2:<nonce>:<digest>`.
+
+## 12. Move-Based Multi-Chain Adapters (Sui & Aptos - P1 Research)
+
+### 12.1 Sui Verification Adapter Architecture
+- **Verification Target**: BCS-encoded transaction certificates and Move Object digests.
+- **Cryptographic Primitives**: BLS12-381 aggregate validator signatures over Sui epoch state.
+- **Audit Persistence**: `sui_verified_transactions` SQLx table storing checkpoint sequence numbers, transaction digests, and mutated object hashes.
+
+### 12.2 Aptos Verification Adapter Architecture
+- **Verification Target**: Jellyfish Merkle Tree (JMT) proof nodes against `LedgerInfo` accumulator roots.
+- **Cryptographic Primitives**: SHA-3-256 state hashing and AptosBFT BLS12-381 multi-signatures.
+- **Audit Persistence**: `aptos_verified_transactions` SQLx table storing ledger version, state root hash, and resource change digests.
+
+## 5. Transactional Idempotency Locks & Distributed Conformance (#251)
+
+### 5.1 Architecture & Schema
+- **Target Schema**: `idempotency_locks` (`key VARCHAR(512) PRIMARY KEY`, `owner VARCHAR(256) NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `expires_at TIMESTAMPTZ NOT NULL`, `payload JSONB`).
+- **Atomic Operations**:
+  - `acquire_lock`: Executes conditional `INSERT ... ON CONFLICT (key) DO UPDATE` with `WHERE idempotency_locks.expires_at <= now() OR idempotency_locks.owner = EXCLUDED.owner`, guaranteeing strict single-worker ownership during lock duration.
+  - `extend_lock`: Atomic duration extension for existing unexpired lock owned by caller.
+  - `release_lock`: Deletes lock record matching `key` and `owner`.
+  - `get_lock`: Retrieves current lock state and payload metadata.
+- **Status**: **Completed (v0.4.23)** in `src/storage/idempotency.rs` and `migrations/20260912000000_idempotency_locks.sql`.
+
+
+## 13. BitVM3 Garbled-Circuit Fraud Proof Verifier (Candidate B)
+- **Primary Domain**: BitVM3 Garbled Circuit Fraud Dispute Verification (`src/executor/bitvm3.rs`) and `/v1/verify/bitvm3` REST API endpoint (`src/api/rest.rs`).
+- **Impact Score**: 9/10
+- **Effort Score**: 6/10
+- **Candidate Status**: **Completed & Initialized in Production Code (v0.4.23)**.
+- **Specification & Architecture**:
+  1. **Garbled Circuit Commitments**: Inspects `GateCommitment` entries (`And`, `Xor`, `Nand` gate types) and verifies garbled table hashes using SHA-256 over `gate_id || challenge_nonce || label0 || label1 || claimed_output_label`.
+  2. **Equivocation & Dispute Assertion**: Evaluates expected gate output logic against input wire labels and verifies if the prover's claimed output label or value equivocates. If fraud is detected, issues a signed `Bitvm3VerificationResponse` proving fraud on-chain with a ~200B dispute assertion.
+  3. **REST API Endpoint**: Exposes `/v1/verify/bitvm3` accepting `Bitvm3VerificationPayload` and returning `Bitvm3VerificationResponse`.

@@ -7,45 +7,10 @@
 //!
 //! # Core v0.3.0 canonical types
 //!
-//! Use `lib_conxian_core::control_model` for canonical chain identity, trust
-//! tier, bridge system, and verification types. The `core_types` sub-module
-//! re-exports the most commonly needed items for Nexus observation boundaries.
-
-/// Re-exports of canonical Core v0.3.0 types for Nexus observation and
-/// verification boundaries. These are the single source of truth for chain
-/// identity across the Conxian ecosystem.
-pub mod core_types {
-    pub use lib_conxian_core::control_model::{
-        chain_family_for, BridgeSystem, Chain, ChainFamily, FinalityClass, TrustTier,
-        VerificationClass, VerificationStatus,
-    };
-    pub use lib_conxian_core::signing::{SignerCapabilities, SigningAlgorithm, SigningTarget};
-    pub use lib_conxian_core::verifier::{
-        ChainId, ProofVerificationRequest, ProofVerificationResult, ProtocolVerifier,
-        ProtocolVerifierBackend, ProtocolVerifierError, TransactionFinalityStatus,
-        VerifiedBlockReference, VerifierCapabilities, VerifierCapability,
-    };
-
-    /// Anchoring primitives for state-root persistence (Tableland, on-chain).
-    pub use lib_conxian_core::anchoring::{
-        AnchoringError, AnchoringPublication, AnchoringPublisher, AnchoringReceipt,
-        AnchoringRequest, AnchoringTarget, OnChainAnchoringPublisher, TablelandAnchoringPublisher,
-    };
-
-    pub use lib_conxian_core::bitcoin::bip322;
-    /// Bitcoin-native protocol primitives (BIP-322, Taproot, Liquid).
-    pub use lib_conxian_core::bitcoin::taproot;
-
-    pub use lib_conxian_core::protocol::covenant;
-    /// Protocol primitives (DLC, FROST, covenants, intents).
-    pub use lib_conxian_core::protocol::dlc;
-    pub use lib_conxian_core::protocol::frost;
-    pub use lib_conxian_core::protocol::intent;
-
-    pub use lib_conxian_core::adapters;
-    /// Chain adapters for multi-chain observation.
-    pub use lib_conxian_core::lightning::LightningAdapter;
-}
+//! Canonical chain identity, trust tier, bridge system, verification, and risk
+//! classification types are consumed through the [`crate::verification`]
+//! module, which wraps `lib_conxian_core` primitives for Nexus's observation
+//! and proof boundaries.
 
 use anyhow::Context;
 use k256::ecdsa::{signature::Signer, Signature, SigningKey};
@@ -56,6 +21,14 @@ use sha2::{Digest, Sha256};
 pub const ENV_CONXIAN_PRIVATE_KEY_HEX: &str = "CONXIAN_PRIVATE_KEY_HEX";
 pub const ENV_NEXUS_PRIVATE_KEY: &str = "NEXUS_PRIVATE_KEY";
 
+/// Deterministic "mock" signer used only for local development. Its private key
+/// is the well-known scalar `1` and must never be used as a production signer.
+const MOCK_PRIVATE_KEY_BYTES: [u8; 32] = {
+    let mut key = [0_u8; 32];
+    key[31] = 1;
+    key
+};
+
 #[derive(Clone)]
 pub struct Wallet {
     signing_key: SigningKey,
@@ -64,6 +37,19 @@ pub struct Wallet {
 impl Wallet {
     pub fn new() -> anyhow::Result<Self> {
         Self::from_env_with(|name| std::env::var(name))
+    }
+
+    pub fn mock() -> Self {
+        Self::from_private_key_bytes(&MOCK_PRIVATE_KEY_BYTES).expect("canonical mock private key")
+    }
+
+    /// Returns `true` if this wallet uses the deterministic mock/known signer.
+    ///
+    /// The mock signer is the publicly-known scalar `1` and is only safe for
+    /// local development. Oracle-worker startup rejects it unless mock keys are
+    /// explicitly allowed.
+    pub fn is_mock(&self) -> bool {
+        self.signing_key.to_bytes().as_slice() == MOCK_PRIVATE_KEY_BYTES.as_slice()
     }
 
     fn from_env_with<F>(read_env: F) -> anyhow::Result<Self>
@@ -90,6 +76,12 @@ impl Wallet {
     }
 
     pub fn from_private_key_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        if bytes.is_empty() {
+            anyhow::bail!("private key is empty (0 bytes)");
+        }
+        if bytes.iter().all(|&byte| byte == 0) {
+            anyhow::bail!("private key is zeroed (all-zero bytes are not a valid signer)");
+        }
         let signing_key = SigningKey::from_slice(bytes).with_context(|| "invalid private key")?;
         Ok(Self { signing_key })
     }
@@ -200,6 +192,19 @@ mod tests {
         let mut key = [0_u8; 32];
         key[31] = 2;
         hex::encode(key)
+    }
+
+    #[test]
+    fn mock_wallet_returns_valid_canonical_key() {
+        let wallet = Wallet::mock();
+        assert_eq!(
+            wallet.public_key(),
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
+        assert_eq!(
+            wallet.stacks_address_hash(),
+            "751e76e8199196d454941c45d1b3a323f1433bd6"
+        );
     }
 
     #[test]
@@ -315,5 +320,34 @@ mod tests {
             error.to_string(),
             "missing private key env var: set CONXIAN_PRIVATE_KEY_HEX (or legacy NEXUS_PRIVATE_KEY)"
         );
+    }
+
+    #[test]
+    fn is_mock_is_true_only_for_the_canonical_mock_key() {
+        assert!(Wallet::mock().is_mock());
+        // scalar-1 is, by definition, the canonical mock key.
+        assert!(Wallet::from_private_key_bytes(&private_key_one())
+            .expect("valid key")
+            .is_mock());
+
+        let mut other = [0_u8; 32];
+        other[31] = 2;
+        assert!(!Wallet::from_private_key_bytes(&other)
+            .expect("valid key")
+            .is_mock());
+    }
+
+    #[test]
+    fn empty_and_zeroed_private_keys_are_rejected() {
+        let empty_err = Wallet::from_private_key_bytes(&[])
+            .err()
+            .expect("empty key rejected");
+        assert!(empty_err.to_string().contains("empty"));
+
+        let zeroed = [0_u8; 32];
+        let zeroed_err = Wallet::from_private_key_bytes(&zeroed)
+            .err()
+            .expect("zeroed key rejected");
+        assert!(zeroed_err.to_string().contains("zeroed"));
     }
 }

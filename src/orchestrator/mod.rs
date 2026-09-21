@@ -1,6 +1,8 @@
 //! [NEXUS-ORCH-01] Autonomous Orchestrator for Glass Node self-healing.
 //! Monitors internal services and manages fail-closed/recovery states.
 
+pub mod roast;
+
 use crate::api::billing::nostr::NostrTelemetry;
 use crate::state::NexusState;
 use crate::storage::Storage;
@@ -175,4 +177,3 @@ impl AutonomousOrchestrator {
         Ok(())
     }
 }
-pub mod roast;

@@ -15,6 +15,8 @@
 - `CODEOWNERS`
 - `SECURITY.md`
 - `SUPPORT.md`
+- `docs/RELEASE.md`
+- `CHANGELOG.md`
 - `.github/ISSUE_TEMPLATE/**`
 - `.github/PULL_REQUEST_TEMPLATE*`
 - `.github/workflows/**`

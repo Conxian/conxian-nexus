@@ -5,13 +5,14 @@ use conxian_nexus::compat::core_bridge::{
     Wallet, ENV_CONXIAN_PRIVATE_KEY_HEX, ENV_NEXUS_PRIVATE_KEY,
 };
 use conxian_nexus::config::{
-    Config, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED, ENV_ORACLE_ENDPOINT_URL,
+    Config, ENV_ORACLE_ALLOW_MOCK_KEY, ENV_ORACLE_CONTRACT_PRINCIPAL, ENV_ORACLE_ENABLED,
+    ENV_ORACLE_ENDPOINT_URL,
 };
 use conxian_nexus::executor::NexusExecutor;
 use conxian_nexus::executor::{
     bitvm_groth16::CanonicalStateTransitionVerifier,
     canonical_bitvm::{
-        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, UnavailableBitcoinHeightProvider,
+        CanonicalBitvmService, PostgresCanonicalBitvmReceiptStore, StacksBitcoinHeightProvider,
     },
 };
 use conxian_nexus::oracle::OracleService;
@@ -35,6 +36,7 @@ use tracing_subscriber::{prelude::*, EnvFilter};
 
 fn load_oracle_wallet_with<F>(
     oracle_enabled: bool,
+    allow_mock_key: bool,
     load_wallet: F,
 ) -> anyhow::Result<Option<Wallet>>
 where
@@ -44,15 +46,37 @@ where
         return Ok(None);
     }
 
-    load_wallet().map(Some).with_context(|| {
-        format!(
-            "{ENV_ORACLE_ENABLED}=1 requires {ENV_CONXIAN_PRIVATE_KEY_HEX} or legacy {ENV_NEXUS_PRIVATE_KEY}"
-        )
-    })
+    match load_wallet() {
+        Ok(wallet) => {
+            if wallet.is_mock() && !allow_mock_key {
+                anyhow::bail!(
+                    "Diagnostic Error: {ENV_ORACLE_ENABLED}=1 resolved a mock/ephemeral Oracle signer key, which is forbidden for production. Configure a persistent, non-ephemeral signer in {ENV_CONXIAN_PRIVATE_KEY_HEX} (or legacy {ENV_NEXUS_PRIVATE_KEY}). For local development only, set {ENV_ORACLE_ALLOW_MOCK_KEY}=1 to allow the mock signer."
+                )
+            }
+            Ok(Some(wallet))
+        }
+        Err(err) => {
+            if allow_mock_key {
+                let mock_wallet = Wallet::mock();
+                tracing::warn!(
+                    "ORACLE_ENABLED=1 is set without a valid private key, but mock key generator flag is enabled ({ENV_ORACLE_ALLOW_MOCK_KEY}=1). Generated mock Oracle signer key (pubkey: {}).",
+                    mock_wallet.public_key()
+                );
+                Ok(Some(mock_wallet))
+            } else {
+                anyhow::bail!(
+                    "Diagnostic Error: {ENV_ORACLE_ENABLED}=1 is enabled, but no valid private key was found in {ENV_CONXIAN_PRIVATE_KEY_HEX} or legacy {ENV_NEXUS_PRIVATE_KEY}. Cause: {err:#}. For local development, set {ENV_ORACLE_ALLOW_MOCK_KEY}=1 (or ORACLE_GENERATE_MOCK_KEY=1) to generate a mock Oracle signer key automatically."
+                )
+            }
+        }
+    }
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
     // Load environment variables
     dotenvy::dotenv().ok();
 
@@ -123,12 +147,15 @@ async fn main() -> anyhow::Result<()> {
         let service = CanonicalBitvmService::new(
             Arc::new(CanonicalStateTransitionVerifier::new(Arc::new(registry))),
             expected_network,
-            Arc::new(UnavailableBitcoinHeightProvider),
+            Arc::new(StacksBitcoinHeightProvider::new(
+                config.stacks_node_rpc_url.clone(),
+            )),
             Arc::new(PostgresCanonicalBitvmReceiptStore::new(storage.clone())),
         );
         executor = executor.with_canonical_bitvm_service(Arc::new(service));
-        tracing::warn!(
-            "Canonical BitVM registry loaded, but verification remains unavailable until a reviewed trusted Bitcoin-height provider is wired"
+        tracing::info!(
+            "Canonical BitVM registry loaded with Stacks-derived Bitcoin height provider (RPC: {})",
+            config.stacks_node_rpc_url
         );
     } else {
         tracing::info!(
@@ -189,15 +216,29 @@ async fn main() -> anyhow::Result<()> {
         let contract_principal = config.oracle_contract_principal.clone().with_context(|| {
             format!("{ENV_ORACLE_ENABLED}=1 requires {ENV_ORACLE_CONTRACT_PRINCIPAL}")
         })?;
-        let wallet = load_oracle_wallet_with(true, Wallet::new)?
+        let wallet = load_oracle_wallet_with(true, config.oracle_allow_mock_key, Wallet::new)?
             .expect("enabled Oracle always returns an injected wallet");
 
-        Some(Arc::new(OracleService::new(
+        let service = Arc::new(OracleService::new(
             storage.clone(),
             endpoint_url,
             contract_principal,
             wallet,
-        )))
+        ));
+        if config.oracle_allow_mock_key {
+            tracing::warn!(
+                "Oracle worker started with a MOCK signer (pubkey: {}, stacks address: {}). Do not use in production.",
+                service.signer_public_key(),
+                service.signer_stacks_address()
+            );
+        } else {
+            tracing::info!(
+                "Oracle worker started with verified non-ephemeral signer (pubkey: {}, stacks address: {})",
+                service.signer_public_key(),
+                service.signer_stacks_address()
+            );
+        }
+        Some(service)
     } else {
         None
     };
@@ -412,21 +453,75 @@ mod tests {
 
     fn fixed_wallet() -> Wallet {
         let mut key = [0_u8; 32];
-        key[31] = 1;
+        key[31] = 2; // scalar 2: a valid, non-mock signer
         Wallet::from_private_key_bytes(&key).expect("fixed test key")
     }
 
     #[test]
     fn disabled_oracle_does_not_load_signer() {
-        let wallet = load_oracle_wallet_with(false, || panic!("signer loader must not run"))
+        let wallet = load_oracle_wallet_with(false, false, || panic!("signer loader must not run"))
             .expect("disabled Oracle");
         assert!(wallet.is_none());
     }
 
     #[test]
-    fn enabled_oracle_accepts_valid_signer() {
-        let wallet = load_oracle_wallet_with(true, || Ok(fixed_wallet()))
+    fn enabled_oracle_accepts_valid_non_mock_signer() {
+        let wallet = load_oracle_wallet_with(true, false, || Ok(fixed_wallet()))
             .expect("enabled Oracle signer")
+            .expect("wallet");
+        assert!(!wallet.is_mock());
+        assert_eq!(
+            wallet.public_key(),
+            Wallet::from_private_key_bytes(&{
+                let mut key = [0_u8; 32];
+                key[31] = 2;
+                key
+            })
+            .expect("valid key")
+            .public_key()
+        );
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_mock_signer_when_flag_unset() {
+        let error = load_oracle_wallet_with(true, false, || Ok(Wallet::mock()))
+            .err()
+            .expect("mock signer rejected when flag unset");
+        let msg = error.to_string();
+        assert!(msg.contains("Diagnostic Error"));
+        assert!(msg.contains("mock"));
+        assert!(msg.contains("CONXIAN_PRIVATE_KEY_HEX"));
+        assert!(msg.contains("ORACLE_ALLOW_MOCK_KEY"));
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_missing_signer_with_diagnostic() {
+        let error = load_oracle_wallet_with(true, false, || anyhow::bail!("missing private key"))
+            .err()
+            .expect("missing signer rejected");
+        let msg = error.to_string();
+        assert!(msg.contains("Diagnostic Error"));
+        assert!(msg.contains("CONXIAN_PRIVATE_KEY_HEX"));
+        assert!(msg.contains("NEXUS_PRIVATE_KEY"));
+        assert!(msg.contains("ORACLE_ALLOW_MOCK_KEY"));
+    }
+
+    #[test]
+    fn enabled_oracle_rejects_invalid_signer_with_diagnostic() {
+        let error =
+            load_oracle_wallet_with(true, false, || Wallet::from_private_key_hex("not-hex"))
+                .err()
+                .expect("invalid signer rejected");
+        let msg = error.to_string();
+        assert!(msg.contains("Diagnostic Error"));
+        assert!(msg.contains("CONXIAN_PRIVATE_KEY_HEX"));
+        assert!(msg.contains("ORACLE_ALLOW_MOCK_KEY"));
+    }
+
+    #[test]
+    fn enabled_oracle_uses_mock_signer_when_flag_set() {
+        let wallet = load_oracle_wallet_with(true, true, || anyhow::bail!("missing private key"))
+            .expect("mock signer generated")
             .expect("wallet");
         assert_eq!(
             wallet.public_key(),
@@ -435,19 +530,14 @@ mod tests {
     }
 
     #[test]
-    fn enabled_oracle_rejects_missing_signer() {
-        let error = load_oracle_wallet_with(true, || anyhow::bail!("missing private key"))
-            .err()
-            .expect("missing signer rejected");
-        assert!(error.to_string().contains("CONXIAN_PRIVATE_KEY_HEX"));
-        assert!(error.to_string().contains("NEXUS_PRIVATE_KEY"));
-    }
-
-    #[test]
-    fn enabled_oracle_rejects_invalid_signer() {
-        let error = load_oracle_wallet_with(true, || Wallet::from_private_key_hex("not-hex"))
-            .err()
-            .expect("invalid signer rejected");
-        assert!(error.to_string().contains("CONXIAN_PRIVATE_KEY_HEX"));
+    fn enabled_oracle_accepts_explicit_mock_signer_when_flag_set() {
+        let wallet = load_oracle_wallet_with(true, true, || Ok(Wallet::mock()))
+            .expect("mock signer allowed when flag set")
+            .expect("wallet");
+        assert!(wallet.is_mock());
+        assert_eq!(
+            wallet.public_key(),
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        );
     }
 }

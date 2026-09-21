@@ -10,6 +10,7 @@ async fn test_execution_request_priority_serialization() {
         sender: "alice".to_string(),
         priority: 10,
         attestation_certificate: None,
+        expected_enclave_measurement: None,
     };
     let json = serde_json::to_string(&req).unwrap();
     let deserialized: ExecutionRequest = serde_json::from_str(&json).unwrap();

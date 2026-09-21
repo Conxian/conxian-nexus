@@ -1,9 +1,10 @@
 //! [CON-473] PoC: Nostr relay + collector bridge for Nexus telemetry.
 //! Publishes and consumes signed telemetry events from a Nostr relay.
-//! Updated for nostr-sdk v0.43.0.
+//! Updated for nostr-sdk v0.45.0.
 
 use crate::storage::Storage;
 use anyhow::{anyhow, Context};
+use futures_util::StreamExt;
 use nostr_sdk::prelude::*;
 use serde_json::json;
 use std::sync::Arc;
@@ -60,6 +61,7 @@ fn determine_bridge_action(is_new: bool, api_key_exists: bool) -> BridgeAction {
 
 pub struct NostrTelemetry {
     client: Client,
+    keys: Keys,
     pubkey_bech32: String,
 }
 
@@ -71,7 +73,7 @@ impl NostrTelemetry {
             .to_bech32()
             .context("Failed to encode pubkey")?;
 
-        let client = Client::builder().signer(keys).build();
+        let client = Client::new();
         for relay in relays {
             client.add_relay(relay).await?;
         }
@@ -79,6 +81,7 @@ impl NostrTelemetry {
 
         Ok(Self {
             client,
+            keys,
             pubkey_bech32,
         })
     }
@@ -97,17 +100,19 @@ impl NostrTelemetry {
         })
         .to_string();
 
-        // Updated for nostr-sdk v0.43.0: EventBuilder::new takes kind and content
+        // Updated for nostr-sdk v0.45: EventBuilder::new takes kind and content;
+        // sign explicitly with `finalize`, then send the signed event.
         let builder = EventBuilder::new(telemetry_event_kind(), content);
-        let event = self.client.send_event_builder(builder).await?;
-        let event_id = event.id();
+        let event = builder.finalize(&self.keys)?;
+        let event_id = event.id;
+        self.client.send_event(&event).await?;
 
         tracing::info!(
             "Published telemetry to Nostr. EventId: {:?}, PubKey: {}",
             event_id,
             self.pubkey_bech32
         );
-        Ok(*event_id)
+        Ok(event_id)
     }
 
     /// [NEXUS-04] Sovereign Health Reporting via Nostr.
@@ -127,17 +132,18 @@ impl NostrTelemetry {
         })
         .to_string();
 
-        // Updated for nostr-sdk v0.43.0: EventBuilder::new takes kind and content
+        // Updated for nostr-sdk v0.45: sign explicitly then send the signed event.
         let builder = EventBuilder::new(health_event_kind(), content);
-        let event = self.client.send_event_builder(builder).await?;
-        let event_id = event.id();
+        let event = builder.finalize(&self.keys)?;
+        let event_id = event.id;
+        self.client.send_event(&event).await?;
 
         tracing::info!(
             "Reported health to Nostr. EventId: {:?}, Status: {}",
             event_id,
             status
         );
-        Ok(*event_id)
+        Ok(event_id)
     }
 
     pub async fn shutdown(&self) -> anyhow::Result<()> {
@@ -166,14 +172,14 @@ impl NostrCollector {
 
     pub async fn run(&self) -> anyhow::Result<()> {
         let filter = Filter::new().kind(telemetry_event_kind());
-        // nostr-sdk v0.43.0 subscribe expects a Filter (not a Vec)
-        self.client.subscribe(filter, None).await?;
+        // nostr-sdk v0.45 subscribe expects a single target (Filter)
+        self.client.subscribe(filter).await?;
 
         tracing::info!("Nostr Collector started, listening for telemetry events (Kind 26001)...");
 
         let mut notifications = self.client.notifications();
-        while let Ok(notification) = notifications.recv().await {
-            if let RelayPoolNotification::Event { event, .. } = notification {
+        while let Some(notification) = notifications.next().await {
+            if let ClientNotification::Event { event, .. } = notification {
                 if is_telemetry_kind(event.kind) {
                     if let Err(e) = self.handle_telemetry_event(*event).await {
                         tracing::error!("Failed to handle Nostr telemetry event: {}", e);
