@@ -1,5 +1,5 @@
-//! [CON-162] External Settlement Trigger Module.
-//! Handles ISO 20022, PAPSS, and BRICS triggers for TEE-verified proposals.
+//! [CON-162] External Settlement Trigger & x402 V2 Settlement Rail Verification Module.
+//! Handles ISO 20022, PAPSS, BRICS triggers, and x402 V2 payment proof verification.
 
 use crate::api::rest::AppState;
 use crate::storage::kwil::{KwilSettlementLogCommitment, KwilSettlementProposalCommitment};
@@ -18,6 +18,74 @@ pub struct ExternalSettlementTrigger {
     pub external_id: String,
     pub payload: serde_json::Value,
     pub attestation: String, // TEE Attestation
+}
+
+/// Typed settlement source network (CON-1351: CIPS/SPFS vs SWIFT normalization).
+/// Backward-compatible with the legacy free-form `source` values
+/// ("ISO20022", "PAPSS", "BRICS").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SettlementSource {
+    /// SWIFT network (ISO 20022 `pacs`/`camt` messages).
+    Swift,
+    /// China's Cross-Border Interbank Payment System (ISO 20022 with CIPS extensions).
+    Cips,
+    /// Russia's System for Transfer of Financial Messages (ISO 20022 with SPFS extensions).
+    Spfs,
+    /// Pan-African Payment and Settlement System.
+    Papss,
+    /// BRICS regional settlement network ingestion.
+    Brics,
+}
+
+impl SettlementSource {
+    /// Parse a settlement source from the legacy free-form value, fail-closed on unknown.
+    pub fn parse(value: &str) -> Option<Self> {
+        match normalize_policy_token(value).as_str() {
+            "iso20022" | "iso_20022" | "swift" => Some(Self::Swift),
+            "cips" => Some(Self::Cips),
+            "spfs" => Some(Self::Spfs),
+            "papss" => Some(Self::Papss),
+            "brics" => Some(Self::Brics),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Swift => "SWIFT",
+            Self::Cips => "CIPS",
+            Self::Spfs => "SPFS",
+            Self::Papss => "PAPSS",
+            Self::Brics => "BRICS",
+        }
+    }
+
+    /// Sanctions-risk classification for downstream policy (CON-1351).
+    pub fn sanctions_risk(self) -> SanctionsRisk {
+        match self {
+            Self::Swift | Self::Papss => SanctionsRisk::Low,
+            Self::Cips | Self::Brics => SanctionsRisk::Elevated,
+            Self::Spfs => SanctionsRisk::High,
+        }
+    }
+}
+
+/// Sanctions-risk tier attached to each settlement source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SanctionsRisk {
+    Low,
+    Elevated,
+    High,
+}
+
+impl SanctionsRisk {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Low => "low",
+            Self::Elevated => "elevated",
+            Self::High => "high",
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -409,10 +477,26 @@ pub fn validate_routing_policy_metadata(
     })
 }
 
-/// [CON-162] Handles external settlement triggers.
-/// Verifies TEE attestation and initiates a 144-block time-lock proposal.
+/// [CON-162 / CON-804] Router for external settlement triggers and x402 V2 payment verification.
 pub fn settlement_routes() -> Router<AppState> {
-    Router::new().route("/trigger", post(settlement_trigger_handler))
+    Router::new()
+        .route("/trigger", post(settlement_trigger_handler))
+        .route("/x402/verify", post(verify_x402_settlement_handler))
+}
+
+/// [CON-804] Verifies x402 V2 HTTP payment authorization proofs.
+pub async fn verify_x402_settlement_handler(
+    Json(payload): Json<crate::verification::X402PaymentPayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::X402PaymentVerifier::new();
+    match verifier.verify_payment_proof(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "is_valid": false })),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn settlement_trigger_handler(
@@ -440,6 +524,34 @@ pub async fn settlement_trigger_handler(
         )
             .into_response();
     }
+
+    // 1b. Parse + validate the settlement source (fail-closed on unknown) [CON-1351]
+    let settlement_source = match SettlementSource::parse(&payload.source) {
+        Some(source) => source,
+        None => {
+            tracing::warn!(
+                source = %payload.source,
+                external_id = %payload.external_id,
+                "Unknown settlement source rejected"
+            );
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(SettlementProposalResponse {
+                    proposal_id: "".to_string(),
+                    status: "Rejected".to_string(),
+                    unlock_height: 0,
+                    message: "Unknown settlement source.".to_string(),
+                    policy_rejection: None,
+                }),
+            )
+                .into_response();
+        }
+    };
+    tracing::info!(
+        source = settlement_source.as_str(),
+        sanctions_risk = settlement_source.sanctions_risk().as_str(),
+        "Settlement source normalized and tagged"
+    );
 
     // 2. Enforce routing policy metadata before oracle checks and DB writes [CON-803]
     let routing_policy = match validate_routing_policy_metadata(&payload.payload) {
@@ -534,7 +646,7 @@ pub async fn settlement_trigger_handler(
          VALUES ($1, $2, $3, $4)",
     )
     .bind(&external_tx_ref)
-    .bind(&payload.source)
+    .bind(settlement_source.as_str())
     .bind(fiat_value)
     .bind(&payload.payload)
     .execute(&state.storage.pg_pool)
@@ -545,7 +657,7 @@ pub async fn settlement_trigger_handler(
         let _ = kwil
             .persist_settlement_log(KwilSettlementLogCommitment {
                 external_tx_reference: external_tx_ref,
-                settlement_network_origin: payload.source.clone(),
+                settlement_network_origin: settlement_source.as_str().to_string(),
                 fiat_value_pegged: fiat_value,
                 raw_payload: payload.payload.clone(),
             })
@@ -575,7 +687,7 @@ pub async fn settlement_trigger_handler(
     )
     .bind(&proposal_id)
     .bind(&payload.external_id)
-    .bind(&payload.source)
+    .bind(settlement_source.as_str())
     .bind(&payload.payload)
     .bind(current_height)
     .bind(unlock_height as i64)
@@ -588,7 +700,7 @@ pub async fn settlement_trigger_handler(
             .persist_settlement_proposal(KwilSettlementProposalCommitment {
                 proposal_id: proposal_id.clone(),
                 external_id: payload.external_id.clone(),
-                source: payload.source.clone(),
+                source: settlement_source.as_str().to_string(),
                 payload: payload.payload.clone(),
                 status: "active".to_string(),
                 init_height: current_height as u64,
@@ -711,5 +823,111 @@ mod tests {
 
         let err = validate_routing_policy_metadata(&payload).unwrap_err();
         assert_eq!(err.code, "requested_trust_tier_mismatch");
+    }
+
+    #[test]
+    fn parses_legacy_and_new_settlement_sources() {
+        assert_eq!(
+            SettlementSource::parse("ISO20022"),
+            Some(SettlementSource::Swift)
+        );
+        assert_eq!(
+            SettlementSource::parse("SWIFT"),
+            Some(SettlementSource::Swift)
+        );
+        assert_eq!(
+            SettlementSource::parse("CIPS"),
+            Some(SettlementSource::Cips)
+        );
+        assert_eq!(
+            SettlementSource::parse("SPFS"),
+            Some(SettlementSource::Spfs)
+        );
+        assert_eq!(
+            SettlementSource::parse("PAPSS"),
+            Some(SettlementSource::Papss)
+        );
+        assert_eq!(
+            SettlementSource::parse("BRICS"),
+            Some(SettlementSource::Brics)
+        );
+        assert_eq!(SettlementSource::parse("UNKNOWN"), None);
+        assert_eq!(SettlementSource::parse(""), None);
+    }
+
+    #[test]
+    fn maps_sanctions_risk_by_source() {
+        assert_eq!(SettlementSource::Swift.sanctions_risk(), SanctionsRisk::Low);
+        assert_eq!(SettlementSource::Papss.sanctions_risk(), SanctionsRisk::Low);
+        assert_eq!(
+            SettlementSource::Cips.sanctions_risk(),
+            SanctionsRisk::Elevated
+        );
+        assert_eq!(
+            SettlementSource::Brics.sanctions_risk(),
+            SanctionsRisk::Elevated
+        );
+        assert_eq!(SettlementSource::Spfs.sanctions_risk(), SanctionsRisk::High);
+    }
+
+    #[test]
+    fn normalizes_source_to_canonical_network() {
+        assert_eq!(
+            SettlementSource::parse("ISO20022").unwrap().as_str(),
+            "SWIFT"
+        );
+        assert_eq!(SettlementSource::parse("CIPS").unwrap().as_str(), "CIPS");
+        assert_eq!(SettlementSource::parse("SPFS").unwrap().as_str(), "SPFS");
+    }
+
+    #[test]
+    fn rejects_invalid_routing_policy_json_type() {
+        let payload = json!({
+            "routing_policy": "invalid_string_instead_of_object"
+        });
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "invalid_routing_policy");
+    }
+
+    #[test]
+    fn rejects_t4_trust_tier() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "IBC",
+            "trust_tier": "T4",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+            "evidence_hash": "0xabc123",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "trust_tier_not_allowed");
+    }
+
+    #[test]
+    fn rejects_verification_class_mismatch() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "Hyperlane",
+            "trust_tier": "T2",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+            "evidence_hash": "0xabc123",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "verification_class_mismatch");
+    }
+
+    #[test]
+    fn rejects_missing_required_evidence_hash() {
+        let payload = base_payload_with_routing_policy(json!({
+            "system": "IBC",
+            "trust_tier": "T1",
+            "verification_class": "light_client",
+            "policy_version": "2026-06-01",
+        }));
+
+        let err = validate_routing_policy_metadata(&payload).unwrap_err();
+        assert_eq!(err.code, "missing_required_routing_policy_field");
     }
 }

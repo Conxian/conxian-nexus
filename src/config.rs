@@ -19,6 +19,9 @@ pub const ENV_ORACLE_ENABLED: &str = "ORACLE_ENABLED";
 pub const ENV_ORACLE_STUB_OK: &str = "ORACLE_STUB_OK";
 pub const ENV_ORACLE_ENDPOINT_URL: &str = "ORACLE_ENDPOINT_URL";
 pub const ENV_ORACLE_CONTRACT_PRINCIPAL: &str = "ORACLE_CONTRACT_PRINCIPAL";
+pub const ENV_ORACLE_ALLOW_MOCK_KEY: &str = "ORACLE_ALLOW_MOCK_KEY";
+pub const ENV_ORACLE_GENERATE_MOCK_KEY: &str = "ORACLE_GENERATE_MOCK_KEY";
+pub const ENV_ORACLE_MOCK_KEY: &str = "ORACLE_MOCK_KEY";
 pub const ENV_ERP_ATTESTATION_TRUSTED_KEYS: &str = "ERP_ATTESTATION_TRUSTED_KEYS_JSON";
 pub const ENV_ADMIN_API_TOKEN: &str = "NEXUS_ADMIN_API_TOKEN";
 pub const ENV_BITVM_GROTH16_TRUSTED_REGISTRY: &str = "NEXUS_BITVM_GROTH16_TRUSTED_REGISTRY_JSON";
@@ -123,6 +126,7 @@ pub struct Config {
     pub kwil_private_key_hex: Option<String>,
     pub oracle_enabled: bool,
     pub oracle_stub_ok: bool,
+    pub oracle_allow_mock_key: bool,
     pub oracle_endpoint_url: Option<String>,
     pub oracle_contract_principal: Option<String>,
     pub erp_attestation_trusted_keys: HashMap<String, String>,
@@ -149,6 +153,7 @@ impl fmt::Debug for Config {
             .field("experimental_apis_enabled", &self.experimental_apis_enabled)
             .field("oracle_enabled", &self.oracle_enabled)
             .field("oracle_stub_ok", &self.oracle_stub_ok)
+            .field("oracle_allow_mock_key", &self.oracle_allow_mock_key)
             .field("oracle_endpoint_url", &self.oracle_endpoint_url)
             .field("oracle_contract_principal", &self.oracle_contract_principal)
             .field("erp_attestation_trusted_keys", &"<redacted>")
@@ -195,6 +200,7 @@ impl Config {
             kwil_private_key_hex: None,
             oracle_enabled: false,
             oracle_stub_ok: true,
+            oracle_allow_mock_key: false,
             oracle_endpoint_url: None,
             oracle_contract_principal: None,
             erp_attestation_trusted_keys: HashMap::new(),
@@ -288,6 +294,9 @@ impl Config {
             .ok()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
+        let oracle_allow_mock_key = env_flag(ENV_ORACLE_ALLOW_MOCK_KEY)
+            || env_flag(ENV_ORACLE_GENERATE_MOCK_KEY)
+            || env_flag(ENV_ORACLE_MOCK_KEY);
 
         if oracle_enabled && ORACLE_SERVICE_IS_STUBBED && !oracle_stub_ok {
             anyhow::bail!(
@@ -392,6 +401,7 @@ impl Config {
             experimental_apis_enabled,
             oracle_enabled,
             oracle_stub_ok,
+            oracle_allow_mock_key,
             oracle_endpoint_url,
             oracle_contract_principal,
             erp_attestation_trusted_keys,

@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Conxian Nexus (Glass Node) API
   description: High-performance middleware for Stacks L1 state synchronization and multi-protocol support.
-  version: 0.4.13
+  version: 0.4.23
 servers:
   - url: http://localhost:3000
     description: Local development server
@@ -607,6 +607,49 @@ paths:
       responses:
         '200':
           description: OK
+  /v1/dlc/cet/verify:
+    post:
+      summary: Verify DLC Contract Execution Transaction (CET) Outcome & Oracle Attestation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dlc_contract_id, oracle_pubkey, attestation_signature, outcome_value, total_principal_sbtc]
+              properties:
+                dlc_contract_id:
+                  type: string
+                oracle_pubkey:
+                  type: string
+                attestation_signature:
+                  type: string
+                outcome_value:
+                  type: integer
+                total_principal_sbtc:
+                  type: integer
+      responses:
+        "200":
+          description: CET outcome verified and payout calculated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dlc_contract_id:
+                    type: string
+                  verified:
+                    type: boolean
+                  cet_status:
+                    type: string
+                  payout_sbtc_investor:
+                    type: integer
+                  payout_sbtc_issuer:
+                    type: integer
+        "400":
+          description: Malformed request payload
+        "422":
+          description: Invalid Oracle attestation signature
   /v1/dlc/bond:
     post:
       summary: Create DLC bond
@@ -628,6 +671,73 @@ paths:
       responses:
         '201':
           description: Created
+  /v1/settlement/x402/verify:
+    post:
+      summary: Verify x402 V2 HTTP payment authorization proof
+      description: Cryptographically verifies x402 V2 payment challenges, Schnorr payment signatures, satoshi amounts, expiration bounds, and replay protection nonces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - protocol_id
+                - scheme
+                - network
+                - amount_sats
+                - payer
+                - payee
+                - nonce
+                - timestamp
+                - expires_at
+                - public_key
+                - signature
+              properties:
+                protocol_id:
+                  type: string
+                  example: "x402-v2-settlement-verifier"
+                scheme:
+                  type: string
+                  example: "x402"
+                network:
+                  type: string
+                  example: "bitcoin_mainnet"
+                amount_sats:
+                  type: integer
+                  format: int64
+                  example: 50000
+                payer:
+                  type: string
+                  example: "bc1qpayer123456789"
+                payee:
+                  type: string
+                  example: "bc1qpayee987654321"
+                nonce:
+                  type: string
+                  example: "nonce_1234567890abcdef"
+                timestamp:
+                  type: integer
+                  format: int64
+                  example: 1750000000
+                expires_at:
+                  type: integer
+                  format: int64
+                  example: 1750003600
+                public_key:
+                  type: string
+                  example: "02abc..."
+                signature:
+                  type: string
+                  example: "3045..."
+                payment_hash:
+                  type: string
+                  nullable: true
+      responses:
+        "200":
+          description: Payment authorization proof verified successfully
+        "400":
+          description: Invalid payment proof or cryptographic signature verification failed
   /v1/settlement/trigger:
     post:
       summary: Trigger external settlement
@@ -708,8 +818,218 @@ paths:
         '503':
           description: Model verification key is not configured
 
+
+  /v1/verify/zkcp:
+    post:
+      summary: Verify Zero-Knowledge Contingent Payment (ZKCP) Groth16 Pre-Image Proof
+      operationId: verifyZkcp
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZkcpProofPayload'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  circuit_id:
+                    type: string
+        '400':
+          description: Invalid payload or proof verification failed
+  /v1/verify/op-cat:
+    post:
+      summary: Verify OP_CAT Recursive Covenant Stack Execution & State Commitment
+      operationId: verifyOpCat
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpCatCovenantPayload'
+      responses:
+        '200':
+          description: Covenant verification result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  domain_id:
+                    type: string
+        '400':
+          description: Stack bounds exceeded or covenant verification failed
+  /v1/verify/frost:
+    post:
+      summary: Verify FROST Schnorr Threshold Signature Share & Commitment Payload
+      operationId: verifyFrost
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FrostVerificationPayload"
+      responses:
+        "200":
+          description: FROST threshold signature verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FrostVerificationResponse"
+        "400":
+          description: Threshold not met or invalid Schnorr signature payload
+  /v1/verify/sui:
+    post:
+      summary: Verify Sui Move Object State Proof & BCS Transaction Certificate
+      operationId: verifySui
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SuiVerificationPayload"
+      responses:
+        "200":
+          description: Sui Move object transaction state proof verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuiVerificationResponse"
+        "400":
+          description: Invalid sender, gas budget, or transaction certificate parameters
+  /v1/verify/aptos:
+    post:
+      summary: Verify Aptos JMT Sparse Merkle State Proof & Ledger Info
+      operationId: verifyAptos
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AptosVerificationPayload"
+      responses:
+        "200":
+          description: Aptos JMT state proof verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AptosVerificationResponse"
+        "400":
+          description: Invalid transaction hash, state root, or empty proof nodes list
+  /v1/verify/bitvm3:
+    post:
+      summary: Verify BitVM3 Garbled-Circuit Fraud Proof Dispute Assertion
+      operationId: verifyBitvm3
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Bitvm3VerificationPayload"
+      responses:
+        "200":
+          description: BitVM3 garbled-circuit fraud proof dispute result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bitvm3VerificationResponse"
+        "422":
+          description: Invalid or unprocessable fraud proof assertion
 components:
   schemas:
+    SuiVerificationPayload:
+      type: object
+      required: [transaction_digest, checkpoint_sequence_number, sender, mutated_object_ids, validator_signatures, gas_budget]
+      properties:
+        transaction_digest:
+          type: string
+        checkpoint_sequence_number:
+          type: integer
+        sender:
+          type: string
+        mutated_object_ids:
+          type: array
+          items:
+            type: string
+        validator_signatures:
+          type: array
+          items:
+            type: string
+        gas_budget:
+          type: integer
+    SuiVerificationResponse:
+      type: object
+      required: [verified, transaction_digest, checkpoint_sequence_number, mutated_objects_count, commitment_hash]
+      properties:
+        verified:
+          type: boolean
+        transaction_digest:
+          type: string
+        checkpoint_sequence_number:
+          type: integer
+        mutated_objects_count:
+          type: integer
+        commitment_hash:
+          type: string
+        error:
+          type: string
+    AptosVerificationPayload:
+      type: object
+      required: [ledger_version, transaction_hash, state_root_hash, sender, sequence_number, proof_nodes, signature_hex]
+      properties:
+        ledger_version:
+          type: integer
+        transaction_hash:
+          type: string
+        state_root_hash:
+          type: string
+        sender:
+          type: string
+        sequence_number:
+          type: integer
+        proof_nodes:
+          type: array
+          items:
+            type: string
+        signature_hex:
+          type: string
+    AptosVerificationResponse:
+      type: object
+      required: [verified, ledger_version, transaction_hash, proof_nodes_count, commitment_hash]
+      properties:
+        verified:
+          type: boolean
+        ledger_version:
+          type: integer
+        transaction_hash:
+          type: string
+        proof_nodes_count:
+          type: integer
+        commitment_hash:
+          type: string
+        error:
+          type: string
+
     ApiError:
       type: object
       additionalProperties: false
@@ -863,7 +1183,7 @@ components:
               example: "ok"
             version:
               type: string
-              example: "0.4.19"
+              example: "0.4.22"
             safety_mode:
               type: boolean
             uptime_seconds:
@@ -953,4 +1273,106 @@ components:
         latest_height:
           type: integer
         trust_level:
+          type: string
+
+    ZkcpProofPayload:
+      type: object
+      required: [circuit_id, hash_commitment, verifying_key_bytes, proof_bytes, public_inputs]
+      properties:
+        circuit_id:
+          type: string
+        hash_commitment:
+          type: string
+        verifying_key_bytes:
+          type: array
+          items:
+            type: integer
+        proof_bytes:
+          type: array
+          items:
+            type: integer
+        public_inputs:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+    OpCatCovenantPayload:
+      type: object
+      required: [domain_id, stack, expected_state_hash, recursion_depth]
+      properties:
+        domain_id:
+          type: string
+        stack:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+        expected_state_hash:
+          type: string
+        recursion_depth:
+          type: integer
+    FrostVerificationPayload:
+      type: object
+      required: [protocol_id, message_hash, group_public_key, signature, threshold, participant_count, participant_ids]
+      properties:
+        protocol_id:
+          type: string
+        message_hash:
+          type: string
+        group_public_key:
+          type: string
+        signature:
+          type: string
+        threshold:
+          type: integer
+        participant_count:
+          type: integer
+        participant_ids:
+          type: array
+          items:
+            type: integer
+    FrostVerificationResponse:
+      type: object
+      required: [protocol_id, is_valid, threshold, participant_count, message_hash]
+      properties:
+        protocol_id:
+          type: string
+        is_valid:
+          type: boolean
+        threshold:
+          type: integer
+        participant_count:
+          type: integer
+        message_hash:
+          type: string
+
+    Bitvm3VerificationPayload:
+      type: object
+      required: [circuit_id, challenge_nonce, gate_commitments, dispute]
+      properties:
+        circuit_id:
+          type: string
+        challenge_nonce:
+          type: string
+        gate_commitments:
+          type: array
+          items:
+            type: object
+        dispute:
+          type: object
+    Bitvm3VerificationResponse:
+      type: object
+      required: [is_valid_fraud_proof, circuit_id, disputed_gate_id, proof_digest, message]
+      properties:
+        is_valid_fraud_proof:
+          type: boolean
+        circuit_id:
+          type: string
+        disputed_gate_id:
+          type: integer
+        proof_digest:
+          type: string
+        message:
           type: string

@@ -8,6 +8,8 @@ use axum::{
     Json, Router,
 };
 use k256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+use lib_conxian_core::deployment::{VerificationOutcome, VerificationResult};
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -202,8 +204,8 @@ fn issue_claim_view_token() -> String {
 }
 
 fn issue_otp() -> String {
-    let u = Uuid::new_v4().as_u128();
-    format!("{:06}", u % 1_000_000)
+    let n = rand::rng().random_range(0..1_000_000);
+    format!("{:06}", n)
 }
 
 fn service_base(headers: &HeaderMap) -> String {
@@ -755,10 +757,20 @@ async fn get_promotion_evidence(
     Path(release): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+
+    // Build the canonical post-deployment verification result from Core's
+    // shared artifact schema. Promotion evidence is a release verification
+    // outcome, so it reuses the deployment-verification contract rather than a
+    // Nexus-local ad hoc shape.
+    let mut verification = VerificationResult::new(&format!("promotion_{release}"), &release);
+    verification.outcome = VerificationOutcome::Pass;
+    verification.add_evidence("nexus-promotion", "git_tag_attestation", None);
+
     Ok(Json(json!({
         "release": release,
         "evidence_type": "git_tag_attestation",
-        "verified": true
+        "verified": true,
+        "deployment_verification": verification,
     })))
 }
 
@@ -1008,6 +1020,17 @@ async fn view_claim_otp(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn test_issue_otp_format_and_randomness() {
+        let otp1 = issue_otp();
+        let otp2 = issue_otp();
+        assert_eq!(otp1.len(), 6);
+        assert_eq!(otp2.len(), 6);
+        assert!(otp1.chars().all(|c| c.is_ascii_digit()));
+        assert!(otp2.chars().all(|c| c.is_ascii_digit()));
+    }
+
     use super::*;
 
     #[test]

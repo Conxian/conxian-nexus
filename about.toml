@@ -38,3 +38,28 @@ license = "BSD-3-Clause"
 
 [webpki-roots]
 accepted = ["MPL-2.0"]
+
+# Transitively pulled by lib-conxian-core; dedicated first-party dep.
+[base85]
+accepted = ["MPL-2.0-no-copyleft-exception"]
+
+[musig2]
+accepted = ["Unlicense"]
+
+[secp]
+accepted = ["Unlicense"]
+
+[base64urlsafedata]
+accepted = ["MPL-2.0"]
+
+[webauthn-attestation-ca]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs-core]
+accepted = ["MPL-2.0"]
+
+[webauthn-rs-proto]
+accepted = ["MPL-2.0"]

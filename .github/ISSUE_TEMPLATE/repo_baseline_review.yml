@@ -1,0 +1,71 @@
+name: "Repository Baseline Review & High-Value Improvement"
+description: "Review repository against Conxian baseline standards and execute a single high-value task."
+title: "[BASELINE] <Repository Name> - <Task Summary>"
+labels: ["governance", "baseline-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Conxian Repository Baseline Review Protocol
+        Use this issue template to track repository baseline reviews and record execution of high-value repo hygiene or governance improvements across Conxian repositories.
+
+        **Security Notice:** Do not expose secrets or sensitive configuration. For security vulnerabilities, follow [SECURITY.md](https://github.com/Conxian/.github/blob/main/SECURITY.md).
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the primary objective of this review and task.
+      placeholder: Review repository and complete highest-value improvement according to Conxian review baseline.
+    validations:
+      required: true
+  - type: input
+    id: repo-focus
+    attributes:
+      label: Repository Focus
+      description: Target repository name (e.g., conxian-nexus).
+      placeholder: conxian-nexus
+    validations:
+      required: true
+  - type: dropdown
+    id: priority-tier
+    attributes:
+      label: Priority Level
+      description: Select the priority category of the selected task.
+      options:
+        - "1. Security exposure or public/private boundary risk"
+        - "2. Sensitive files or generated artifacts tracked in git"
+        - "3. Missing ignore rules or CI hygiene"
+        - "4. Missing governance files / issue templates"
+        - "5. README / public-facing clarity improvements"
+        - "6. Release / versioning improvements"
+    validations:
+      required: true
+  - type: textarea
+    id: task-selection
+    attributes:
+      label: Selected Task & Evidence
+      description: Describe the single task selected and present evidence for why it was chosen.
+      placeholder: |
+        Selected task: Add Repository Baseline Review issue template.
+        Why chosen: Standardize baseline review workflow across Conxian repositories.
+        Evidence found: Missing repo_baseline_review template in .github/ISSUE_TEMPLATE.
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables & Verification
+      description: List files changed, documentation updated, and validation commands executed.
+      placeholder: |
+        - Files changed: .github/ISSUE_TEMPLATE/repo_baseline_review.yml
+        - Validation results: ruby scripts/check_workflow_yaml.rb, python3 scripts/verify_contamination_guard.py
+    validations:
+      required: true
+  - type: textarea
+    id: approval-notes
+    attributes:
+      label: Approval Notes & Follow-up
+      description: Notes for human review and any follow-up items.
+      placeholder: Ready for maintainer review. No follow-up action required.
+    validations:
+      required: true
