@@ -8,6 +8,7 @@
 
 pub mod frost;
 pub mod op_cat;
+pub mod proof_envelope;
 pub mod x402;
 pub mod zkcp;
 
@@ -16,6 +17,10 @@ pub use frost::{
     FROST_VERIFIER_ID,
 };
 pub use op_cat::{OpCatCovenantPayload, OpCatCovenantVerifier, OpCatError, OP_CAT_COVENANT_ID};
+pub use proof_envelope::{
+    ProofEnvelopeError, ProofEnvelopePayload, ProofEnvelopeResponse, ProofEnvelopeVerifier,
+    PROOF_ENVELOPE_VERIFIER_ID,
+};
 pub use x402::{
     X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
 };
