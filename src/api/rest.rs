@@ -882,6 +882,7 @@ pub fn verify_routes() -> Router<AppState> {
         .route("/sui", post(verify_sui))
         .route("/aptos", post(verify_aptos))
         .route("/bitvm3", post(verify_bitvm3))
+        .route("/proof-envelope", post(verify_proof_envelope))
 }
 
 async fn verify_sui(
@@ -997,6 +998,24 @@ async fn verify_op_cat(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+
+async fn verify_proof_envelope(
+    Json(payload): Json<crate::verification::ProofEnvelopePayload>,
+) -> impl IntoResponse {
+    let verifier = crate::verification::ProofEnvelopeVerifier::new();
+    match verifier.verify_envelope(&payload) {
+        Ok(res) => (StatusCode::OK, Json(serde_json::to_value(res).unwrap())).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": e.to_string(),
+                "status": "proof_envelope_verification_failed"
+            })),
         )
             .into_response(),
     }
@@ -1217,4 +1236,34 @@ mod verify_endpoint_tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    #[tokio::test]
+    async fn test_verify_proof_envelope_endpoint_success() {
+        use tower::ServiceExt;
+        use std::collections::HashSet;
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let payload = crate::verification::ProofEnvelopePayload {
+            verifier_id: crate::verification::PROOF_ENVELOPE_VERIFIER_ID.to_string(),
+            proof_system: "groth16".to_string(),
+            curve: "bn254".to_string(),
+            vk_hash: "11".repeat(32),
+            proof_bytes: vec![1, 2, 3, 4, 5],
+            state_root: "22".repeat(32),
+            public_inputs_hash: "33".repeat(32),
+            verifier_owner: "0xConxianGovernanceOwnerContract".to_string(),
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/proof-envelope")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
 }

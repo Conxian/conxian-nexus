@@ -934,6 +934,27 @@ paths:
                 $ref: "#/components/schemas/AptosVerificationResponse"
         "400":
           description: Invalid transaction hash, state root, or empty proof nodes list
+  /v1/verify/proof-envelope:
+    post:
+      summary: Verify Cross-Repo Proof Envelope & Verifier Ownership Contract
+      operationId: verifyProofEnvelope
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProofEnvelopePayload"
+      responses:
+        "200":
+          description: Cross-repo proof envelope verification succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProofEnvelopeResponse"
+        "400":
+          description: Proof envelope verification failed
   /v1/verify/bitvm3:
     post:
       summary: Verify BitVM3 Garbled-Circuit Fraud Proof Dispute Assertion
@@ -957,6 +978,47 @@ paths:
           description: Invalid or unprocessable fraud proof assertion
 components:
   schemas:
+    ProofEnvelopePayload:
+      type: object
+      required: [verifier_id, proof_system, curve, vk_hash, proof_bytes, state_root, public_inputs_hash, verifier_owner]
+      properties:
+        verifier_id:
+          type: string
+        proof_system:
+          type: string
+        curve:
+          type: string
+        vk_hash:
+          type: string
+        proof_bytes:
+          type: array
+          items:
+            type: integer
+        state_root:
+          type: string
+        public_inputs_hash:
+          type: string
+        verifier_owner:
+          type: string
+    ProofEnvelopeResponse:
+      type: object
+      required: [valid, verifier_id, proof_system, curve, state_root, verifier_owner, status]
+      properties:
+        valid:
+          type: boolean
+        verifier_id:
+          type: string
+        proof_system:
+          type: string
+        curve:
+          type: string
+        state_root:
+          type: string
+        verifier_owner:
+          type: string
+        status:
+          type: string
+
     SuiVerificationPayload:
       type: object
       required: [transaction_digest, checkpoint_sequence_number, sender, mutated_object_ids, validator_signatures, gas_budget]

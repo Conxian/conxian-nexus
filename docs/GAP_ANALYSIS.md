@@ -33,6 +33,7 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-804** | x402 V2 Settlement Rail Verifier (AWS Bedrock AgentCore Payments) | 9 | 4 | **P1** | **Completed (v0.4.23)** |
 | **#251** | IdempotencyStore Neon Transactional Locks & Conformance | 9 | 3 | **P1** | **Completed (v0.4.23)** |
 | **BitVM3** | BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion | 9 | 6 | **P0** | **Completed (v0.4.23)** |
+| **Candidate C** | Cross-Repo Proof Envelope & Verifier Ownership Contract Alignment | 8 | 6 | **P1** | **Completed (v0.4.23)** |
 
 ## 2. Mapping & Research Context
 

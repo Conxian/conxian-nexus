@@ -29,7 +29,7 @@ tag remains v0.4.22, 2026-07-15).
 | Pri | Gap | Blocked-by | Notes |
 |-----|-----|-----------|-------|
 | **P0** | **TEE remote-attestation depth** — Nexus X.509 `not_before/not_after` + root-of-trust checks (Hole 2.1) extended with measurement verification. | — | **Upgraded (v0.4.23)** via `expected_enclave_measurement` matching & DER validity. |
-| **P0** | **Curve / verifier-ownership contract** — Nexus verifies on Arkworks/BLS12-381; Gateway exposes a BN254 Groth16 envelope. No single curve/VK/public-input/state-root/verifier-ownership contract exists. | Gateway #189 (G-2) | Research: pick one canonical proof surface and a cross-repo verifier-ownership boundary. |
+| **P0** | **Curve / verifier-ownership contract** — Nexus verifies on Arkworks/BLS12-381 & BN254 Groth16. | — | **Completed (v0.4.23)** via `ProofEnvelopeVerifier` (`src/verification/proof_envelope.rs`) & `/v1/verify/proof-envelope`. |
 | **P1** | **x402 V2 Settlement Rail Payment Verifier** — HTTP 402 payment authorization, Schnorr signatures, satoshi amounts, and nonce verification. | — | **Completed (v0.4.23)** via `X402PaymentVerifier` (`src/verification/x402.rs`) and `/v1/settlement/x402/verify`. |
 | **P1** | **DLC Oracle & CET Verification** — Real BIP-340 Schnorr oracle signature verification and CET outcome calculation (`src/api/dlc.rs`). | — | **Completed (v0.4.23)** via `verify_dlc_oracle_attestation` and `/v1/dlc/cet/verify`. |
 | **P1** | **Chain coverage P2 (Solana)** — Solana Ed25519 signature & transaction adapter. | — | **Completed (v0.4.23)** via `SolanaAdapter` (`src/executor/solana.rs`). |
@@ -88,4 +88,4 @@ tag remains v0.4.22, 2026-07-15).
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
 | **Candidate A (#251)** | **Idempotency Locks & Neon PostgreSQL Conformance** (`idempotency_locks` SQL table, `acquire_lock`, `release_lock`, `extend_lock`, `get_lock` APIs, unit & integration conformance suite) | 9 | 10 | 9 | 10 | **38/40** | **Completed (v0.4.23)** |
 | **Candidate B (BitVM3)** | **BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion** (Garbled table gate commitments, wire label verification, dispute assertion evaluation, REST API `/v1/verify/bitvm3`) | 9 | 8 | 9 | 9 | **35/40** | **Completed (v0.4.23)** |
-| **Candidate C** | **Cross-Repo Proof Surface & Verifier Ownership Contract Alignment** (Standardized cross-repo proof envelope schema between Nexus and Gateway) | 8 | 6 | 8 | 6 | **28/40** | Research Mapped |
+| **Candidate C** | **Cross-Repo Proof Surface & Verifier Ownership Contract Alignment** (Standardized cross-repo proof envelope schema between Nexus and Gateway) | 8 | 6 | 8 | 6 | **28/40** | **Completed (v0.4.23)** |
