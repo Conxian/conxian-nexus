@@ -7,6 +7,58 @@ servers:
   - url: http://localhost:3000
     description: Local development server
 paths:
+
+  /v1/verify/proof-envelope:
+    post:
+      summary: Verify standardized cross-repo proof envelope and verifier ownership contract
+      description: Validates proof system metadata, curve alignment, verifying key SHA-256 digest commitments, public input bindings, state root commitments, and verifier ownership.
+      operationId: verifyProofEnvelope
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - envelope_id
+                - proof_system
+                - curve
+                - verifying_key_b64
+                - expected_vk_hash
+                - proof_bytes_b64
+                - public_inputs
+                - expected_public_inputs_hash
+                - verifier_owner
+              properties:
+                envelope_id:
+                  type: string
+                proof_system:
+                  type: string
+                  enum: [groth16_bn254, groth16_bls12_381, bip340_schnorr, garbled_circuit_bitvm3]
+                curve:
+                  type: string
+                verifying_key_b64:
+                  type: string
+                expected_vk_hash:
+                  type: string
+                proof_bytes_b64:
+                  type: string
+                public_inputs:
+                  type: array
+                  items:
+                    type: string
+                expected_public_inputs_hash:
+                  type: string
+                state_root_hex:
+                  type: string
+                verifier_owner:
+                  type: string
+      responses:
+        '200':
+          description: Proof envelope verified successfully
+        '400':
+          description: Schema or cryptographic commitment validation failed
+
   /v1/events:
     get:
       summary: Get canonical cross-chain event feed

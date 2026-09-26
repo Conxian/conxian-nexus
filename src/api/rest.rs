@@ -882,6 +882,7 @@ pub fn verify_routes() -> Router<AppState> {
         .route("/sui", post(verify_sui))
         .route("/aptos", post(verify_aptos))
         .route("/bitvm3", post(verify_bitvm3))
+        .route("/proof-envelope", post(verify_proof_envelope))
 }
 
 async fn verify_sui(
@@ -997,6 +998,22 @@ async fn verify_op_cat(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+async fn verify_proof_envelope(
+    Json(payload): Json<crate::verification::ProofEnvelopePayload>,
+) -> impl IntoResponse {
+    match crate::verification::ProofEnvelopeVerifier::verify_envelope(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(err) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": err.to_string(),
+                "status": "rejected"
+            })),
         )
             .into_response(),
     }
@@ -1208,6 +1225,54 @@ mod verify_endpoint_tests {
         let req = Request::builder()
             .method("POST")
             .uri("/v1/verify/bitvm3")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                serde_json::to_vec(&payload).unwrap(),
+            ))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_verify_proof_envelope_endpoint_success() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let vk_bytes = b"sample_verifying_key_bytes";
+        let vk_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, vk_bytes);
+        let expected_vk_hash = hex::encode(sha2::Sha256::digest(vk_bytes));
+
+        let proof_bytes = b"sample_groth16_proof_bytes";
+        let proof_b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, proof_bytes);
+
+        let public_inputs = vec!["0x1234".to_string(), "0x5678".to_string()];
+        let mut hasher = sha2::Sha256::new();
+        for input in &public_inputs {
+            hasher.update(input.as_bytes());
+            hasher.update(b":");
+        }
+        let expected_inputs_hash = hex::encode(hasher.finalize());
+
+        let payload = crate::verification::ProofEnvelopePayload {
+            envelope_id: "env-001".into(),
+            proof_system: crate::verification::ProofSystem::Groth16Bn254,
+            curve: "bn254".into(),
+            verifying_key_b64: vk_b64,
+            expected_vk_hash,
+            proof_bytes_b64: proof_b64,
+            public_inputs,
+            expected_public_inputs_hash: expected_inputs_hash,
+            state_root_hex: Some(
+                "0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff".into(),
+            ),
+            verifier_owner: "conxian:nexus:gateway_bridge".into(),
+        };
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/verify/proof-envelope")
             .header("content-type", "application/json")
             .body(axum::body::Body::from(
                 serde_json::to_vec(&payload).unwrap(),
