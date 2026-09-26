@@ -191,3 +191,14 @@ This document establishes the official research map, cryptographic specification
   1. **Garbled Circuit Commitments**: Inspects `GateCommitment` entries (`And`, `Xor`, `Nand` gate types) and verifies garbled table hashes using SHA-256 over `gate_id || challenge_nonce || label0 || label1 || claimed_output_label`.
   2. **Equivocation & Dispute Assertion**: Evaluates expected gate output logic against input wire labels and verifies if the prover's claimed output label or value equivocates. If fraud is detected, issues a signed `Bitvm3VerificationResponse` proving fraud on-chain with a ~200B dispute assertion.
   3. **REST API Endpoint**: Exposes `/v1/verify/bitvm3` accepting `Bitvm3VerificationPayload` and returning `Bitvm3VerificationResponse`.
+
+### 8. Candidate C: Cross-Repo Proof Surface & Verifier Ownership Contract Alignment (COMPLETED v0.4.23)
+- **Concept**: Standardized proof envelope schema and verifier ownership assertion contract bridging Nexus observation/proof verification with Gateway execution boundaries.
+- **Specification**:
+  1. Envelope Schema (`ProofEnvelopePayload`): Encapsulates `envelope_id`, `proof_system` (Groth16 BN254, Groth16 BLS12-381, BIP-340 Schnorr, BitVM3 Garbled Circuit), `curve`, base64 verifying key bytes, expected VK hash digest, proof payload bytes, public inputs, expected public inputs hash, state root commitment hex, and `verifier_owner`.
+  2. Verification Rules:
+     - Curve parameter alignment verification for each proof system family.
+     - Cryptographic SHA-256 digest computation and hash matching for verifying keys and public input sequences.
+     - State root hex commitment validation.
+     - Strict verifier ownership prefix assertion (`conxian` / `nexus`).
+- **REST Endpoint**: Exposed via `/v1/verify/proof-envelope` HTTP REST API.
