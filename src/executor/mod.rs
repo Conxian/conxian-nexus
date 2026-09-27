@@ -151,7 +151,8 @@ impl NexusExecutor {
     }
 
     pub fn add_trusted_enclave_measurement(&mut self, measurement: impl Into<String>) {
-        self.trusted_enclave_measurements.insert(measurement.into().to_lowercase());
+        self.trusted_enclave_measurements
+            .insert(measurement.into().to_lowercase());
     }
 
     pub fn with_canonical_bitvm_service(
@@ -526,7 +527,9 @@ mod tests {
     #[tokio::test]
     async fn test_verify_attestation_trusted_measurement_mismatch() {
         let mut executor = make_test_executor(true);
-        executor.add_trusted_enclave_measurement("a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2");
+        executor.add_trusted_enclave_measurement(
+            "a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2",
+        );
 
         let req = ExecutionRequest {
             tx_id: "tx_untrusted_measurement".to_string(),
@@ -535,7 +538,9 @@ mod tests {
             sender: "sender".to_string(),
             priority: 0,
             attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
-            expected_enclave_measurement: Some("f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0".to_string()),
+            expected_enclave_measurement: Some(
+                "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0".to_string(),
+            ),
         };
 
         assert_eq!(
