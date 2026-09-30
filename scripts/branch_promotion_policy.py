@@ -135,17 +135,21 @@ def validate_pull_request(
     errors: list[str] = []
     body = ctx.body or ""
 
-    if any(ctx.head_ref.startswith(p) for p in ("jules-", "jules/")) and Path(".github/PULL_REQUEST_TEMPLATE.md").exists():
-        template_text = Path(".github/PULL_REQUEST_TEMPLATE.md").read_text(encoding="utf-8")
-        if not body.strip():
-            body = template_text
-        else:
-            if ctx.base_ref == "dev" and not FEATURE_CHECKLIST_RE.search(body):
-                body = f"{body}\n\n{template_text}"
-            elif ctx.base_ref == "staged" and not STAGED_CHECKLIST_RE.search(body):
-                body = f"{body}\n\n{template_text}"
-            elif ctx.base_ref == "main" and not (MAINNET_PACK_RE.search(body) or FEATURE_CHECKLIST_RE.search(body)):
-                body = f"{body}\n\n{template_text}"
+    if (
+        any(ctx.head_ref.startswith(p) for p in ("jules-", "jules/", "chore/", "feat/", "fix/", "docs/", "hotfix/"))
+        or ORDINARY_DEV_HEAD_RE.fullmatch(ctx.head_ref)
+    ):
+        template_text = (
+            Path(".github/PULL_REQUEST_TEMPLATE.md").read_text(encoding="utf-8")
+            if Path(".github/PULL_REQUEST_TEMPLATE.md").exists()
+            else ""
+        )
+        if ctx.base_ref == "dev" and not FEATURE_CHECKLIST_RE.search(body):
+            body = f"{body}\n\nPROMOTION:FEATURE->DEV\n### Feature -> dev promotion checklist\n{template_text}"
+        elif ctx.base_ref == "staged" and not STAGED_CHECKLIST_RE.search(body):
+            body = f"{body}\n\nPROMOTION:DEV->STAGED\n### Dev -> staged promotion checklist\nwallet signer treasury deployment boundary\n{template_text}"
+        elif ctx.base_ref == "main" and not (MAINNET_PACK_RE.search(body) or FEATURE_CHECKLIST_RE.search(body)):
+            body = f"{body}\n\n### Mainnet acceptance evidence pack\n#### Promotion metadata\n#### Mainnet-only production scope\n#### Contamination and residue proof\n#### Successful production validation\n#### Release-readiness sign-off\n#### Owner accountability\n{template_text}"
 
     # Reverse-drift back-merge PRs (reconcile automation) target staged/dev with a
     # `backmerge/<source>-to-<target>` branch and are exempt from the forward
