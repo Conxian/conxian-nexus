@@ -211,6 +211,7 @@ fn test_router() -> Router {
         gateway_url: None,
         http_client: reqwest::Client::new(),
         config: config.clone(),
+        mcp402: conxian_nexus::mcp_402::Mcp402Facade::new(),
     };
 
     Router::new()

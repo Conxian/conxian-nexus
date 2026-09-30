@@ -266,6 +266,7 @@ mod tests {
             nostr: None,
             gateway_url: None,
             http_client: reqwest::Client::new(),
+            mcp402: crate::mcp_402::Mcp402Facade::new(),
         }
     }
 
