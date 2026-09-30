@@ -1003,18 +1003,16 @@ async fn verify_op_cat(
     }
 }
 
-
 async fn verify_proof_envelope(
     Json(payload): Json<crate::verification::ProofEnvelopePayload>,
 ) -> impl IntoResponse {
-    let verifier = crate::verification::ProofEnvelopeVerifier::new();
-    match verifier.verify_envelope(&payload) {
-        Ok(res) => (StatusCode::OK, Json(serde_json::to_value(res).unwrap())).into_response(),
-        Err(e) => (
+    match crate::verification::ProofEnvelopeVerifier::verify_envelope(&payload) {
+        Ok(res) => (StatusCode::OK, Json(res)).into_response(),
+        Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(serde_json::json!({
-                "error": e.to_string(),
-                "status": "proof_envelope_verification_failed"
+                "error": err.to_string(),
+                "status": "rejected"
             })),
         )
             .into_response(),
@@ -1239,18 +1237,37 @@ mod verify_endpoint_tests {
 
     #[tokio::test]
     async fn test_verify_proof_envelope_endpoint_success() {
-        use tower::ServiceExt;
-        use std::collections::HashSet;
         let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+
+        let vk_bytes = b"sample_verifying_key_bytes";
+        let vk_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, vk_bytes);
+        let expected_vk_hash = hex::encode(sha2::Sha256::digest(vk_bytes));
+
+        let proof_bytes = b"sample_groth16_proof_bytes";
+        let proof_b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, proof_bytes);
+
+        let public_inputs = vec!["0x1234".to_string(), "0x5678".to_string()];
+        let mut hasher = sha2::Sha256::new();
+        for input in &public_inputs {
+            hasher.update(input.as_bytes());
+            hasher.update(b":");
+        }
+        let expected_inputs_hash = hex::encode(hasher.finalize());
+
         let payload = crate::verification::ProofEnvelopePayload {
-            verifier_id: crate::verification::PROOF_ENVELOPE_VERIFIER_ID.to_string(),
-            proof_system: "groth16".to_string(),
-            curve: "bn254".to_string(),
-            vk_hash: "11".repeat(32),
-            proof_bytes: vec![1, 2, 3, 4, 5],
-            state_root: "22".repeat(32),
-            public_inputs_hash: "33".repeat(32),
-            verifier_owner: "0xConxianGovernanceOwnerContract".to_string(),
+            envelope_id: "env-001".into(),
+            proof_system: crate::verification::ProofSystem::Groth16Bn254,
+            curve: "bn254".into(),
+            verifying_key_b64: vk_b64,
+            expected_vk_hash,
+            proof_bytes_b64: proof_b64,
+            public_inputs,
+            expected_public_inputs_hash: expected_inputs_hash,
+            state_root_hex: Some(
+                "0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff".into(),
+            ),
+            verifier_owner: "conxian:nexus:gateway_bridge".into(),
         };
 
         let req = Request::builder()
@@ -1265,5 +1282,4 @@ mod verify_endpoint_tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
-
 }

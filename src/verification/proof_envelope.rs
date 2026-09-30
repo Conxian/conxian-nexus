@@ -1,187 +1,196 @@
-//! Cross-Repo Proof Envelope & Verifier Ownership Contract Verifier (Candidate C).
+//! Canonical Proof Envelope & Verifier Ownership Contract Alignment (Candidate C).
 //!
-//! Standardizes proof surface validation across Nexus (Glass Node layer) and Gateway (Execution layer)
-//! for cross-repo interoperability and contract owner verification.
+//! Standardized proof surface envelope schema establishing proof-system metadata,
+//! curve parameters, verifying key digest commitments, public input bindings,
+//! state root bindings, and verifier ownership assertions across Nexus and Gateway boundaries.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-/// Domain separator for canonical cross-repo proof envelope verification.
-pub const PROOF_ENVELOPE_VERIFIER_ID: &str = "conxian-proof-envelope-crossrepo-v1";
+pub const PROOF_ENVELOPE_VERIFIER_ID: &str = "NEXUS-PROOF-ENVELOPE-V1";
 
-/// Error types encountered during cross-repo proof envelope verification.
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error)]
 pub enum ProofEnvelopeError {
-    #[error("Invalid verifier identifier: expected {expected}, found {found}")]
-    VerifierIdMismatch { expected: String, found: String },
-
-    #[error("Empty or missing proof bytes payload")]
-    EmptyProof,
-
-    #[error("Unsupported proof system or curve combination: system={system}, curve={curve}")]
-    UnsupportedProofSystem { system: String, curve: String },
-
-    #[error("Malformed hex string for {field}: {error}")]
-    MalformedHex { field: String, error: String },
-
-    #[error("Invalid hash length for {field}: expected {expected_bytes} bytes (got {actual_bytes})")]
-    InvalidHashLength {
-        field: String,
-        expected_bytes: usize,
-        actual_bytes: usize,
-    },
-
-    #[error("Verifier owner contract verification failed: owner {owner} is unauthorized or invalid")]
-    UnauthorizedOwner { owner: String },
-
-    #[error("State root commitment hash mismatch or unverified")]
-    StateRootUnverified,
+    #[error("Missing envelope payload field: {0}")]
+    MissingField(String),
+    #[error("Unsupported curve: {0}")]
+    UnsupportedCurve(String),
+    #[error("Unsupported proof system: {0}")]
+    UnsupportedProofSystem(String),
+    #[error("Verifying key hash mismatch: expected {expected}, computed {computed}")]
+    VkHashMismatch { expected: String, computed: String },
+    #[error("Public inputs hash mismatch: expected {expected}, computed {computed}")]
+    PublicInputsHashMismatch { expected: String, computed: String },
+    #[error("Empty or invalid proof payload")]
+    InvalidProof,
+    #[error("State root mismatch: expected {expected}, computed {computed}")]
+    StateRootMismatch { expected: String, computed: String },
+    #[error("Verifier ownership assertion failed for verifier '{verifier}': {reason}")]
+    OwnershipError { verifier: String, reason: String },
 }
 
-/// Payload representing a cross-repo proof envelope submission.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ProofSystem {
+    #[serde(rename = "groth16_bn254")]
+    Groth16Bn254,
+    #[serde(rename = "groth16_bls12_381")]
+    Groth16Bls12381,
+    #[serde(rename = "bip340_schnorr")]
+    Bip340Schnorr,
+    #[serde(rename = "garbled_circuit_bitvm3")]
+    GarbledCircuitBitvm3,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofEnvelopePayload {
-    /// Canonical verifier identifier (`PROOF_ENVELOPE_VERIFIER_ID`).
-    pub verifier_id: String,
-    /// Proof system identifier (e.g. `"groth16"`, `"frost_schnorr"`, `"garbled_circuit"`).
-    pub proof_system: String,
-    /// Cryptographic curve identifier (e.g. `"bn254"`, `"bls12_381"`, `"secp256k1"`).
+    pub envelope_id: String,
+    pub proof_system: ProofSystem,
     pub curve: String,
-    /// Hex-encoded SHA-256 verifying key digest or hex VK commitment.
-    pub vk_hash: String,
-    /// Hex-encoded proof bytes.
-    pub proof_bytes: Vec<u8>,
-    /// Hex-encoded state root commitment (32 bytes / 64 hex chars).
-    pub state_root: String,
-    /// Hex-encoded public inputs digest commitment (32 bytes / 64 hex chars).
-    pub public_inputs_hash: String,
-    /// Contract address or public key string identifying the verifier contract owner.
+    pub verifying_key_b64: String,
+    pub expected_vk_hash: String,
+    pub proof_bytes_b64: String,
+    pub public_inputs: Vec<String>,
+    pub expected_public_inputs_hash: String,
+    pub state_root_hex: Option<String>,
     pub verifier_owner: String,
 }
 
-/// Verification response for cross-repo proof envelope calls.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofEnvelopeResponse {
-    /// Whether the proof envelope structural and cryptographic contract checks passed.
+    pub envelope_id: String,
     pub valid: bool,
-    /// Canonical verifier ID used.
-    pub verifier_id: String,
-    /// Verified proof system.
-    pub proof_system: String,
-    /// Verified curve.
+    pub verifier_id: &'static str,
+    pub proof_system: ProofSystem,
     pub curve: String,
-    /// Hex-encoded state root commitment.
-    pub state_root: String,
-    /// Contract or public key string of the verified contract owner.
-    pub verifier_owner: String,
-    /// Detailed status message or confirmation code.
-    pub status: String,
+    pub computed_vk_hash: String,
+    pub computed_public_inputs_hash: String,
+    pub state_root_bound: bool,
+    pub verifier_owner_verified: bool,
+    pub message: String,
 }
 
-/// Verifier engine for cross-repo proof envelopes.
-#[derive(Debug, Default, Clone, Copy)]
 pub struct ProofEnvelopeVerifier;
 
 impl ProofEnvelopeVerifier {
-    pub fn new() -> Self {
-        Self
-    }
-
-    /// Verify a cross-repo proof envelope payload.
-    ///
-    /// Checks verifier ID, proof system and curve pairing compatibility, proof byte presence,
-    /// hex hash commitment formats (32-byte digests), state root validity, and verifier owner assertions.
     pub fn verify_envelope(
-        &self,
         payload: &ProofEnvelopePayload,
     ) -> Result<ProofEnvelopeResponse, ProofEnvelopeError> {
-        if payload.verifier_id != PROOF_ENVELOPE_VERIFIER_ID {
-            return Err(ProofEnvelopeError::VerifierIdMismatch {
-                expected: PROOF_ENVELOPE_VERIFIER_ID.to_string(),
-                found: payload.verifier_id.clone(),
+        if payload.envelope_id.trim().is_empty() {
+            return Err(ProofEnvelopeError::MissingField("envelope_id".into()));
+        }
+        if payload.verifying_key_b64.trim().is_empty() {
+            return Err(ProofEnvelopeError::MissingField("verifying_key_b64".into()));
+        }
+        if payload.proof_bytes_b64.trim().is_empty() {
+            return Err(ProofEnvelopeError::MissingField("proof_bytes_b64".into()));
+        }
+        if payload.verifier_owner.trim().is_empty() {
+            return Err(ProofEnvelopeError::MissingField("verifier_owner".into()));
+        }
+
+        // 1. Verify Curve Alignment
+        let curve_clean = payload.curve.trim().to_lowercase();
+        match payload.proof_system {
+            ProofSystem::Groth16Bn254 => {
+                if curve_clean != "bn254" && curve_clean != "alt_bn128" {
+                    return Err(ProofEnvelopeError::UnsupportedCurve(payload.curve.clone()));
+                }
+            }
+            ProofSystem::Groth16Bls12381 => {
+                if curve_clean != "bls12_381" && curve_clean != "bls12-381" {
+                    return Err(ProofEnvelopeError::UnsupportedCurve(payload.curve.clone()));
+                }
+            }
+            ProofSystem::Bip340Schnorr => {
+                if curve_clean != "secp256k1" {
+                    return Err(ProofEnvelopeError::UnsupportedCurve(payload.curve.clone()));
+                }
+            }
+            ProofSystem::GarbledCircuitBitvm3 => {
+                if curve_clean != "bitcoin_script" && curve_clean != "raw" {
+                    return Err(ProofEnvelopeError::UnsupportedCurve(payload.curve.clone()));
+                }
+            }
+        }
+
+        // 2. Base64 Decode Verifying Key & Compute SHA-256 Digest
+        let vk_bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &payload.verifying_key_b64,
+        )
+        .map_err(|_| ProofEnvelopeError::InvalidProof)?;
+
+        if vk_bytes.is_empty() {
+            return Err(ProofEnvelopeError::InvalidProof);
+        }
+
+        let computed_vk_hash = hex::encode(Sha256::digest(&vk_bytes));
+        if !payload.expected_vk_hash.is_empty()
+            && !computed_vk_hash.eq_ignore_ascii_case(&payload.expected_vk_hash)
+        {
+            return Err(ProofEnvelopeError::VkHashMismatch {
+                expected: payload.expected_vk_hash.clone(),
+                computed: computed_vk_hash,
             });
         }
 
-        if payload.proof_bytes.is_empty() {
-            return Err(ProofEnvelopeError::EmptyProof);
+        // 3. Compute Public Inputs SHA-256 Digest Commitment
+        let mut hasher = Sha256::new();
+        for input in &payload.public_inputs {
+            hasher.update(input.as_bytes());
+            hasher.update(b":");
+        }
+        let computed_inputs_hash = hex::encode(hasher.finalize());
+
+        if !payload.expected_public_inputs_hash.is_empty()
+            && !computed_inputs_hash.eq_ignore_ascii_case(&payload.expected_public_inputs_hash)
+        {
+            return Err(ProofEnvelopeError::PublicInputsHashMismatch {
+                expected: payload.expected_public_inputs_hash.clone(),
+                computed: computed_inputs_hash,
+            });
         }
 
-        // Validate proof system and curve compatibility
-        let sys = payload.proof_system.to_ascii_lowercase();
-        let curve = payload.curve.to_ascii_lowercase();
+        // 4. Verify Base64 Proof Bytes
+        let proof_bytes = base64::Engine::decode(
+            &base64::engine::general_purpose::STANDARD,
+            &payload.proof_bytes_b64,
+        )
+        .map_err(|_| ProofEnvelopeError::InvalidProof)?;
 
-        let valid_pair = match (sys.as_str(), curve.as_str()) {
-            ("groth16", "bn254") | ("groth16", "bls12_381") => true,
-            ("frost_schnorr", "secp256k1") => true,
-            ("garbled_circuit", "sha256") => true,
-            _ => false,
+        if proof_bytes.is_empty() {
+            return Err(ProofEnvelopeError::InvalidProof);
+        }
+
+        // 5. Verify State Root Commitment Binding if present
+        let state_root_bound = if let Some(ref root_hex) = payload.state_root_hex {
+            let clean_root = root_hex.trim_start_matches("0x");
+            clean_root.len() == 64 && hex::decode(clean_root).is_ok()
+        } else {
+            false
         };
 
-        if !valid_pair {
-            return Err(ProofEnvelopeError::UnsupportedProofSystem {
-                system: payload.proof_system.clone(),
-                curve: payload.curve.clone(),
-            });
-        }
-
-        // Validate vk_hash
-        let vk_bytes = hex::decode(&payload.vk_hash).map_err(|e| ProofEnvelopeError::MalformedHex {
-            field: "vk_hash".to_string(),
-            error: e.to_string(),
-        })?;
-        if vk_bytes.len() != 32 {
-            return Err(ProofEnvelopeError::InvalidHashLength {
-                field: "vk_hash".to_string(),
-                expected_bytes: 32,
-                actual_bytes: vk_bytes.len(),
-            });
-        }
-
-        // Validate state_root
-        let sr_bytes =
-            hex::decode(&payload.state_root).map_err(|e| ProofEnvelopeError::MalformedHex {
-                field: "state_root".to_string(),
-                error: e.to_string(),
-            })?;
-        if sr_bytes.len() != 32 {
-            return Err(ProofEnvelopeError::InvalidHashLength {
-                field: "state_root".to_string(),
-                expected_bytes: 32,
-                actual_bytes: sr_bytes.len(),
-            });
-        }
-
-        // Validate public_inputs_hash
-        let pi_bytes = hex::decode(&payload.public_inputs_hash).map_err(|e| {
-            ProofEnvelopeError::MalformedHex {
-                field: "public_inputs_hash".to_string(),
-                error: e.to_string(),
-            }
-        })?;
-        if pi_bytes.len() != 32 {
-            return Err(ProofEnvelopeError::InvalidHashLength {
-                field: "public_inputs_hash".to_string(),
-                expected_bytes: 32,
-                actual_bytes: pi_bytes.len(),
-            });
-        }
-
-        // Validate verifier_owner is non-empty and formatted
-        let owner = payload.verifier_owner.trim();
-        if owner.is_empty() || owner == "unauthorized" || owner == "null" {
-            return Err(ProofEnvelopeError::UnauthorizedOwner {
-                owner: payload.verifier_owner.clone(),
+        // 6. Verifier Ownership Validation
+        let owner_clean = payload.verifier_owner.trim();
+        if !owner_clean.starts_with("conxian") && !owner_clean.starts_with("nexus") {
+            return Err(ProofEnvelopeError::OwnershipError {
+                verifier: owner_clean.to_string(),
+                reason: "Owner prefix must be 'conxian' or 'nexus'".into(),
             });
         }
 
         Ok(ProofEnvelopeResponse {
+            envelope_id: payload.envelope_id.clone(),
             valid: true,
-            verifier_id: PROOF_ENVELOPE_VERIFIER_ID.to_string(),
+            verifier_id: PROOF_ENVELOPE_VERIFIER_ID,
             proof_system: payload.proof_system.clone(),
             curve: payload.curve.clone(),
-            state_root: payload.state_root.clone(),
-            verifier_owner: payload.verifier_owner.clone(),
-            status: "proof_envelope_contract_verified".to_string(),
+            computed_vk_hash,
+            computed_public_inputs_hash: computed_inputs_hash,
+            state_root_bound,
+            verifier_owner_verified: true,
+            message: "Proof envelope schema, cryptographic commitments, and verifier ownership verified successfully".into(),
         })
     }
 }
@@ -190,95 +199,70 @@ impl ProofEnvelopeVerifier {
 mod tests {
     use super::*;
 
-    fn valid_payload() -> ProofEnvelopePayload {
+    fn sample_valid_payload() -> ProofEnvelopePayload {
+        let vk_bytes = b"sample_verifying_key_bytes";
+        let vk_b64 = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, vk_bytes);
+        let expected_vk_hash = hex::encode(Sha256::digest(vk_bytes));
+
+        let proof_bytes = b"sample_groth16_proof_bytes";
+        let proof_b64 =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, proof_bytes);
+
+        let public_inputs = vec!["0x1234".to_string(), "0x5678".to_string()];
+        let mut hasher = Sha256::new();
+        for input in &public_inputs {
+            hasher.update(input.as_bytes());
+            hasher.update(b":");
+        }
+        let expected_inputs_hash = hex::encode(hasher.finalize());
+
         ProofEnvelopePayload {
-            verifier_id: PROOF_ENVELOPE_VERIFIER_ID.to_string(),
-            proof_system: "groth16".to_string(),
-            curve: "bn254".to_string(),
-            vk_hash: "11".repeat(32),
-            proof_bytes: vec![1, 2, 3, 4, 5],
-            state_root: "22".repeat(32),
-            public_inputs_hash: "33".repeat(32),
-            verifier_owner: "0xConxianGovernanceOwnerContract".to_string(),
+            envelope_id: "env-001".into(),
+            proof_system: ProofSystem::Groth16Bn254,
+            curve: "bn254".into(),
+            verifying_key_b64: vk_b64,
+            expected_vk_hash,
+            proof_bytes_b64: proof_b64,
+            public_inputs,
+            expected_public_inputs_hash: expected_inputs_hash,
+            state_root_hex: Some(
+                "0x11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff".into(),
+            ),
+            verifier_owner: "conxian:nexus:gateway_bridge".into(),
         }
     }
 
     #[test]
-    fn test_verify_valid_envelope() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let payload = valid_payload();
-        let res = verifier.verify_envelope(&payload).unwrap();
+    fn test_valid_proof_envelope() {
+        let payload = sample_valid_payload();
+        let res = ProofEnvelopeVerifier::verify_envelope(&payload).unwrap();
         assert!(res.valid);
-        assert_eq!(res.status, "proof_envelope_contract_verified");
-        assert_eq!(res.verifier_owner, "0xConxianGovernanceOwnerContract");
+        assert!(res.state_root_bound);
+        assert!(res.verifier_owner_verified);
+        assert_eq!(res.verifier_id, PROOF_ENVELOPE_VERIFIER_ID);
     }
 
     #[test]
-    fn test_rejects_verifier_id_mismatch() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let mut payload = valid_payload();
-        payload.verifier_id = "invalid-id".to_string();
-        let err = verifier.verify_envelope(&payload).unwrap_err();
-        assert_eq!(
-            err,
-            ProofEnvelopeError::VerifierIdMismatch {
-                expected: PROOF_ENVELOPE_VERIFIER_ID.to_string(),
-                found: "invalid-id".to_string(),
-            }
-        );
+    fn test_curve_mismatch_rejected() {
+        let mut payload = sample_valid_payload();
+        payload.curve = "secp256k1".into();
+        let err = ProofEnvelopeVerifier::verify_envelope(&payload).unwrap_err();
+        assert!(matches!(err, ProofEnvelopeError::UnsupportedCurve(_)));
     }
 
     #[test]
-    fn test_rejects_empty_proof_bytes() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let mut payload = valid_payload();
-        payload.proof_bytes = vec![];
-        let err = verifier.verify_envelope(&payload).unwrap_err();
-        assert_eq!(err, ProofEnvelopeError::EmptyProof);
+    fn test_vk_hash_mismatch_rejected() {
+        let mut payload = sample_valid_payload();
+        payload.expected_vk_hash = "00".repeat(32);
+        let err = ProofEnvelopeVerifier::verify_envelope(&payload).unwrap_err();
+        assert!(matches!(err, ProofEnvelopeError::VkHashMismatch { .. }));
     }
 
     #[test]
-    fn test_rejects_unsupported_curve_system() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let mut payload = valid_payload();
-        payload.curve = "p256".to_string();
-        let err = verifier.verify_envelope(&payload).unwrap_err();
-        assert_eq!(
-            err,
-            ProofEnvelopeError::UnsupportedProofSystem {
-                system: "groth16".to_string(),
-                curve: "p256".to_string(),
-            }
-        );
-    }
-
-    #[test]
-    fn test_rejects_invalid_hash_length() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let mut payload = valid_payload();
-        payload.state_root = "22".repeat(16); // Only 16 bytes
-        let err = verifier.verify_envelope(&payload).unwrap_err();
-        assert_eq!(
-            err,
-            ProofEnvelopeError::InvalidHashLength {
-                field: "state_root".to_string(),
-                expected_bytes: 32,
-                actual_bytes: 16,
-            }
-        );
-    }
-
-    #[test]
-    fn test_rejects_unauthorized_owner() {
-        let verifier = ProofEnvelopeVerifier::new();
-        let mut payload = valid_payload();
-        payload.verifier_owner = "unauthorized".to_string();
-        let err = verifier.verify_envelope(&payload).unwrap_err();
-        assert_eq!(
-            err,
-            ProofEnvelopeError::UnauthorizedOwner {
-                owner: "unauthorized".to_string()
-            }
-        );
+    fn test_verifier_owner_rejected() {
+        let mut payload = sample_valid_payload();
+        payload.verifier_owner = "unauthorized_owner".into();
+        let err = ProofEnvelopeVerifier::verify_envelope(&payload).unwrap_err();
+        assert!(matches!(err, ProofEnvelopeError::OwnershipError { .. }));
     }
 }

@@ -150,6 +150,10 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
             continue;
         }
 
+        if raw_line.trim().is_empty() {
+            continue;
+        }
+
         if !raw_line.starts_with("  ") {
             break;
         }
