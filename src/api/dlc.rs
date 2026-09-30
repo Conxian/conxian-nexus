@@ -432,6 +432,7 @@ mod tests {
             gateway_url: None,
             http_client: reqwest::Client::new(),
             config,
+            mcp402: crate::mcp_402::Mcp402Facade::new(),
         }
     }
 
