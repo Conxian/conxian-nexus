@@ -139,3 +139,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Transitioning from 100KB Groth16 proofs to 200B garbled-circuit fraud dispute assertions on Bitcoin L1.
 - **Status**: **Completed (v0.4.23)**. Implemented `Bitvm3Verifier` in `src/executor/bitvm3.rs` providing gate commitment verification, wire label evaluation, garbled table hash checks, equivocation dispute assertions, and `/v1/verify/bitvm3` REST API endpoint.
 - **Code**: `src/executor/bitvm3.rs`, `src/api/canonical_bitvm.rs`
+
+### 2.20 Cross-Repo Proof Surface & Verifier Ownership Contract Alignment (Candidate C)
+- **Gap**: Disparity between Nexus and Gateway proof surface definitions and verifier ownership boundaries.
+- **Status**: **Completed (v0.4.23)**. Standardized proof envelope schema in `src/verification/proof_envelope.rs` supporting BN254 Groth16, BLS12-381, BIP-340 Schnorr, and BitVM3 garbled circuits. Validates curve parameters, verifying key digest commitments, public input binding hashes, state root commitments, and verifier ownership assertions, exposed via `/v1/verify/proof-envelope` REST endpoint.
+- **Code**: `src/verification/proof_envelope.rs`, `src/api/rest.rs`

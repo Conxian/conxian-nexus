@@ -2,7 +2,11 @@
 
 ## [0.4.23] - 2026-08-18
 
+- Implemented Cross-Repo Proof Surface & Verifier Ownership Contract Alignment (`Candidate C`) in `src/verification/proof_envelope.rs`, establishing standardized proof envelope validation, curve alignment, SHA-256 verifying key and public input hash commitments, state root binding, verifier ownership assertions, and `/v1/verify/proof-envelope` REST API endpoint.
+
+
 ### Added
+- **Hole 2.1 TEE Remote Attestation Depth & Measurement Verification**: Enhanced `NexusExecutor` in `src/executor/mod.rs` with X.509 DER certificate validity window checks (`not_before` / `not_after`), trusted enclave measurement set validation (`trusted_enclave_measurements`), and remote attestation verification.
 - Added BitVM3 Garbled-Circuit Fraud Proof Verifier (`src/executor/bitvm3.rs`) and `/v1/verify/bitvm3` REST API endpoint for ~200B fast-dispute assertions.
 - **CON-804 x402 V2 Settlement Rail Payment Verifier**: Implemented `X402PaymentVerifier` in `src/verification/x402.rs` and exposed `/v1/settlement/x402/verify` REST endpoint for HTTP 402 payment authorization proofs, Schnorr payment signatures, satoshi amounts, expiration bounds, and replay protection nonces.
 - **CON-803 DLC Oracle Attestation Verification & CET Outcome Endpoint**: Upgraded `src/api/dlc.rs` to include cryptographic BIP-340 Schnorr signature verification for DLC Oracles and added `/v1/dlc/cet/verify` REST endpoint for CET outcome verification and payout calculation.
