@@ -1,5 +1,4 @@
 version: 2
-  target-branch: "dev"
 updates:
   - package-ecosystem: "cargo"
     directory: "/"

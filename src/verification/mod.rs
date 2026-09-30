@@ -19,7 +19,7 @@ pub use frost::{
 pub use op_cat::{OpCatCovenantPayload, OpCatCovenantVerifier, OpCatError, OP_CAT_COVENANT_ID};
 pub use proof_envelope::{
     ProofEnvelopeError, ProofEnvelopePayload, ProofEnvelopeResponse, ProofEnvelopeVerifier,
-    PROOF_ENVELOPE_VERIFIER_ID,
+    ProofSystem, PROOF_ENVELOPE_VERIFIER_ID,
 };
 pub use x402::{
     X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
