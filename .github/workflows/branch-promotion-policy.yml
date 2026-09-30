@@ -1,0 +1,29 @@
+name: Branch Promotion Policy
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
+    branches: [main, staged, dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enforce:
+    name: Enforce branch promotion rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout policy implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        with:
+          # The enforcement implementation always comes from trusted
+          # default-branch code. Never check out the PR head or merge commit.
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Enforce exact route and evidence matrix
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python3 scripts/branch_promotion_policy.py --event-path "$GITHUB_EVENT_PATH"
