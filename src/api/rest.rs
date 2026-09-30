@@ -5,11 +5,13 @@ use crate::api::canonical_bitvm::{canonical_bitvm_routes, legacy_bitvm_unavailab
 use crate::api::dlc::dlc_routes;
 use crate::api::erp::erp_routes;
 use crate::api::identity::identity_routes;
+use crate::api::mcp402::mcp402_routes;
 use crate::api::services::services_routes;
 use crate::api::settlement::settlement_routes;
 use crate::api::zkml::zkml_routes;
 use crate::config::Config;
 use crate::executor::{ExecutionRequest, NexusExecutor};
+use crate::mcp_402::Mcp402Facade;
 use crate::metrics::{encode_bip110_metrics, init_bip110_metrics, BIP110_PROMETHEUS_CONTENT_TYPE};
 use crate::oracle::OracleService;
 use crate::state::NexusState;
@@ -57,6 +59,7 @@ pub struct AppState {
     pub gateway_url: Option<reqwest::Url>,
     pub http_client: reqwest::Client,
     pub config: Arc<Config>,
+    pub mcp402: Mcp402Facade,
 }
 
 #[derive(Deserialize, Debug)]
@@ -171,6 +174,7 @@ pub fn app_router(
         gateway_url,
         http_client: reqwest::Client::new(),
         config,
+        mcp402: Mcp402Facade::new(),
     };
 
     // Security: CORS configuration
@@ -200,6 +204,7 @@ pub fn app_router(
         .nest("/v1/zkml", zkml_routes())
         .nest("/admin/v1", crate::api::admin::admin_routes(state.clone()))
         .nest("/v1/settlement", settlement_routes())
+        .nest("/v1/mcp402", mcp402_routes())
         .nest("/v1/identity", identity_routes())
         .nest("/v1/dlc", dlc_routes())
         .nest("/v1/erp", erp_routes())

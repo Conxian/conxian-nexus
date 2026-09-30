@@ -1174,6 +1174,7 @@ mod cryptographic_hardening_tests {
             gateway_url: None,
             http_client: reqwest::Client::new(),
             config: std::sync::Arc::new(config),
+            mcp402: crate::mcp_402::Mcp402Facade::new(),
         };
 
         let response = login_handler(State(state), Json(login_req_with_sigs)).await;
