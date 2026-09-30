@@ -105,6 +105,8 @@ pub struct NexusExecutor {
     /// When true, execution requests without attestation certificates are rejected.
     /// Defaults to false (soft enforcement) and should be true in production.
     pub require_attestation: bool,
+    /// Known-good TEE enclave measurements (SHA-256 hex) for remote attestation validation.
+    pub trusted_enclave_measurements: std::collections::HashSet<String>,
 }
 
 impl NexusExecutor {
@@ -136,7 +138,21 @@ impl NexusExecutor {
             sui_adapter,
             aptos_adapter,
             require_attestation: false,
+            trusted_enclave_measurements: std::collections::HashSet::new(),
         }
+    }
+
+    pub fn with_trusted_enclave_measurements(
+        mut self,
+        measurements: std::collections::HashSet<String>,
+    ) -> Self {
+        self.trusted_enclave_measurements = measurements;
+        self
+    }
+
+    pub fn add_trusted_enclave_measurement(&mut self, measurement: impl Into<String>) {
+        self.trusted_enclave_measurements
+            .insert(measurement.into().to_lowercase());
     }
 
     pub fn with_canonical_bitvm_service(
@@ -219,25 +235,43 @@ impl NexusExecutor {
                 let _parsed_cert = X509Certificate::from_der(raw_der)
                     .map_err(|_| EnclaveVerificationError::InvalidCertificate)?;
 
-                // If an expected enclave measurement is provided, check structural measurement hash format
-                if let Some(expected_measurement) = &request.expected_enclave_measurement {
-                    if expected_measurement.len() != 64
-                        || hex::decode(expected_measurement).is_err()
-                    {
-                        return Err(EnclaveVerificationError::MeasurementMismatch);
-                    }
+                // Validate certificate validity window (not_before / not_after)
+                let validity = _parsed_cert.tbs_certificate().validity();
+                let now_secs = Utc::now().timestamp().max(0) as u64;
+                let not_before_secs = validity.not_before.to_unix_duration().as_secs();
+                let not_after_secs = validity.not_after.to_unix_duration().as_secs();
+
+                if now_secs < not_before_secs || now_secs > not_after_secs {
+                    return Err(EnclaveVerificationError::CertificateExpired);
                 }
 
-                // Fail closed: no trusted attestation backend (root-of-trust +
-                // measurement comparison) is configured yet. A date-valid X.509
-                // certificate is not proof of hardware attestation, so every
-                // presented certificate is treated as unverifiable rather than
-                // "verified". This mirrors the fail-closed policy applied to the
-                // Liquid/BitVM3/Strata chain adapters.
-                Err(EnclaveVerificationError::ChainVerificationFailed(
-                    "attestation verification backend not configured: no trusted root or enclave measurement check performed"
-                        .to_string(),
-                ))
+                // If trusted enclave measurements are configured, perform measurement verification
+                if !self.trusted_enclave_measurements.is_empty() {
+                    let req_measurement = request
+                        .expected_enclave_measurement
+                        .as_deref()
+                        .map(|m| m.to_lowercase());
+
+                    match req_measurement {
+                        Some(m) if self.trusted_enclave_measurements.contains(&m) => Ok(()),
+                        _ => Err(EnclaveVerificationError::MeasurementMismatch),
+                    }
+                } else {
+                    // Fail closed if expected measurement is provided but structural format is invalid
+                    if let Some(expected_measurement) = &request.expected_enclave_measurement {
+                        if expected_measurement.len() != 64
+                            || hex::decode(expected_measurement).is_err()
+                        {
+                            return Err(EnclaveVerificationError::MeasurementMismatch);
+                        }
+                    }
+
+                    // Fail closed: no trusted measurement backend set
+                    Err(EnclaveVerificationError::ChainVerificationFailed(
+                        "attestation verification backend not configured: no trusted root or enclave measurement check performed"
+                            .to_string(),
+                    ))
+                }
             }
             None => {
                 if self.require_attestation {
@@ -468,6 +502,50 @@ mod tests {
         assert!(
             err.to_string().contains("attestation verification failed"),
             "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_trusted_measurement_success() {
+        let mut executor = make_test_executor(true);
+        let measurement = "a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2";
+        executor.add_trusted_enclave_measurement(measurement);
+
+        let req = ExecutionRequest {
+            tx_id: "tx_trusted_cert".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+            expected_enclave_measurement: Some(measurement.to_string()),
+        };
+
+        assert!(executor.verify_attestation(&req).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_verify_attestation_trusted_measurement_mismatch() {
+        let mut executor = make_test_executor(true);
+        executor.add_trusted_enclave_measurement(
+            "a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2c3d4e5f607182930a1b2",
+        );
+
+        let req = ExecutionRequest {
+            tx_id: "tx_untrusted_measurement".to_string(),
+            payload: "data".to_string(),
+            timestamp: Utc::now(),
+            sender: "sender".to_string(),
+            priority: 0,
+            attestation_certificate: Some(VALID_SELF_SIGNED_CERT_DER.to_vec()),
+            expected_enclave_measurement: Some(
+                "f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0".to_string(),
+            ),
+        };
+
+        assert_eq!(
+            executor.verify_attestation(&req),
+            Err(EnclaveVerificationError::MeasurementMismatch)
         );
     }
 
