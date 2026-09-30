@@ -182,7 +182,7 @@ def validate_pull_request(
             errors.append("Promotions into 'staged' must come from this repository.")
 
         generated = GENERATED_DEV_RE.fullmatch(ctx.head_ref)
-        if ctx.head_ref != "dev" and generated is None and not any(ctx.head_ref.startswith(p) for p in ("jules-", "jules/")):
+        if ctx.head_ref != "dev" and generated is None:
             errors.append(
                 "PRs into 'staged' must come from 'dev' or an exact "
                 "promotion/dev-to-staged-<source-sha> candidate."
@@ -202,11 +202,11 @@ def validate_pull_request(
             errors.append("Promotions into 'main' must come from this repository.")
 
         generated = GENERATED_STAGED_RE.fullmatch(ctx.head_ref)
-        is_allowed_head = ctx.head_ref == "staged" or generated is not None or any(ctx.head_ref.startswith(p) for p in ("fix-", "fix/", "feature/", "feat/", "docs/", "chore/", "jules-", "jules/"))
+        is_allowed_head = ctx.head_ref == "staged" or generated is not None
         if not is_allowed_head:
             errors.append(
-                "PRs into 'main' must come from 'staged', an exact "
-                "promotion/staged-to-main-<source-sha> candidate, or a fix branch."
+                "PRs into 'main' must come from 'staged' or an exact "
+                "promotion/staged-to-main-<source-sha> candidate."
             )
         if ctx.actor == "dependabot[bot]" or ctx.head_ref.startswith("dependabot/"):
             errors.append("Dependabot PRs must target 'dev'; there is no Dependabot-to-main exception.")
@@ -215,9 +215,9 @@ def validate_pull_request(
         if generated is not None:
             _validate_generated_evidence(ctx, generated.group(1), errors)
 
-        if not (MAINNET_PACK_RE.search(body) or FEATURE_CHECKLIST_RE.search(body)):
+        if not MAINNET_PACK_RE.search(body):
             errors.append("PRs into 'main' must include a Mainnet Acceptance Evidence Pack.")
-        elif MAINNET_PACK_RE.search(body):
+        else:
             required_headings = (
                 "Promotion metadata",
                 "Mainnet-only production scope",
@@ -229,8 +229,6 @@ def validate_pull_request(
             missing = [heading for heading in required_headings if not _has_heading(body, heading)]
             if missing:
                 errors.append("Mainnet Acceptance Evidence Pack is missing: " + ", ".join(missing) + ".")
-        elif FEATURE_CHECKLIST_RE.search(body) and not any(ctx.head_ref.startswith(p) for p in ("jules-", "jules/")):
-            errors.append("PRs into 'main' using feature checklist must come from agent branches.")
         return errors
 
     errors.append("Branch Promotion Policy only accepts pull requests targeting dev, staged, or main.")
