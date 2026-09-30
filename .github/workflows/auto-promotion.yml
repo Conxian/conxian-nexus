@@ -1,0 +1,271 @@
+name: Auto-Promotion
+
+on:
+  push:
+    branches: [dev, staged]
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: Source branch to promote from
+        required: true
+        type: choice
+        options: [dev, staged]
+      target_branch:
+        description: Target branch to promote into
+        required: true
+        type: choice
+        options: [staged, main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: auto-promotion-${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Create immutable promotion candidate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    steps:
+      - name: Determine promotion lane
+        id: branches
+        env:
+          SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || github.ref_name }}
+          TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch || '' }}
+        run: |
+          set -euo pipefail
+          SOURCE="$SOURCE_REF"
+          TARGET="$TARGET_REF"
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            case "${SOURCE}:${TARGET}" in
+              dev:staged|staged:main) ;;
+              *)
+                echo "::error::Invalid promotion pair: ${SOURCE} -> ${TARGET}. Allowed: dev->staged, staged->main"
+                exit 1
+                ;;
+            esac
+          elif [ "$SOURCE" = "dev" ]; then
+            TARGET="staged"
+          elif [ "$SOURCE" = "staged" ]; then
+            TARGET="main"
+          else
+            echo "::error::Unsupported source branch: $SOURCE"
+            exit 1
+          fi
+
+          echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
+          echo "target=${TARGET}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event_name == 'push' && github.sha || steps.branches.outputs.source }}
+          fetch-depth: 0
+
+      - name: Capture exact candidate evidence
+        id: details
+        env:
+          SOURCE: ${{ steps.branches.outputs.source }}
+          TARGET: ${{ steps.branches.outputs.target }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$SOURCE" "$TARGET"
+
+          SOURCE_SHA=$(git rev-parse HEAD)
+          TARGET_SHA=$(git rev-parse "origin/${TARGET}")
+          if ! git merge-base "$SOURCE_SHA" "$TARGET_SHA" >/dev/null; then
+            echo "::error::Source and target have no merge base. Refusing bulk synchronization; open a reviewed manual promotion PR after lineage reconciliation."
+            exit 1
+          fi
+
+          COMMIT_WINDOW="${TARGET_SHA}..${SOURCE_SHA}"
+          COMMITS=$(git log "$COMMIT_WINDOW" --oneline --no-merges | head -20 || true)
+          if [ -z "$COMMITS" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No new commits to promote from ${SOURCE}@${SOURCE_SHA} to ${TARGET}@${TARGET_SHA}."
+            exit 0
+          fi
+
+          PROMO_BRANCH="promotion/${SOURCE}-to-${TARGET}-${SOURCE_SHA}"
+          {
+            echo "skip=false"
+            echo "source_sha=${SOURCE_SHA}"
+            echo "target_sha=${TARGET_SHA}"
+            echo "commit_window=${COMMIT_WINDOW}"
+            echo "promo_branch=${PROMO_BRANCH}"
+            echo 'commit_summary<<EOF'
+            echo "$COMMITS"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Detect exact existing candidate PR
+        if: steps.details.outputs.skip != 'true'
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
+          TARGET: ${{ steps.branches.outputs.target }}
+          PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
+        run: |
+          set -euo pipefail
+          EXISTING=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --base "$TARGET" \
+            --head "$PROMO_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // ""')
+          echo "number=${EXISTING}" >> "$GITHUB_OUTPUT"
+          if [ -n "$EXISTING" ]; then
+            echo "::notice::Exact promotion candidate PR #${EXISTING} already exists."
+          fi
+
+      - name: Publish immutable candidate ref
+        if: steps.details.outputs.skip != 'true' && steps.existing.outputs.number == ''
+        env:
+          PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
+          SOURCE_SHA: ${{ steps.details.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          git branch "$PROMO_BRANCH" "$SOURCE_SHA"
+          REMOTE_SHA=$(git ls-remote --heads origin "refs/heads/${PROMO_BRANCH}" | awk '{print $1}')
+          if [ -n "$REMOTE_SHA" ] && [ "$REMOTE_SHA" != "$SOURCE_SHA" ]; then
+            echo "::error::Immutable candidate ref already exists at a different SHA. Refusing to overwrite it."
+            exit 1
+          fi
+          git push -u origin "$PROMO_BRANCH"
+
+      - name: Build promotion PR body
+        if: steps.details.outputs.skip != 'true' && steps.existing.outputs.number == ''
+        env:
+          SOURCE: ${{ steps.branches.outputs.source }}
+          TARGET: ${{ steps.branches.outputs.target }}
+          SOURCE_SHA: ${{ steps.details.outputs.source_sha }}
+          TARGET_SHA: ${{ steps.details.outputs.target_sha }}
+          COMMIT_WINDOW: ${{ steps.details.outputs.commit_window }}
+          COMMIT_SUMMARY: ${{ steps.details.outputs.commit_summary }}
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import os
+
+          source = os.environ["SOURCE"]
+          target = os.environ["TARGET"]
+          source_sha = os.environ["SOURCE_SHA"]
+          target_sha = os.environ["TARGET_SHA"]
+          window = os.environ["COMMIT_WINDOW"]
+          commits = os.environ["COMMIT_SUMMARY"]
+          metadata = f"""### Exact promotion evidence
+
+          - Promotion source SHA: `{source_sha}`
+          - Promotion target-base SHA: `{target_sha}`
+          - Promotion commit window: `{window}`
+
+          ### Included changes
+
+          ```text
+          {commits}
+          ```
+          """
+
+          if (source, target) == ("dev", "staged"):
+              body = f"""## Dev -> staged promotion
+
+          Immutable candidate generated from the exact `dev` revision recorded below.
+
+          {metadata}
+
+          <!-- PROMOTION:DEV->STAGED -->
+          ### Dev -> staged promotion checklist
+
+          - [ ] Integrated testnet validation completed on `dev` and is linked here.
+          - [ ] Required CI checks are green for the exact promotion candidate commit.
+          - [ ] Wallet / signer / treasury boundary checks are explicitly recorded.
+          - [ ] Deployment boundary checks are explicitly recorded.
+          - [ ] Any required submodule pins, lockfiles, and artifact provenance are updated.
+          """
+          else:
+              body = f"""## Staged -> main promotion
+
+          Immutable candidate generated from the exact `staged` revision recorded below.
+
+          {metadata}
+
+          <!-- PROMOTION:STAGED->MAIN -->
+          ### Mainnet acceptance evidence pack
+
+          #### Promotion metadata
+          Complete all fields required by `openspec/specs/mainnet-acceptance-evidence-pack/spec.md`.
+
+          #### Mainnet-only production scope
+          Complete before review.
+
+          #### Contamination and residue proof
+          Complete before review.
+
+          #### Successful production validation
+          Complete before review.
+
+          #### Release-readiness sign-off
+          Complete before review.
+
+          #### Owner accountability
+          Complete before review.
+          """
+
+          date_str = datetime.date.today().isoformat()
+          title = f"PROMOTION:{source.upper()}->{target.upper()} — {date_str} — {source_sha[:12]}"
+          with open("pr_body.md", "w", encoding="utf-8") as handle:
+              handle.write(body)
+          with open("pr_title.txt", "w", encoding="utf-8") as handle:
+              handle.write(title)
+          PY
+
+      - name: Open draft promotion PR
+        if: steps.details.outputs.skip != 'true' && steps.existing.outputs.number == ''
+        env:
+          GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
+          TARGET: ${{ steps.branches.outputs.target }}
+          PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
+        run: |
+          set -euo pipefail
+          if ! gh pr create \
+            --repo "${{ github.repository }}" \
+            --base "$TARGET" \
+            --head "$PROMO_BRANCH" \
+            --draft \
+            --title "$(cat pr_title.txt)" \
+            --body-file pr_body.md; then
+            echo "::error::Automatic PR creation is unavailable. The immutable candidate ref remains published; open a manual promotion PR from ${PROMO_BRANCH} to ${TARGET} using pr_body.md without rewriting the ref."
+            exit 1
+          fi
+
+      - name: Enable auto-merge on promotion PR
+        if: steps.details.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
+          TARGET: ${{ steps.branches.outputs.target }}
+          PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --base "$TARGET" \
+            --head "$PROMO_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // ""')
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::error::Promotion PR not found for ${PROMO_BRANCH} -> ${TARGET}."
+            exit 1
+          fi
+          gh pr ready "$PR_NUMBER" --repo "${{ github.repository }}"
+          gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --squash --auto --delete-branch
+          echo "::notice::Auto-merge enabled for promotion PR #${PR_NUMBER} (merges on green required checks)."
+
+      - name: Report nothing to promote
+        if: steps.details.outputs.skip == 'true'
+        run: echo "::notice::No commits are pending in the exact promotion window."
