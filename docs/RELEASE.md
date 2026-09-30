@@ -6,7 +6,7 @@ This document details the release process, versioning rules, governance sign-off
 
 - **Semantic Versioning**: Follow `MAJOR.MINOR.PATCH` (e.g., `0.4.23`).
 - **Tag Format**: Release tags must follow `vMAJOR.MINOR.PATCH` (e.g., `v0.4.23`).
-- **MSRV Alignment**: Releases require Rust 1.98.1 (MSRV) as specified in `Cargo.toml` and `.github/workflows/release.yml`.
+- **MSRV Alignment**: Releases require Rust 1.94.0 (MSRV) as specified in `Cargo.toml` and `.github/workflows/release.yml`.
 - **Version Synchronization**: The version in `Cargo.toml`, `Cargo.lock`, and `CHANGELOG.md` must be identical prior to creating a release tag.
 
 ## Changelog Requirements
@@ -24,7 +24,7 @@ Releases are processed through the 7-stage automated workflow in `.github/workfl
 | Stage | Name | Key Controls & Checks |
 |-------|------|----------------------|
 | **1** | **Hygiene & Contamination Guard** | Gitleaks secret scanning (v8.18.2 with SHA-256 validation), `verify_contamination_guard.py`, `check_production_boundary.sh`, and workflow YAML verification. |
-| **2** | **Build, Test & Scoped Coverage** | Cargo workspace build/test execution under Rust 1.98.1; enforcing Lightning coverage (≥90%) and Bitcoin coverage (≥92%). |
+| **2** | **Build, Test & Scoped Coverage** | Cargo workspace build/test execution under Rust 1.94.0; enforcing Lightning coverage (≥90%) and Bitcoin coverage (≥92%). |
 | **3** | **Version Validation & Notes Extraction** | Ensures tag version matches `Cargo.toml` `version` field; parses release notes directly from `CHANGELOG.md`. |
 | **4** | **Release License Compliance Gate** | Executes `scripts/run_license_compliance.sh` using pinned tools (`cargo-deny` 0.18.6, `cargo-about` 0.8.2, `cargo-cyclonedx` 0.5.7) to verify software licenses and generate SBOM/attestation artifacts in `target/compliance/`. |
 | **5** | **Create GitHub Release** | Automatically creates the GitHub Release with extracted changelog notes and prerelease flags if applicable. |

@@ -62,7 +62,7 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 ### Prerequisites
 
 - Docker and Docker Compose
-- Rust 1.98.1 (MSRV), PostgreSQL 15, and Redis 7
+- Rust 1.94.0 (MSRV), PostgreSQL 15, and Redis 7
 
 ### Setup & Local Development
 

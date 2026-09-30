@@ -19,7 +19,7 @@ tag remains v0.4.22, 2026-07-15).
 
 - CI on `main`: green (Build & Test, `audit`, dependency license policy,
   Repo Hygiene & Contamination Guard, CodeQL, dependency-review).
-- MSRV: aligned to **1.98.1** (CI toolchain) — see the companion
+- MSRV: aligned to **1.94.0** (CI toolchain) — see the companion
   `chore: align MSRV declaration to CI toolchain` commit in this change set.
 - All six modules (`sync`, `state`, `executor`, `safety`, `api`, `storage`)
   are Active.
