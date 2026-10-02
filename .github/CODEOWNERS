@@ -38,8 +38,8 @@
 /CONTRIBUTING.md @botshelomokoka @admin-conxian-labs
 
 # Repository-specific ownership
-/src/api/ @Conxian/api-team
-/proto/ @Conxian/api-team
-/src/api/billing/ @Conxian/security-team
-/src/safety/ @Conxian/security-team
-/docs/ @Conxian/docs-team
+/src/api/ @Conxian/conxian-admin
+/proto/ @Conxian/conxian-admin
+/src/api/billing/ @Conxian/conxian-admin
+/src/safety/ @Conxian/conxian-admin
+/docs/ @Conxian/conxian-admin
