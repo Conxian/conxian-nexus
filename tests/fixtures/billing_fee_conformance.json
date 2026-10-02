@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "description": "Canonical ADR-004 billing-tier to fee-model conformance vectors (G5). This file links conxian-nexus SubscriptionTier (CON-24) to lib-conxian-core ADR-004 enterprise_subscription_cap, and MUST stay byte-identical with the corresponding fixture in lib-conxian-core.",
+  "cases": [
+    {
+      "subscription_tier": "free",
+      "signature_limit": 50000,
+      "enterprise_subscription_cap": false
+    },
+    {
+      "subscription_tier": "pro",
+      "signature_limit": 500000,
+      "enterprise_subscription_cap": false
+    },
+    {
+      "subscription_tier": "enterprise",
+      "signature_limit": 5000000,
+      "enterprise_subscription_cap": true
+    }
+  ]
+}
