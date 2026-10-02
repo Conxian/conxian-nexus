@@ -69,6 +69,19 @@ impl SubscriptionTier {
         matches!(self, Self::Enterprise)
     }
 
+    /// Maps this subscription tier to the ADR-004 fee model's
+    /// `enterprise_subscription_cap` flag (G5).
+    ///
+    /// The nexus tiers (CON-24) gate *monthly signature volume and features*;
+    /// the core fee model (ADR-004, `lib-conxian-core/src/fee.rs`) prices
+    /// *per-settlement*. The link: an Enterprise subscriber has already paid the
+    /// committed-use subscription (1M sats/mo), so their per-settlement
+    /// percentage component is replaced by the flat floor
+    /// (`FeeOptions::enterprise_subscription_cap`).
+    pub fn enterprise_fee_cap(&self) -> bool {
+        matches!(self, Self::Enterprise)
+    }
+
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "free" => Some(Self::Free),
@@ -771,5 +784,12 @@ mod tests {
         let decision =
             evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1_000_000, None, 0.5, pro_limit);
         assert_eq!(decision, QuotaDecision::WithinLimit);
+    }
+
+    #[test]
+    fn test_enterprise_fee_cap() {
+        assert!(!SubscriptionTier::Free.enterprise_fee_cap());
+        assert!(!SubscriptionTier::Pro.enterprise_fee_cap());
+        assert!(SubscriptionTier::Enterprise.enterprise_fee_cap());
     }
 }
