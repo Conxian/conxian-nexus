@@ -2,6 +2,10 @@
 
 <!-- What changed and why? -->
 
+### Feature -> dev promotion checklist
+
+- [ ] Ordinary work branch targeting dev with feature implementation and tests verified.
+
 ## Security and Governance Checklist
 
 - [ ] I assessed whether this change affects security posture, threat model, or governance controls.

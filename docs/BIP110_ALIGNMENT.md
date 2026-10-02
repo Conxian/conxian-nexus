@@ -124,11 +124,8 @@ The implementation commit declares Rust 1.85. Nexus still pins
 which predates that module and exposes no drop-in BIP-110 API for Nexus. The
 later control-model API also does not supply Nexus's missing Bitcoin metadata
 extraction or verification backend. This follow-up does not move the pin:
-Nexus declares Rust 1.82 in `Cargo.toml`, and changing the pin would be a
-dependency and API/MSRV change outside this conservative metadata-only scope.
-The locked workspace is verified with Rust 1.94.0 because its existing `sqlx`
-dependency requires that newer compiler; that verification constraint is not a
-request to change the declared MSRV.
+Nexus declares Rust 1.98.1 in `Cargo.toml` as its Minimum Supported Rust Version (MSRV).
+The locked workspace is verified with Rust 1.98.1.
 
 The exact `Conxian/conxius-enclave-sdk` implementation reviewed for comparison
 is commit [`a9986ef104b9cdd560bf7316f38b6878620e1ae5`](https://github.com/Conxian/conxius-enclave-sdk/commit/a9986ef104b9cdd560bf7316f38b6878620e1ae5),
