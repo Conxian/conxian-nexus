@@ -47,6 +47,9 @@ node_modules/
 test-results/
 playwright-report/
 
+# Agent & Session Tracking Artifacts
+.session/
+
 # Audit, Dumps, Temporary & Backup Files
 full_audit_dump.txt
 *dump.txt
