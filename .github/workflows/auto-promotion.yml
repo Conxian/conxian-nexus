@@ -3,6 +3,9 @@ name: Auto-Promotion
 on:
   push:
     branches: [dev, staged]
+  schedule:
+    # Hourly dwell re-check: promotes staged -> main once the minimum soak is met.
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       source_branch:
@@ -28,19 +31,28 @@ jobs:
   promote:
     name: Create immutable promotion candidate
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    env:
+      # Minimum soak time (hours) a staged head must age before it may be
+      # promoted to main. Override via the repo variable MIN_MAINNET_DWELL_HOURS
+      # (set to 0 to disable the dwell gate).
+      MIN_MAINNET_DWELL_HOURS: ${{ vars.MIN_MAINNET_DWELL_HOURS || '24' }}
     steps:
       - name: Determine promotion lane
         id: branches
         env:
-          SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || github.ref_name }}
+          SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || '' }}
           TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch || '' }}
         run: |
           set -euo pipefail
           SOURCE="$SOURCE_REF"
           TARGET="$TARGET_REF"
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # Hourly dwell re-check targets the soak-gated staged -> main lane.
+            SOURCE="staged"
+            TARGET="main"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${SOURCE}:${TARGET}" in
               dev:staged|staged:main) ;;
               *)
@@ -48,13 +60,17 @@ jobs:
                 exit 1
                 ;;
             esac
-          elif [ "$SOURCE" = "dev" ]; then
-            TARGET="staged"
-          elif [ "$SOURCE" = "staged" ]; then
-            TARGET="main"
           else
-            echo "::error::Unsupported source branch: $SOURCE"
-            exit 1
+            # push event
+            SOURCE="${{ github.ref_name }}"
+            if [ "$SOURCE" = "dev" ]; then
+              TARGET="staged"
+            elif [ "$SOURCE" = "staged" ]; then
+              TARGET="main"
+            else
+              echo "::error::Unsupported source branch: $SOURCE"
+              exit 1
+            fi
           fi
 
           echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
@@ -88,6 +104,21 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::No new commits to promote from ${SOURCE}@${SOURCE_SHA} to ${TARGET}@${TARGET_SHA}."
             exit 0
+          fi
+
+          # Minimum dwell (soak) gate for staged -> main releases. The staged
+          # head must have aged at least MIN_MAINNET_DWELL_HOURS before it may
+          # be promoted to main (which fires the production deploy).
+          if [ "$SOURCE" = "staged" ] && [ "$TARGET" = "main" ]; then
+            SOURCE_HEAD_TIME=$(git log -1 --format=%ct "$SOURCE_SHA")
+            NOW=$(date +%s)
+            AGE_SECONDS=$(( NOW - SOURCE_HEAD_TIME ))
+            MIN_SECONDS=$(( MIN_MAINNET_DWELL_HOURS * 3600 ))
+            if [ "$AGE_SECONDS" -lt "$MIN_SECONDS" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::staged->main dwell not yet met: source commit ${SOURCE_SHA} is ${AGE_SECONDS}s old (< ${MIN_SECONDS}s = ${MIN_MAINNET_DWELL_HOURS}h). Re-checking on the next schedule."
+              exit 0
+            fi
           fi
 
           PROMO_BRANCH="promotion/${SOURCE}-to-${TARGET}-${SOURCE_SHA}"
@@ -252,7 +283,10 @@ jobs:
         if: steps.details.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
+          SOURCE: ${{ steps.branches.outputs.source }}
           TARGET: ${{ steps.branches.outputs.target }}
+          SOURCE_SHA: ${{ steps.details.outputs.source_sha }}
+          TARGET_SHA: ${{ steps.details.outputs.target_sha }}
           PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
         run: |
           set -euo pipefail
@@ -267,6 +301,23 @@ jobs:
             echo "::error::Promotion PR not found for ${PROMO_BRANCH} -> ${TARGET}."
             exit 1
           fi
+
+          # Autopull: re-check the latest source/target before merging. If the
+          # source advanced, this candidate is stale and a newer promotion
+          # supersedes it; if the target advanced, pull it into the candidate.
+          git fetch --no-tags origin "$SOURCE" "$TARGET"
+          LATEST_SOURCE=$(git rev-parse "origin/${SOURCE}")
+          LATEST_TARGET=$(git rev-parse "origin/${TARGET}")
+          if [ "${LATEST_SOURCE}" != "${SOURCE_SHA}" ]; then
+            echo "::notice::Source ${SOURCE} advanced past ${SOURCE_SHA}; closing stale candidate (newer promotion supersedes it)."
+            gh pr close "$PR_NUMBER" --repo "${{ github.repository }}" --delete-branch
+            exit 0
+          fi
+          if [ "${LATEST_TARGET}" != "${TARGET_SHA}" ]; then
+            echo "::notice::Target ${TARGET} advanced past ${TARGET_SHA}; updating candidate branch before merge."
+            gh pr update-branch "$PR_NUMBER" --repo "${{ github.repository }}" || echo "::notice::Could not auto-update branch; proceeding."
+          fi
+
           gh pr ready "$PR_NUMBER" --repo "${{ github.repository }}"
           # Required status checks (e.g. "Enforce branch promotion rules") can
           # still be queued when the PR is brand new, which makes GitHub reject
@@ -289,4 +340,4 @@ jobs:
 
       - name: Report nothing to promote
         if: steps.details.outputs.skip == 'true'
-        run: echo "::notice::No commits are pending in the exact promotion window."
+        run: echo "::notice::Nothing to promote (no new commits in the window, or the staged->main dwell has not elapsed)."
