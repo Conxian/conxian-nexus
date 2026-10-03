@@ -252,7 +252,10 @@ jobs:
         if: steps.details.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
+          SOURCE: ${{ steps.branches.outputs.source }}
           TARGET: ${{ steps.branches.outputs.target }}
+          SOURCE_SHA: ${{ steps.details.outputs.source_sha }}
+          TARGET_SHA: ${{ steps.details.outputs.target_sha }}
           PROMO_BRANCH: ${{ steps.details.outputs.promo_branch }}
         run: |
           set -euo pipefail
@@ -267,6 +270,23 @@ jobs:
             echo "::error::Promotion PR not found for ${PROMO_BRANCH} -> ${TARGET}."
             exit 1
           fi
+
+          # Autopull: re-check the latest source/target before merging. If the
+          # source advanced, this candidate is stale and a newer promotion
+          # supersedes it; if the target advanced, pull it into the candidate.
+          git fetch --no-tags origin "$SOURCE" "$TARGET"
+          LATEST_SOURCE=$(git rev-parse "origin/${SOURCE}")
+          LATEST_TARGET=$(git rev-parse "origin/${TARGET}")
+          if [ "${LATEST_SOURCE}" != "${SOURCE_SHA}" ]; then
+            echo "::notice::Source ${SOURCE} advanced past ${SOURCE_SHA}; closing stale candidate (newer promotion supersedes it)."
+            gh pr close "$PR_NUMBER" --repo "${{ github.repository }}" --delete-branch
+            exit 0
+          fi
+          if [ "${LATEST_TARGET}" != "${TARGET_SHA}" ]; then
+            echo "::notice::Target ${TARGET} advanced past ${TARGET_SHA}; updating candidate branch before merge."
+            gh pr update-branch "$PR_NUMBER" --repo "${{ github.repository }}" || echo "::notice::Could not auto-update branch; proceeding."
+          fi
+
           gh pr ready "$PR_NUMBER" --repo "${{ github.repository }}"
           # Required status checks (e.g. "Enforce branch promotion rules") can
           # still be queued when the PR is brand new, which makes GitHub reject
