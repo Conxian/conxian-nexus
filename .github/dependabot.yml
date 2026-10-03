@@ -1,6 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
+    target-branch: "dev"
     directory: "/"
     schedule:
       interval: "weekly"
@@ -9,6 +10,7 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: "github-actions"
+    target-branch: "dev"
     directory: "/"
     schedule:
       interval: "weekly"
