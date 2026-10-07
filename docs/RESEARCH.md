@@ -202,3 +202,30 @@ This document establishes the official research map, cryptographic specification
      - State root hex commitment validation.
      - Strict verifier ownership prefix assertion (`conxian` / `nexus`).
 - **REST Endpoint**: Exposed via `/v1/verify/proof-envelope` HTTP REST API.
+
+## 14. CXIP-1317: Conxian Org-Wide Upgrade & Refinement Proposal
+
+### 14.1 Overview & Architectural Vision
+CXIP-1317 establishes the organization-wide protocol refinement and technical upgrade map across the Conxian stack (`lib-conxian-core`, `conxian-gateway`, `conxian-nexus`, `conxian_market`, and `conxian-business`). For Conxian Nexus (the protocol's primary Glass Node observation and proof layer), CXIP-1317 standardizes multi-chain proof verification, cross-repo proof envelopes, confidential enclave attestation, and fail-closed settlement rails.
+
+### 14.2 Strategic Refinement Pillars
+
+1. **Glass Node Multi-Chain Verifier Scaling (NIP-005 Phase 2 & BitVM3)**:
+   - Real cryptographic verification across all Tier 1 chain families: Bitcoin (BitVM2 BN254 Groth16, BitVM3 garbled circuits, Stacks/sBTC, Fedimint e-cash), EVM (MPT Keccak-256 root matching), Cosmos (IBC Tendermint SHA-256 header digests), Solana (Ed25519 & slot verification), Sui (BCS transaction effects & Move objects), and Aptos (Jellyfish Merkle Tree state proofs).
+   - Elimination of structural-only mock verifiers in favor of zero-knowledge, cryptographic, or state-proof assertions.
+
+2. **Cross-Repo Proof Envelope & Verifier Ownership Alignment (Candidate C)**:
+   - Canonical `ProofEnvelopePayload` schema bridging Nexus observation/verification with Gateway execution boundaries.
+   - Standardized proof system curve validation (BN254, BLS12-381, secp256k1 BIP-340), verifying key digest binding, public input hashing, and verifier ownership assertions (`conxian` / `nexus` prefixes).
+
+3. **Confidential TEE Enclave Attestation Depth (Hole 2.1)**:
+   - X.509 DER certificate parsing via `x509-cert`, time validity window enforcement (`not_before` / `not_after`), and expected enclave measurement hash matching (`trusted_enclave_measurements`).
+   - Hardened production boundary enforcement requiring remote authenticated Redis and PostgreSQL storage instances.
+
+4. **Distributed Idempotency & Conformance Layer (#251)**:
+   - Atomic SQLx transactional locks (`idempotency_locks`) supporting `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` primitives.
+   - Fail-closed consume-once idempotency for multi-node execution safety with live PostgreSQL conformance test suites.
+
+5. **x402 V2 Agentic Settlement & DLC Bond Verification (CON-804 / CON-803)**:
+   - HTTP 402 payment proof verification using BIP-340 Schnorr signatures over canonical payload digests.
+   - DLC Oracle attestation verification and CET outcome payout calculations for sovereign financial settlement.
