@@ -218,6 +218,7 @@ impl Config {
             bitvm_groth16_trusted_registry: None,
             admin_api_token: None,
             admin_public_keys: vec![],
+            lightning_invoice_check_url: None,
             otel_exporter_otlp_endpoint: None,
             otel_service_name: "conxian-nexus".to_string(),
         }
