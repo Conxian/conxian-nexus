@@ -585,8 +585,9 @@ async fn verify_payment(
             verified: false,
             tier: "free".to_string(),
             new_limit: FREE_TIER_SIGNATURE_LIMIT,
-            message: "Lightning payment verification not configured; upgrade requires manual review"
-                .to_string(),
+            message:
+                "Lightning payment verification not configured; upgrade requires manual review"
+                    .to_string(),
         })
         .into_response();
     }
