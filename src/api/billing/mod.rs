@@ -575,6 +575,23 @@ async fn verify_payment(
 
     let tier = SubscriptionTier::parse(&target_tier).unwrap_or_default();
 
+    // Fail-closed: never upgrade a tier without proof of Lightning settlement.
+    // Until a real invoice verifier (LND/CLN lookup via LIGHTNING_INVOICE_CHECK_URL)
+    // is wired, reject the upgrade rather than trusting the invoice_id alone.
+    // This closes the free self-upgrade path where any caller holding an
+    // invoice_id (minted by /billing/upgrade without payment) could claim Pro/Enterprise.
+    if state.config.lightning_invoice_check_url.is_none() {
+        return Json(PaymentVerifyResponse {
+            verified: false,
+            tier: "free".to_string(),
+            new_limit: FREE_TIER_SIGNATURE_LIMIT,
+            message:
+                "Lightning payment verification not configured; upgrade requires manual review"
+                    .to_string(),
+        })
+        .into_response();
+    }
+
     // Validates invoice settlement status against the persistent Redis store.
     // Enforces production-grade invoice lookup and key tier migration.
     let api_key_redis = format!("apikey:{}", api_key);

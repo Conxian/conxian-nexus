@@ -3,6 +3,9 @@ name: Auto-Promotion
 on:
   push:
     branches: [dev, staged]
+  schedule:
+    # Hourly dwell re-check: promotes staged -> main once the minimum soak is met.
+    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       source_branch:
@@ -28,19 +31,28 @@ jobs:
   promote:
     name: Create immutable promotion candidate
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/'))
+    env:
+      # Minimum soak time (hours) a staged head must age before it may be
+      # promoted to main. Override via the repo variable MIN_MAINNET_DWELL_HOURS
+      # (set to 0 to disable the dwell gate).
+      MIN_MAINNET_DWELL_HOURS: ${{ vars.MIN_MAINNET_DWELL_HOURS || '24' }}
     steps:
       - name: Determine promotion lane
         id: branches
         env:
-          SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || github.ref_name }}
+          SOURCE_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.source_branch || '' }}
           TARGET_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.target_branch || '' }}
         run: |
           set -euo pipefail
           SOURCE="$SOURCE_REF"
           TARGET="$TARGET_REF"
 
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            # Hourly dwell re-check targets the soak-gated staged -> main lane.
+            SOURCE="staged"
+            TARGET="main"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             case "${SOURCE}:${TARGET}" in
               dev:staged|staged:main) ;;
               *)
@@ -48,13 +60,17 @@ jobs:
                 exit 1
                 ;;
             esac
-          elif [ "$SOURCE" = "dev" ]; then
-            TARGET="staged"
-          elif [ "$SOURCE" = "staged" ]; then
-            TARGET="main"
           else
-            echo "::error::Unsupported source branch: $SOURCE"
-            exit 1
+            # push event
+            SOURCE="${{ github.ref_name }}"
+            if [ "$SOURCE" = "dev" ]; then
+              TARGET="staged"
+            elif [ "$SOURCE" = "staged" ]; then
+              TARGET="main"
+            else
+              echo "::error::Unsupported source branch: $SOURCE"
+              exit 1
+            fi
           fi
 
           echo "source=${SOURCE}" >> "$GITHUB_OUTPUT"
@@ -88,6 +104,21 @@ jobs:
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "::notice::No new commits to promote from ${SOURCE}@${SOURCE_SHA} to ${TARGET}@${TARGET_SHA}."
             exit 0
+          fi
+
+          # Minimum dwell (soak) gate for staged -> main releases. The staged
+          # head must have aged at least MIN_MAINNET_DWELL_HOURS before it may
+          # be promoted to main (which fires the production deploy).
+          if [ "$SOURCE" = "staged" ] && [ "$TARGET" = "main" ]; then
+            SOURCE_HEAD_TIME=$(git log -1 --format=%ct "$SOURCE_SHA")
+            NOW=$(date +%s)
+            AGE_SECONDS=$(( NOW - SOURCE_HEAD_TIME ))
+            MIN_SECONDS=$(( MIN_MAINNET_DWELL_HOURS * 3600 ))
+            if [ "$AGE_SECONDS" -lt "$MIN_SECONDS" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::staged->main dwell not yet met: source commit ${SOURCE_SHA} is ${AGE_SECONDS}s old (< ${MIN_SECONDS}s = ${MIN_MAINNET_DWELL_HOURS}h). Re-checking on the next schedule."
+              exit 0
+            fi
           fi
 
           PROMO_BRANCH="promotion/${SOURCE}-to-${TARGET}-${SOURCE_SHA}"
@@ -248,7 +279,7 @@ jobs:
             exit 1
           fi
 
-      - name: Enable auto-merge on promotion PR
+      - name: Leave promotion PR as draft for manual review
         if: steps.details.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.ORG_RECONCILE_PAT }}
@@ -287,26 +318,9 @@ jobs:
             gh pr update-branch "$PR_NUMBER" --repo "${{ github.repository }}" || echo "::notice::Could not auto-update branch; proceeding."
           fi
 
-          gh pr ready "$PR_NUMBER" --repo "${{ github.repository }}"
-          # Required status checks (e.g. "Enforce branch promotion rules") can
-          # still be queued when the PR is brand new, which makes GitHub reject
-          # auto-merge enablement with "Repository rule violations found".
-          # Retry with backoff until the checks report a status.
-          enabled=false
-          for attempt in 1 2 3 4 5 6; do
-            if gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" --merge --auto --delete-branch; then
-              enabled=true
-              break
-            fi
-            echo "::notice::Auto-merge enable attempt ${attempt} failed (required checks may still be queued); retrying in 20s."
-            sleep 20
-          done
-          if [ "$enabled" != "true" ]; then
-            echo "::error::Could not enable auto-merge for promotion PR #${PR_NUMBER} after 6 attempts."
-            exit 1
-          fi
-          echo "::notice::Auto-merge enabled for promotion PR #${PR_NUMBER} (merges on green required checks)."
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "Promotion candidate left as DRAFT. Manual review required before merge: fill the evidence pack and confirm all required CI checks are green."
+          echo "::notice::Promotion PR #${PR_NUMBER} left as DRAFT for manual review (no auto-merge)."
 
       - name: Report nothing to promote
         if: steps.details.outputs.skip == 'true'
-        run: echo "::notice::No commits are pending in the exact promotion window."
+        run: echo "::notice::Nothing to promote (no new commits in the window, or the staged->main dwell has not elapsed)."
