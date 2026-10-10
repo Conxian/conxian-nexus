@@ -136,6 +136,7 @@ pub struct Config {
     pub bitvm_groth16_trusted_registry: Option<BitvmGroth16TrustedRegistryConfig>,
     pub admin_api_token: Option<String>,
     pub admin_public_keys: Vec<String>,
+    pub lightning_invoice_check_url: Option<String>,
     pub otel_exporter_otlp_endpoint: Option<String>,
     pub otel_service_name: String,
 }
@@ -172,6 +173,13 @@ impl fmt::Debug for Config {
                 &self.admin_api_token.as_ref().map(|_| "<redacted>"),
             )
             .field("admin_public_keys", &self.admin_public_keys)
+            .field(
+                "lightning_invoice_check_url",
+                &self
+                    .lightning_invoice_check_url
+                    .as_ref()
+                    .map(|_| "<redacted>"),
+            )
             .field(
                 "otel_exporter_otlp_endpoint",
                 &self.otel_exporter_otlp_endpoint,
@@ -210,6 +218,7 @@ impl Config {
             bitvm_groth16_trusted_registry: None,
             admin_api_token: None,
             admin_public_keys: vec![],
+            lightning_invoice_check_url: None,
             otel_exporter_otlp_endpoint: None,
             otel_service_name: "conxian-nexus".to_string(),
         }
@@ -411,6 +420,10 @@ impl Config {
             bitvm_groth16_trusted_registry,
             admin_api_token,
             admin_public_keys,
+            lightning_invoice_check_url: env::var("LIGHTNING_INVOICE_CHECK_URL")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty()),
             otel_exporter_otlp_endpoint,
             otel_service_name,
         })
