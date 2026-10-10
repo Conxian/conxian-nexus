@@ -83,6 +83,21 @@ def _has_heading(body: str, heading: str) -> bool:
     )
 
 
+EVIDENCE_PLACEHOLDER_RE = re.compile(
+    r"complete\s+(?:all\s+fields|before\s+review)",
+    re.IGNORECASE,
+)
+
+
+def _heading_content(body: str, heading: str) -> str:
+    match = re.search(
+        rf"(?m)^####[ \t]+{re.escape(heading)}[ \t]*\n(.*?)(?=^####[ \t]|^##[ \t]|^---[ \t]*$|\Z)",
+        body,
+        re.IGNORECASE | re.DOTALL,
+    )
+    return match.group(1).strip() if match else ""
+
+
 def _bootstrap_matches(ctx: PullRequestContext, exception: BootstrapException) -> bool:
     return (
         exception.pr_number > 0
@@ -229,6 +244,21 @@ def validate_pull_request(
             missing = [heading for heading in required_headings if not _has_heading(body, heading)]
             if missing:
                 errors.append("Mainnet Acceptance Evidence Pack is missing: " + ", ".join(missing) + ".")
+            unfilled = [
+                heading
+                for heading in required_headings
+                if _has_heading(body, heading)
+                and (
+                    not _heading_content(body, heading)
+                    or EVIDENCE_PLACEHOLDER_RE.search(_heading_content(body, heading))
+                )
+            ]
+            if unfilled:
+                errors.append(
+                    "Mainnet Acceptance Evidence Pack must be completed (not placeholder) for: "
+                    + ", ".join(unfilled)
+                    + "."
+                )
         return errors
 
     errors.append("Branch Promotion Policy only accepts pull requests targeting dev, staged, or main.")
