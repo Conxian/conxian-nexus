@@ -203,6 +203,10 @@ pub fn app_router(
         .nest("/v1/identity", identity_routes())
         .nest("/v1/dlc", dlc_routes())
         .nest("/v1/erp", erp_routes())
+        .nest(
+            "/v1/gateway/iso20022",
+            crate::api::iso20022::iso20022_routes(),
+        )
         .nest("/v1/services", services_routes())
         .nest("/v1/bitvm2", bitvm_routes())
         .nest("/v1/evm", evm_routes())
@@ -877,6 +881,7 @@ mod tests {
 pub fn verify_routes() -> Router<AppState> {
     Router::new()
         .route("/zkcp", post(verify_zkcp))
+        .route("/zkvm", post(verify_zkvm))
         .route("/op-cat", post(verify_op_cat))
         .route("/frost", post(verify_frost))
         .route("/sui", post(verify_sui))
@@ -964,6 +969,25 @@ async fn verify_frost(
             Json(serde_json::json!({ "error": e.to_string(), "is_valid": false })),
         )
             .into_response(),
+    }
+}
+
+async fn verify_zkvm(
+    Json(payload): Json<crate::verification::ZkVmVerificationPayload>,
+) -> Result<
+    Json<crate::verification::ZkVmVerificationResponse>,
+    (StatusCode, Json<serde_json::Value>),
+> {
+    let verifier = crate::verification::ZkVmVerifier::new();
+    match verifier.verify_proof(&payload) {
+        Ok(res) => Ok(Json(res)),
+        Err(e) => Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "zkvm_verification_failed",
+                "message": e.to_string()
+            })),
+        )),
     }
 }
 

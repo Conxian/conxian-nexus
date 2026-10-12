@@ -11,6 +11,7 @@ pub mod op_cat;
 pub mod proof_envelope;
 pub mod x402;
 pub mod zkcp;
+pub mod zkvm;
 
 pub use frost::{
     FrostError, FrostVerificationPayload, FrostVerificationResponse, FrostVerifier,
@@ -25,6 +26,10 @@ pub use x402::{
     X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
 };
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
+pub use zkvm::{
+    ZkVmEnvironment, ZkVmError, ZkVmVerificationPayload, ZkVmVerificationResponse, ZkVmVerifier,
+    ZKVM_VERIFIER_ID,
+};
 
 use lib_conxian_core::control_model::{
     canonical_risk_profile_set, chain_family_for, Chain, ChainFamily, OverallRiskStatus,
