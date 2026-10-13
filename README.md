@@ -2,14 +2,15 @@
 
 Conxian Nexus is a universal chain node and proof layer, serving as the primary observation, synchronization, and verification point for Tier 1 Chain Families in the Conxian ecosystem.
 
-## Open Protocol (.org) vs. Commercial Infrastructure (.com) Architectural Boundary
+## Public protocol and managed service boundary
 
-Conxian operates on a strict architectural boundary separating open-source public goods (`conxian.org`) from commercial enterprise offerings (`conxian-labs.com`):
+Nexus owns observation, state commitments, and proof verification. Its public-protocol role is the deterministic, Bitcoin-anchored verification interface. Conxian-Labs may operate managed Nexus nodes with availability and support commitments, but those commercial operations do not change proof validity or introduce a native token, staking asset, or protocol tokenomics.
 
-- **Open Core (.org):** Focused on tokenless Bitcoin L1 anchoring, Rust-based Zero-Knowledge state verification (Groth16, SP1 & RISC Zero zkVMs), stateless multi-chain routing, and open-source hardware security SDKs (Android StrongBox TEE). Zero native tokens or speculative tokenomics.
-- **Commercial Enterprise (.com):** Focused on SLA-backed managed infrastructure, high-throughput ISO 20022 financial gateway translation middleware, rate-limiting & API authorization, and traditional finance (TradFi) compliance bridges.
+This repository is currently licensed under BUSL-1.1 and is therefore source-available rather than OSI open source. A separate licensing decision is required before describing the implementation itself as an open-source public good.
 
-For the full system architecture specification, see [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
+ISO 20022 parsing, API-key tenancy, commercial rate limits, and banking compliance orchestration belong to `conxian-gateway`. Multi-tenant deployment and SLA dashboards belong to `conxius-platform`. Hardware-backed signing belongs to `conxius-enclave-sdk`; Nexus consumes attested evidence and must not hold signing keys.
+
+The ecosystem is Bitcoin L1 anchored and has no Conxian native token. References to assets on observed third-party networks describe external state and must not be interpreted as Conxian token issuance or staking.
 
 ## Purpose
 
@@ -17,7 +18,11 @@ Provide a verifiable synchronization, ordering, and proof layer for Conxian serv
 
 ## Status
 
-**Active development (v0.4.23).** Production intent exists. Nexus is hardened for Tier 1 multi-chain verification as per ADR-006 / NIP-005 Phase 2, 2026 zkVM proving environments (SP1 and RISC Zero), BitVM3 garbled-circuit fraud proofs, FROST threshold signatures, OP_CAT covenants, DLC oracle attestation, x402 V2 settlement rails, ISO 20022 financial gateway translation, and the SRL-1 Lightning resilience layer.
+**Active development (v0.4.23).** Capabilities have different evidence levels.
+Treat a verifier as production-ready only when its implementation, conformance
+fixtures, deployment configuration, and external review satisfy its documented
+gate. The zkVM surface currently provides a fail-closed provider interface; it
+does not yet ship an SP1 or RISC Zero verifier backend or public REST route.
 
 ## Audience
 
@@ -35,16 +40,17 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 
 ## Relationship to the Conxian stack
 
-- **Core Protocol:** `Conxian` (DAO/On-chain) <-> **Nexus** (Observation/Proof Target A)
-- **Middleware:** `conxian-gateway` (Transport/ISO 20022 Translation Target B)
-- **Hardware Enclave:** `conxius-enclave-sdk` (StrongBox TEE Key Isolation Target C)
-- **Orchestration:** `conxius-platform` (Managed SLA & Dashboard Target D)
+- **Public protocol:** Bitcoin-anchored verification contracts and evidence schemas
+- **Middleware:** `conxian-gateway` (routing, ISO 20022, tenancy and compliance)
+- **Libraries:** Nexus-owned protocol and compatibility primitives
+- **Operations:** `conxius-platform` (managed deployment and SLA evidence)
+- **Clients:** `conxius-wallet`, `conxian_ui`
 
 ## Architecture
 
 Nexus is designed as a modular "Glass Node" that provides a verifiable synchronization layer between Layer 1 blockchains and the Conxian ecosystem.
 
-- **Verifiable Proofs**: Generates MMR state root commitments for off-chain state and executes cryptographic verifiers for 2026 zkVMs (SP1 / RISC Zero), zero-knowledge circuits (ZKCP), FROST threshold signatures, OP_CAT covenants, DLC oracle attestations, and x402 V2 settlement rails.
+- **Verifiable Proofs**: Generates MMR state root commitments for off-chain state and executes cryptographic verifiers for zero-knowledge circuits (ZKCP), FROST threshold signatures, OP_CAT covenants, DLC oracle attestations, and x402 V2 settlement rails.
 - **Multi-Chain Adapters**: Standardized normalization and cryptographic state verification for Bitcoin (UTXO, BitVM2, BitVM3 garbled circuits, Stacks/sBTC, Fedimint), EVM (Merkle Patricia Trie Keccak-256 root matching), Cosmos (Tendermint IBC SHA-256 header digests), Solana (Ed25519/slot verification), Sui (BCS transaction effects & Move objects), and Aptos (Jellyfish Merkle Tree sparse state proofs) (see [ADR-006](./docs/ADR-006_Tier1_Chain_Families.md) and [NIP-005](./docs/NIP-005_Real_MultiChain_Verification.md)).
 - **Resilience & Storage**: Integrated SRL-1 recovery layer for Lightning Network reliability and Neon PostgreSQL IdempotencyStore transactional locks.
 
@@ -53,16 +59,16 @@ Nexus is designed as a modular "Glass Node" that provides a verifiable synchroni
 - `nexus-sync`: Multi-chain ingestion and reorg handling (Bitcoin, EVM, Cosmos, Solana, Sui, Aptos).
 - `nexus-state`: MMR state root commitments, IdempotencyStore Neon PostgreSQL transactional locking, and persistence.
 - `nexus-executor`: Multi-chain protocol adapters (BitVM2, BitVM3, EVM MPT, Cosmos IBC, Solana, Sui, Aptos, Fedimint, Stacks/sBTC) and sequencing logic.
-- `nexus-verification`: Cryptographic verifiers for 2026 zkVMs (SP1 & RISC Zero), FROST Threshold Signatures (CON-1302), OP_CAT Covenants (CON-1303), ZKCP Pre-Image Circuits (CON-1313), DLC Oracle Attestations (CON-803), and x402 V2 Settlement Rails (CON-804).
+- `nexus-verification`: Cryptographic verifiers for FROST Threshold Signatures (CON-1302), OP_CAT Covenants (CON-1303), ZKCP Pre-Image Circuits (CON-1313), DLC Oracle Attestations (CON-803), and x402 V2 Settlement Rails (CON-804).
 - `nexus-safety`: Drift monitoring, Hardware Enclave Attestation verification (Hole 2.1), and SRL-1 resilience layer.
-- `api`: REST, ISO 20022 Gateway, and gRPC surfaces for multi-chain proofs, settlement verification, identity resolution, and event feeds.
+- `api`: REST and gRPC surfaces for multi-chain proofs, settlement verification, identity resolution, and event feeds.
 
 ## Documentation
 
 Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https://docs.conxian-labs.com/nexus) (GitHub Pages route).
 
-- [Architecture & System Boundaries](./docs/ARCHITECTURE.md)
 - [Operator Guide](./docs/PRD.md)
+- [Architecture and ownership boundary](./docs/ARCHITECTURE.md)
 - [API Reference](./docs/openapi.yaml)
 - [Security Model](./SECURITY.md)
 - [Observability & Runbooks](./docs/remediation/OBSERVABILITY_RUNBOOK.md)
@@ -116,17 +122,6 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
     # Node health check
     curl -f http://localhost:8080/health
 
-    # 2026 zkVM Proving Environment Verification (SP1 / RISC Zero)
-    curl -X POST http://localhost:8080/v1/verify/zkvm \
-      -H "Content-Type: application/json" \
-      -d '{"environment": "sp1", "program_digest": "...", "proof": "...", "public_values": "...", "expected_state_commitment": "..."}'
-
-    # ISO 20022 Financial Message Gateway Translation
-    curl -X POST http://localhost:8080/v1/gateway/iso20022/translate \
-      -H "X-API-Key: cx_live_ent_sample" \
-      -H "Content-Type: application/json" \
-      -d '{"message_type": "pacs_008", "format": "xml", "raw_message": "...", "target_chain_family": "bitcoin_utxo"}'
-
     # ZKCP Pre-Image Circuit Verification
     curl -X POST http://localhost:8080/v1/verify/zkcp \
       -H "Content-Type: application/json" \
@@ -136,6 +131,16 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
     curl -X POST http://localhost:8080/v1/verify/frost \
       -H "Content-Type: application/json" \
       -d '{"group_public_key": "...", "signature": "...", "message": "..."}'
+
+    # BitVM3 Garbled Circuit Fraud Proof Verification
+    curl -X POST http://localhost:8080/v1/verify/bitvm3 \
+      -H "Content-Type: application/json" \
+      -d '{"garbled_table_hash": "...", "wire_labels": [], "equivocation_proof": null}'
+
+    # x402 V2 Settlement Payment Verification
+    curl -X POST http://localhost:8080/v1/settlement/x402/verify \
+      -H "Content-Type: application/json" \
+      -d '{"payment_proof": "...", "amount_sats": 1000, "nonce": "..."}'
     ```
 
 ### Quick Start (Docker)

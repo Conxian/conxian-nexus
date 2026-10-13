@@ -6,7 +6,6 @@ pub mod dlc;
 pub mod erp;
 pub mod grpc;
 pub mod identity;
-pub mod iso20022;
 pub mod rest;
 pub mod security;
 pub mod services;

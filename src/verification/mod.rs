@@ -27,8 +27,9 @@ pub use x402::{
 };
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
 pub use zkvm::{
-    ZkVmEnvironment, ZkVmError, ZkVmVerificationPayload, ZkVmVerificationResponse, ZkVmVerifier,
-    ZKVM_VERIFIER_ID,
+    validate_envelope as validate_zkvm_envelope, verify_zkvm_proof, BitcoinNetwork,
+    BitcoinPublicValues, UnavailableZkVmBackend, ValidatedZkVmProof, ZkVmEnvironment, ZkVmError,
+    ZkVmProofBackend, ZkVmVerificationPayload, ZkVmVerificationReceipt, ZKVM_ENVELOPE_VERSION,
 };
 
 use lib_conxian_core::control_model::{

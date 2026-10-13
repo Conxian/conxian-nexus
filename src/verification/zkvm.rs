@@ -1,240 +1,253 @@
-//! 2026 zkVM Proving Environment Verification Module.
+//! Provider boundary for Bitcoin-state proofs produced by zkVMs.
 //!
-//! Provides cryptographic verification primitives and handlers for 2026 zkVM proving
-//! environments (SP1 and RISC Zero) for Bitcoin state verification, enforcing
-//! deterministic validation over public values digests and state commitments.
+//! Nexus validates the transport envelope and Bitcoin state binding here. A
+//! configured backend must perform the actual SP1 or RISC Zero receipt
+//! verification. The default backend is deliberately unavailable; structural
+//! validation alone must never produce a successful verification result.
 
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-/// Identifier for the zkVM verifier primitive.
-pub const ZKVM_VERIFIER_ID: &str = "zkvm:2026:v1";
+pub const ZKVM_ENVELOPE_VERSION: u16 = 1;
+const MAX_PROOF_BYTES: usize = 16 * 1024 * 1024;
+const MAX_PUBLIC_VALUES_BYTES: usize = 64 * 1024;
 
-/// Supported 2026 zkVM proving environment targets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ZkVmEnvironment {
-    /// Succinct SP1 zkVM
     Sp1,
-    /// RISC Zero zkVM
     RiscZero,
 }
 
-impl std::fmt::Display for ZkVmEnvironment {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Sp1 => write!(f, "sp1"),
-            Self::RiscZero => write!(f, "risc_zero"),
-        }
-    }
-}
-
-/// Payload supplied to execute zkVM proof verification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZkVmVerificationPayload {
-    /// Target zkVM environment (SP1 or RISC Zero).
+    pub envelope_version: u16,
     pub environment: ZkVmEnvironment,
-    /// ELF program digest or image ID (64 hex characters / 32 bytes).
+    /// SP1 verifying-key digest or RISC Zero image ID, encoded as 32-byte hex.
     pub program_digest: String,
-    /// Base64-encoded proof bytes.
-    pub proof: String,
-    /// Base64-encoded public values journal.
-    pub public_values: String,
-    /// Expected Bitcoin state commitment or MMR root hash (64 hex characters).
+    pub proof_b64: String,
+    /// JSON-encoded [`BitcoinPublicValues`].
+    pub public_values_b64: String,
+    /// Expected Bitcoin block or MMR state commitment, encoded as 32-byte hex.
     pub expected_state_commitment: String,
 }
 
-/// Response returned from zkVM verification.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ZkVmVerificationResponse {
-    /// Whether the proof and commitments are cryptographically valid.
-    pub verified: bool,
-    /// Identifier of the verifier implementation.
-    pub verifier_id: String,
-    /// Verified zkVM environment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BitcoinPublicValues {
+    pub bitcoin_network: BitcoinNetwork,
+    pub bitcoin_height: u64,
+    pub state_commitment: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BitcoinNetwork {
+    Mainnet,
+    Testnet,
+    Signet,
+    Regtest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValidatedZkVmProof {
     pub environment: ZkVmEnvironment,
-    /// Program digest / image ID verified against.
+    pub program_digest: [u8; 32],
+    pub proof: Vec<u8>,
+    pub public_values_bytes: Vec<u8>,
+    pub public_values: BitcoinPublicValues,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZkVmVerificationReceipt {
+    pub verified: bool,
+    pub environment: ZkVmEnvironment,
+    pub backend: String,
+    pub backend_version: String,
     pub program_digest: String,
-    /// SHA-256 hash digest of the verified public values journal (hex).
-    pub public_values_digest: String,
-    /// Verified Bitcoin state commitment.
-    pub verified_state_commitment: String,
+    pub bitcoin_network: BitcoinNetwork,
+    pub bitcoin_height: u64,
+    pub state_commitment: String,
 }
 
-/// Errors occurring during zkVM proof verification.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ZkVmError {
-    #[error("Empty or invalid program digest (must be 64-character hex string)")]
-    InvalidProgramDigest,
-
-    #[error("Empty or invalid proof payload")]
-    InvalidProof,
-
-    #[error("Empty or invalid public values journal")]
-    InvalidPublicValues,
-
-    #[error("Empty or invalid state commitment (must be 64-character hex string)")]
-    InvalidStateCommitment,
-
-    #[error("Public values digest mismatch: calculated {calculated}, expected {expected}")]
-    PublicValuesMismatch {
-        calculated: String,
-        expected: String,
-    },
-
-    #[error("Base64 decoding failed: {0}")]
-    Base64Error(String),
-
-    #[error("Verification execution failed: {0}")]
-    ExecutionFailed(String),
+    #[error("unsupported zkVM envelope version {0}")]
+    UnsupportedEnvelopeVersion(u16),
+    #[error("{field} must be exactly 32 bytes encoded as hexadecimal")]
+    InvalidDigest { field: &'static str },
+    #[error("invalid base64 in {field}")]
+    InvalidBase64 { field: &'static str },
+    #[error("{field} exceeds the maximum accepted size")]
+    PayloadTooLarge { field: &'static str },
+    #[error("proof payload is empty")]
+    EmptyProof,
+    #[error("public values are not valid Bitcoin state JSON: {0}")]
+    InvalidPublicValues(String),
+    #[error("public state commitment does not match the expected commitment")]
+    StateCommitmentMismatch,
+    #[error("zkVM verifier backend is not configured for {0:?}")]
+    BackendUnavailable(ZkVmEnvironment),
+    #[error("zkVM backend rejected the proof: {0}")]
+    ProofRejected(String),
 }
 
-/// Deterministic zkVM verifier.
-#[derive(Debug, Default, Clone)]
-pub struct ZkVmVerifier;
+/// Cryptographic provider implemented by an audited SP1 or RISC Zero adapter.
+pub trait ZkVmProofBackend: Send + Sync {
+    fn backend_name(&self) -> &'static str;
+    fn backend_version(&self) -> &'static str;
+    fn verify(&self, proof: &ValidatedZkVmProof) -> Result<(), ZkVmError>;
+}
 
-impl ZkVmVerifier {
-    pub fn new() -> Self {
-        Self
+/// Fail-closed backend used until a real verifier is deliberately configured.
+#[derive(Debug, Default)]
+pub struct UnavailableZkVmBackend;
+
+impl ZkVmProofBackend for UnavailableZkVmBackend {
+    fn backend_name(&self) -> &'static str {
+        "unavailable"
     }
 
-    /// Execute cryptographic verification of an SP1 or RISC Zero zkVM proof payload.
-    pub fn verify_proof(
-        &self,
-        payload: &ZkVmVerificationPayload,
-    ) -> Result<ZkVmVerificationResponse, ZkVmError> {
-        let program_digest = payload.program_digest.trim();
-        if program_digest.len() != 64 || !program_digest.chars().all(|c| c.is_ascii_hexdigit()) {
-            return Err(ZkVmError::InvalidProgramDigest);
-        }
-
-        let state_commitment = payload.expected_state_commitment.trim();
-        if state_commitment.len() != 64 || !state_commitment.chars().all(|c| c.is_ascii_hexdigit())
-        {
-            return Err(ZkVmError::InvalidStateCommitment);
-        }
-
-        let proof_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            payload.proof.trim(),
-        )
-        .map_err(|e| ZkVmError::Base64Error(format!("proof decode: {}", e)))?;
-
-        if proof_bytes.is_empty() {
-            return Err(ZkVmError::InvalidProof);
-        }
-
-        let public_values_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            payload.public_values.trim(),
-        )
-        .map_err(|e| ZkVmError::Base64Error(format!("public_values decode: {}", e)))?;
-
-        if public_values_bytes.is_empty() {
-            return Err(ZkVmError::InvalidPublicValues);
-        }
-
-        // Compute SHA-256 digest of the public values journal
-        let mut hasher = Sha256::new();
-        hasher.update(&public_values_bytes);
-        let public_values_digest = hex::encode(hasher.finalize());
-
-        // Perform zkVM structural and environment verification
-        match payload.environment {
-            ZkVmEnvironment::Sp1 => {
-                // SP1 proof verification protocol
-                if proof_bytes.len() < 32 {
-                    return Err(ZkVmError::ExecutionFailed(
-                        "SP1 proof payload under minimum length bound (32 bytes)".into(),
-                    ));
-                }
-            }
-            ZkVmEnvironment::RiscZero => {
-                // RISC Zero receipt journal verification protocol
-                if proof_bytes.len() < 32 {
-                    return Err(ZkVmError::ExecutionFailed(
-                        "RISC Zero seal payload under minimum length bound (32 bytes)".into(),
-                    ));
-                }
-            }
-        }
-
-        Ok(ZkVmVerificationResponse {
-            verified: true,
-            verifier_id: ZKVM_VERIFIER_ID.to_string(),
-            environment: payload.environment,
-            program_digest: program_digest.to_lowercase(),
-            public_values_digest,
-            verified_state_commitment: state_commitment.to_lowercase(),
-        })
+    fn backend_version(&self) -> &'static str {
+        "0"
     }
+
+    fn verify(&self, proof: &ValidatedZkVmProof) -> Result<(), ZkVmError> {
+        Err(ZkVmError::BackendUnavailable(proof.environment))
+    }
+}
+
+pub fn verify_zkvm_proof(
+    payload: &ZkVmVerificationPayload,
+    backend: &dyn ZkVmProofBackend,
+) -> Result<ZkVmVerificationReceipt, ZkVmError> {
+    let proof = validate_envelope(payload)?;
+    backend.verify(&proof)?;
+
+    Ok(ZkVmVerificationReceipt {
+        verified: true,
+        environment: proof.environment,
+        backend: backend.backend_name().to_owned(),
+        backend_version: backend.backend_version().to_owned(),
+        program_digest: hex::encode(proof.program_digest),
+        bitcoin_network: proof.public_values.bitcoin_network,
+        bitcoin_height: proof.public_values.bitcoin_height,
+        state_commitment: proof.public_values.state_commitment,
+    })
+}
+
+pub fn validate_envelope(
+    payload: &ZkVmVerificationPayload,
+) -> Result<ValidatedZkVmProof, ZkVmError> {
+    if payload.envelope_version != ZKVM_ENVELOPE_VERSION {
+        return Err(ZkVmError::UnsupportedEnvelopeVersion(payload.envelope_version));
+    }
+
+    let program_digest = decode_digest(&payload.program_digest, "program_digest")?;
+    let expected = decode_digest(
+        &payload.expected_state_commitment,
+        "expected_state_commitment",
+    )?;
+    let proof = decode_bounded(&payload.proof_b64, "proof_b64", MAX_PROOF_BYTES)?;
+    if proof.is_empty() {
+        return Err(ZkVmError::EmptyProof);
+    }
+    let public_values_bytes = decode_bounded(
+        &payload.public_values_b64,
+        "public_values_b64",
+        MAX_PUBLIC_VALUES_BYTES,
+    )?;
+    let public_values: BitcoinPublicValues = serde_json::from_slice(&public_values_bytes)
+        .map_err(|error| ZkVmError::InvalidPublicValues(error.to_string()))?;
+    let public_commitment = decode_digest(&public_values.state_commitment, "state_commitment")?;
+    if !constant_time_eq(&public_commitment, &expected) {
+        return Err(ZkVmError::StateCommitmentMismatch);
+    }
+
+    Ok(ValidatedZkVmProof {
+        environment: payload.environment,
+        program_digest,
+        proof,
+        public_values_bytes,
+        public_values,
+    })
+}
+
+fn decode_digest(value: &str, field: &'static str) -> Result<[u8; 32], ZkVmError> {
+    let value = value.strip_prefix("0x").unwrap_or(value);
+    let bytes = hex::decode(value).map_err(|_| ZkVmError::InvalidDigest { field })?;
+    bytes.try_into().map_err(|_| ZkVmError::InvalidDigest { field })
+}
+
+fn decode_bounded(
+    value: &str,
+    field: &'static str,
+    maximum: usize,
+) -> Result<Vec<u8>, ZkVmError> {
+    let estimated = value.len().saturating_mul(3) / 4;
+    if estimated > maximum {
+        return Err(ZkVmError::PayloadTooLarge { field });
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(value)
+        .map_err(|_| ZkVmError::InvalidBase64 { field })?;
+    if bytes.len() > maximum {
+        return Err(ZkVmError::PayloadTooLarge { field });
+    }
+    Ok(bytes)
+}
+
+fn constant_time_eq(left: &[u8; 32], right: &[u8; 32]) -> bool {
+    left.iter()
+        .zip(right)
+        .fold(0_u8, |difference, (a, b)| difference | (a ^ b))
+        == 0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn sample_payload(env: ZkVmEnvironment) -> ZkVmVerificationPayload {
-        let dummy_proof =
-            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, vec![1u8; 64]);
-        let dummy_journal = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            b"bitcoin_state_root_commit_2026",
-        );
-
+    fn payload() -> ZkVmVerificationPayload {
+        let public = BitcoinPublicValues {
+            bitcoin_network: BitcoinNetwork::Signet,
+            bitcoin_height: 245,
+            state_commitment: "ab".repeat(32),
+        };
         ZkVmVerificationPayload {
-            environment: env,
-            program_digest: "a".repeat(64),
-            proof: dummy_proof,
-            public_values: dummy_journal,
-            expected_state_commitment: "b".repeat(64),
+            envelope_version: ZKVM_ENVELOPE_VERSION,
+            environment: ZkVmEnvironment::Sp1,
+            program_digest: "cd".repeat(32),
+            proof_b64: base64::engine::general_purpose::STANDARD.encode([7_u8; 64]),
+            public_values_b64: base64::engine::general_purpose::STANDARD
+                .encode(serde_json::to_vec(&public).unwrap()),
+            expected_state_commitment: "ab".repeat(32),
         }
     }
 
     #[test]
-    fn test_sp1_verification_success() {
-        let verifier = ZkVmVerifier::new();
-        let payload = sample_payload(ZkVmEnvironment::Sp1);
-        let res = verifier.verify_proof(&payload).unwrap();
-
-        assert!(res.verified);
-        assert_eq!(res.environment, ZkVmEnvironment::Sp1);
-        assert_eq!(res.verifier_id, ZKVM_VERIFIER_ID);
-        assert_eq!(res.program_digest, "a".repeat(64));
+    fn validates_bitcoin_state_binding() {
+        let validated = validate_envelope(&payload()).unwrap();
+        assert_eq!(validated.public_values.bitcoin_height, 245);
     }
 
     #[test]
-    fn test_risc_zero_verification_success() {
-        let verifier = ZkVmVerifier::new();
-        let payload = sample_payload(ZkVmEnvironment::RiscZero);
-        let res = verifier.verify_proof(&payload).unwrap();
-
-        assert!(res.verified);
-        assert_eq!(res.environment, ZkVmEnvironment::RiscZero);
+    fn rejects_mismatched_state_commitment() {
+        let mut value = payload();
+        value.expected_state_commitment = "ef".repeat(32);
+        assert_eq!(
+            validate_envelope(&value),
+            Err(ZkVmError::StateCommitmentMismatch)
+        );
     }
 
     #[test]
-    fn test_rejects_invalid_program_digest() {
-        let verifier = ZkVmVerifier::new();
-        let mut payload = sample_payload(ZkVmEnvironment::Sp1);
-        payload.program_digest = "short_digest".into();
-
-        assert!(matches!(
-            verifier.verify_proof(&payload),
-            Err(ZkVmError::InvalidProgramDigest)
-        ));
-    }
-
-    #[test]
-    fn test_rejects_invalid_state_commitment() {
-        let verifier = ZkVmVerifier::new();
-        let mut payload = sample_payload(ZkVmEnvironment::Sp1);
-        payload.expected_state_commitment = "invalid_hex".into();
-
-        assert!(matches!(
-            verifier.verify_proof(&payload),
-            Err(ZkVmError::InvalidStateCommitment)
-        ));
+    fn unavailable_backend_never_verifies_structural_payloads() {
+        let error = verify_zkvm_proof(&payload(), &UnavailableZkVmBackend).unwrap_err();
+        assert_eq!(
+            error,
+            ZkVmError::BackendUnavailable(ZkVmEnvironment::Sp1)
+        );
     }
 }

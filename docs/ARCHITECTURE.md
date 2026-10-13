@@ -1,67 +1,50 @@
-# Conxian System Architecture & Enterprise Boundary Specification
+# Nexus architecture and operating boundary
 
-## Overview
+## Role
 
-Conxian is an enterprise-grade financial technology and blockchain protocol stack designed around a strict architectural boundary between the **Open Protocol (.org)** public goods layer and the **Commercial Enterprise (.com)** infrastructure offerings.
+Conxian Nexus is the evidence and verification service. It observes configured networks, produces deterministic state commitments, and verifies proofs against explicit Bitcoin state bindings. It does not own banking-message translation, customer tenancy, signing keys, transaction custody, or enterprise deployment policy.
 
-```
-+-----------------------------------------------------------------------------------+
-|                                 CONXIAN ECOSYSTEM                                 |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|    .org (Open Core / Public Protocol)            .com (Commercial Enterprise)     |
-|   -----------------------------------           ------------------------------    |
-|   - Tokenless L1 Proof Anchor                   - Managed High-Availability Nodes |
-|   - Rust-Based ZK State Verification            - ISO 20022 Financial Gateway     |
-|   - Stateless Multi-Chain Routing               - SLA & Managed API Rate Limits   |
-|   - Android StrongBox TEE Hardware SDK          - Enterprise Security Auditing    |
-|                                                                                   |
-+-----------------------------------------------------------------------------------+
-```
+## Public protocol and commercial operation
 
----
+| Surface | Public protocol responsibility | Managed Conxian-Labs responsibility |
+|---|---|---|
+| State observation | Deterministic adapters and evidence schemas | Operated data sources, capacity, monitoring, and incident response |
+| Proof verification | Fail-closed verifier interfaces and Bitcoin commitment binding | Audited verifier builds, rollout control, availability, and support |
+| API | Portable proof and health contracts | Authentication at the service perimeter, quotas, observability, and SLA reporting |
+| Persistence | Reproducible schema and integrity rules | Backups, replication, retention, recovery, and regional placement |
 
-## Strategic Boundaries & Repository Execution Targets
+The code is currently BUSL-1.1 source-available. The intended public-good role does not by itself make the repository open source; changing that status requires an explicit license decision.
 
-### Target A: conxian-nexus (The Verification Engine)
-- **Role:** Primary observation, synchronization, and zero-knowledge proof verification layer rooted in Bitcoin L1.
-- **Open Core (.org):**
-  - Universal ZK state verification across Tier 1 chains (Bitcoin, EVM, Cosmos, Solana, Sui, Aptos).
-  - Native support for modern 2026 zkVM proving environments (**SP1** and **RISC Zero**).
-  - Stateless execution, deterministic MMR state root commitments, and zero tokenomics.
-- **Commercial Enterprise (.com):**
-  - SLA-backed managed Nexus node deployments with automatic failover and high-availability load balancing.
+Commercial ISO 20022 translation, API-key tenancy, banking compliance, and routing policy are owned by `conxian-gateway`. Multi-tenant cloud orchestration is owned by `conxius-platform`. Hardware-backed key isolation and value-bearing signing are owned by `conxius-enclave-sdk`.
 
-### Target B: conxian-gateway (The Commercial Bridge)
-- **Role:** Financial middleware bridging traditional institutional systems to universal blockchain routing.
-- **Open Core (.org):**
-  - Open-source, stateless message transformation primitives for ISO 20022 (pacs.008, pain.001, camt.053 XML/JSON).
-- **Commercial Enterprise (.com):**
-  - High-throughput banking compliance translation, API key rate-limiting middleware, audit logging, and automated reconciliation for enterprise banking rails.
+## Invariants
 
-### Target C: conxius-enclave-sdk (Hardware Security)
-- **Role:** Hardware-enforced key isolation and non-custodial transaction signing.
-- **Open Core (.org):**
-  - Android StrongBox TEE cryptographic integration SDK for offline key protection.
-- **Commercial Enterprise (.com):**
-  - White-glove institutional security integration, hardware security module (HSM) attestation auditing, and bespoke enterprise deployment support.
+1. Bitcoin L1 is the root of verification for promoted production claims.
+2. Conxian has no native token, staking asset, or speculative tokenomics.
+3. Structural validation is not cryptographic proof verification.
+4. A proof succeeds only after an explicitly configured cryptographic backend verifies it and the public values bind to the expected Bitcoin commitment.
+5. Missing providers, stale observations, malformed evidence, and unsupported proof systems fail closed.
+6. Nexus does not custody keys or execute banking settlement.
 
-### Target D: conxius-platform (Enterprise Orchestration)
-- **Role:** Managed deployment infrastructure and cloud service management.
-- **Open Core (.org):**
-  - Containerization standards and local deployment templates (Docker Compose).
-- **Commercial Enterprise (.com):**
-  - Multi-tenant cloud orchestration dashboards, automated multi-cloud CI/CD pipelines (AWS/GCP), and SLA compliance monitoring.
+## zkVM provider boundary
 
----
+`src/verification/zkvm.rs` defines a bounded, versioned envelope for SP1 and RISC Zero receipts. It validates encoding, payload size, program/image identifiers, and a canonical Bitcoin state commitment. The `ZkVmProofBackend` trait is the integration point for audited verifier adapters.
 
-## Core System Invariants
+`UnavailableZkVmBackend` is the default scaffold and always returns an error. No REST verification route is published until a real backend, conformance fixtures, and deployment evidence exist. This prevents arbitrary bytes from being reported as verified proofs.
 
-1. **Zero-Token Policy:**
-   The entire Conxian ecosystem is strictly anchored to **Bitcoin L1**. No native protocol tokens, speculative staking, or tokenomic logic exist anywhere in the protocol stack.
+A production adapter must:
 
-2. **Fail-Closed Security Model:**
-   All cryptographic verification modules (Groth16, FROST, OP_CAT, ZKCP, zkVM SP1/RISC Zero, x402 V2) fail closed upon structural or verification anomaly.
+- invoke the upstream verifier for the selected zkVM;
+- bind the verified journal/public values to the exact bytes Nexus validated;
+- pin and report the verifier implementation and version;
+- enforce program/image allowlists through reviewed configuration;
+- return a typed rejection for unsupported or malformed receipts;
+- pass upstream-generated valid and tampered proof fixtures.
 
-3. **Multi-Chain Universal Verification:**
-   Stateless cryptographic proof checking across Tier 1 chain families without requiring custody or custodial bridges.
+## Legacy network adapters
+
+Stacks and other non-Bitcoin adapters currently remain compatibility observation modules. They are not Conxian trust roots and do not create a native asset. Removal or isolation requires fixture-backed migration so historical evidence and consumers are not silently broken. New protocol authority must not be added to those adapters.
+
+## Deployment gate
+
+Nexus is not a valid control-plane admin runtime until its admin API provides the canonical list routes, durable mutation/audit persistence, truthful readiness and synchronization data, and authenticated read/write separation expected by `conxian-business`. Provider deployment must remain gated until those contracts pass end-to-end tests against the deployed service.
