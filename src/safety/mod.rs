@@ -21,16 +21,32 @@ pub struct NexusSafety {
 }
 
 pub async fn is_safety_mode_active(storage: &Storage) -> anyhow::Result<bool> {
+    time::timeout(Duration::from_secs(5), read_safety_mode(storage)).await?
+}
+
+async fn read_safety_mode(storage: &Storage) -> anyhow::Result<bool> {
     let mut conn = storage
         .redis_client
         .get_multiplexed_async_connection()
         .await?;
-    let is_safety_mode: bool = redis::cmd("GET")
+    let raw = redis::cmd("GET")
         .arg("nexus:safety_mode")
-        .query_async::<bool>(&mut conn)
-        .await
-        .unwrap_or(false);
-    Ok(is_safety_mode)
+        .query_async::<Option<String>>(&mut conn)
+        .await?;
+    decode_safety_mode(raw.as_deref())
+}
+
+/// A missing key is the observed cleared state. Read failures and malformed
+/// values must never be converted into permission to execute.
+pub fn decode_safety_mode(raw: Option<&str>) -> anyhow::Result<bool> {
+    match raw
+        .map(|value| value.trim().to_ascii_lowercase())
+        .as_deref()
+    {
+        None | Some("0" | "false" | "no" | "off") => Ok(false),
+        Some("1" | "true" | "yes" | "on") => Ok(true),
+        Some(_) => anyhow::bail!("Invalid safety-mode state"),
+    }
 }
 
 impl NexusSafety {
@@ -212,11 +228,11 @@ impl NexusSafety {
             .redis_client
             .get_multiplexed_async_connection()
             .await?;
-        let is_safety_mode: bool = redis::cmd("GET")
+        let raw = redis::cmd("GET")
             .arg("nexus:safety_mode")
-            .query_async::<bool>(&mut conn)
-            .await
-            .unwrap_or(false);
+            .query_async::<Option<String>>(&mut conn)
+            .await?;
+        let is_safety_mode = decode_safety_mode(raw.as_deref())?;
 
         if is_safety_mode {
             tracing::info!("System recovered. Clearing Safety Mode.");
@@ -242,11 +258,11 @@ impl NexusSafety {
             .redis_client
             .get_multiplexed_async_connection()
             .await?;
-        let is_safety_mode: bool = redis::cmd("GET")
+        let raw = redis::cmd("GET")
             .arg("nexus:safety_mode")
-            .query_async::<bool>(&mut conn)
-            .await
-            .unwrap_or(false);
+            .query_async::<Option<String>>(&mut conn)
+            .await?;
+        let is_safety_mode = decode_safety_mode(raw.as_deref())?;
 
         if is_safety_mode {
             Ok(format!(
@@ -265,6 +281,24 @@ impl NexusSafety {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safety_mode_accepts_observed_cleared_and_legacy_boolean_states() {
+        assert!(!decode_safety_mode(None).unwrap());
+        for value in ["0", "false", "no", "off"] {
+            assert!(!decode_safety_mode(Some(value)).unwrap());
+        }
+        for value in ["1", "true", "yes", "on", " TRUE "] {
+            assert!(decode_safety_mode(Some(value)).unwrap());
+        }
+    }
+
+    #[test]
+    fn malformed_safety_state_cannot_authorize_execution() {
+        for value in ["", "unknown", "2", "healthy", "-1"] {
+            assert!(decode_safety_mode(Some(value)).is_err());
+        }
+    }
 
     #[test]
     fn test_calculate_drift() {

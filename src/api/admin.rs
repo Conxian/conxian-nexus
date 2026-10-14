@@ -628,11 +628,24 @@ async fn get_runtime_health(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
+        .await
+        .map_err(|_| safety_state_unavailable())?;
+    if safety_mode {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "status": "safety-mode", "safety_mode": true,
+                "version": env!("CARGO_PKG_VERSION"), "timestamp": current_timestamp()
+            })),
+        )
+            .into_response());
+    }
     Ok(Json(json!({
         "status": "healthy",
         "timestamp": current_timestamp(),
-        "version": "v0.4.18",
-        "safety_mode": crate::safety::is_safety_mode_active(&state.storage).await.unwrap_or(false)
+        "version": env!("CARGO_PKG_VERSION"),
+        "safety_mode": safety_mode
     })))
 }
 
@@ -750,11 +763,23 @@ async fn get_safety_mode(
     authorize_for_scope(&state, &headers, "api.read")?;
     let active = crate::safety::is_safety_mode_active(&state.storage)
         .await
-        .unwrap_or(false);
+        .map_err(|_| safety_state_unavailable())?;
     Ok(Json(json!({
         "active": active,
         "triggered_at": Value::Null
     })))
+}
+
+fn safety_state_unavailable() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "status": "unavailable", "error": "safety_state_unavailable",
+            "active": Value::Null, "safety_mode": Value::Null,
+            "triggered_at": Value::Null
+        })),
+    )
+        .into_response()
 }
 
 async fn ack_safety_mode(

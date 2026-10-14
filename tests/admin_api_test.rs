@@ -188,7 +188,7 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
 fn test_router() -> Router {
     let config = Arc::new(Config::from_env().unwrap_or_else(|_| Config::default_test()));
     let storage =
-        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/").unwrap());
+        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1:1/").unwrap());
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
@@ -735,6 +735,16 @@ async fn admin_observations_fail_closed_without_real_evidence() {
             "/admin/v1/drift",
             "drift_observation_unavailable",
             "drift_ms",
+        ),
+        (
+            "/admin/v1/runtime/health",
+            "safety_state_unavailable",
+            "safety_mode",
+        ),
+        (
+            "/admin/v1/safety-mode",
+            "safety_state_unavailable",
+            "active",
         ),
     ] {
         let response = app
