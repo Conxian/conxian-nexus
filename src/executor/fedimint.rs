@@ -1,6 +1,5 @@
 use crate::storage::Storage;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,10 +34,8 @@ impl FedimintAdapter {
         Self { storage }
     }
 
-    /// Validates and verifies an e-cash blinded mint proof / note for Fedimint (CON-1304 Phase 2).
-    ///
-    /// Performs cryptographic digest derivation, prefix & payload structural validation,
-    /// double-spend detection against `fedimint_verified_proofs`, and audit logging.
+    /// Validates structural input, then fails closed without a cryptographic provider.
+    /// A prefix/hash is not federation signature or double-spend evidence.
     pub async fn verify_mint_proof(&self, proof: &str) -> anyhow::Result<bool> {
         let res = self
             .verify_mint_proof_detailed(proof, "fed:default_federation", 1000)
@@ -64,74 +61,13 @@ impl FedimintAdapter {
             anyhow::bail!("Invalid Fedimint e-cash proof length: payload too short");
         }
 
-        // Derive SHA-256 proof hash
-        let proof_hash = hex::encode(Sha256::digest(trimmed_proof.as_bytes()));
-
-        // Derive SHA-256 nonce hash (simulated pre-image/nonce derivation from proof payload)
-        let mut nonce_hasher = Sha256::new();
-        nonce_hasher.update(b"fedimint_nonce_v1:");
-        nonce_hasher.update(trimmed_proof.as_bytes());
-        let nonce_hash = hex::encode(nonce_hasher.finalize());
-
-        // Check for double-spend in PostgreSQL audit repository
-        let existing: Option<i64> = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM fedimint_verified_proofs WHERE nonce_hash = $1 OR proof_hash = $2",
-        )
-        .bind(&nonce_hash)
-        .bind(&proof_hash)
-        .fetch_optional(&self.storage.pg_pool)
-        .await
-        .unwrap_or(Some(0));
-
-        if let Some(count) = existing {
-            if count > 0 {
-                tracing::warn!(
-                    "Fedimint proof double-spend attempt detected: nonce_hash={}",
-                    nonce_hash
-                );
-                return Ok(FedimintVerificationResult {
-                    valid: false,
-                    proof_hash,
-                    nonce_hash,
-                    federation_id: federation_id.to_string(),
-                    amount_sats,
-                    message: "Double-spend attempt detected: proof or nonce already spent"
-                        .to_string(),
-                });
-            }
+        if federation_id.trim().is_empty() || amount_sats == 0 {
+            anyhow::bail!("Invalid Fedimint federation or amount context");
         }
-
-        // Record verified proof in persistent audit trail
-        let insert_res = sqlx::query(
-            "INSERT INTO fedimint_verified_proofs (proof_hash, federation_id, amount_sats, nonce_hash, status)
-             VALUES ($1, $2, $3, $4, 'verified')",
-        )
-        .bind(&proof_hash)
-        .bind(federation_id)
-        .bind(amount_sats as i64)
-        .bind(&nonce_hash)
-        .execute(&self.storage.pg_pool)
-        .await;
-
-        if let Err(e) = insert_res {
-            tracing::warn!("Failed to insert Fedimint proof audit record: {}", e);
-        }
-
-        tracing::info!(
-            "Successfully verified Fedimint e-cash proof: proof_hash={}, nonce_hash={}, fed_id={}",
-            proof_hash,
-            nonce_hash,
-            federation_id
-        );
-
-        Ok(FedimintVerificationResult {
-            valid: true,
-            proof_hash,
-            nonce_hash,
-            federation_id: federation_id.to_string(),
-            amount_sats,
-            message: "Fedimint blinded mint proof cryptographically verified".to_string(),
-        })
+        // No qualified federation keyset/signature verifier or atomic spentness
+        // provider is wired into this adapter. Never record arbitrary input as
+        // verified, and never treat a database failure as an unspent note.
+        anyhow::bail!("Fedimint cryptographic verifier not configured")
     }
 }
 
@@ -172,15 +108,12 @@ mod tests {
         let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
         let adapter = FedimintAdapter::new(storage);
 
-        let res = adapter
+        let err = adapter
             .verify_mint_proof_detailed(sample_valid_proof(), "fed:test_federation_1", 5000)
             .await
-            .unwrap();
-
-        assert!(res.valid);
-        assert_eq!(res.federation_id, "fed:test_federation_1");
-        assert_eq!(res.amount_sats, 5000);
-        assert_ne!(res.proof_hash, "");
-        assert_ne!(res.nonce_hash, "");
+            .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("cryptographic verifier not configured"));
     }
 }

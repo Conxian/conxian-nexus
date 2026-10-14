@@ -133,6 +133,10 @@ pub struct ServiceMetadata {
     pub version: String,
     pub proof_surface_version: String,
     pub supported_chains: Vec<String>,
+    #[serde(default)]
+    pub supported_chains_semantics: String,
+    #[serde(default)]
+    pub adapter_discovery: Option<crate::api::capabilities::ObservationDiscoveryManifest>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -192,6 +196,10 @@ pub fn app_router(
         .route("/metrics", get(prometheus_metrics_handler))
         .route("/v1/proof", get(get_proof))
         .route("/v1/proof/manifest", get(get_proof_manifest)) // Narrow proof surface
+        .route(
+            "/v1/capabilities",
+            get(crate::api::capabilities::get_capabilities),
+        )
         .route("/v1/submit", post(submit_transaction))
         .route("/v1/status", get(health_handler))
         .route("/v1/mmr-proof", get(get_mmr_proof))
@@ -508,6 +516,10 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
         service: ServiceMetadata {
             version: env!("CARGO_PKG_VERSION").to_string(),
             proof_surface_version: "1.0.0".to_string(),
+            supported_chains_semantics: "legacy-interface-families-not-live-support".into(),
+            adapter_discovery: Some(crate::api::capabilities::registered_observation_adapters(
+                &state,
+            )),
             supported_chains: vec![
                 "stacks".to_string(),
                 "bitcoin".to_string(),

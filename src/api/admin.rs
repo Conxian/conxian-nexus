@@ -676,7 +676,9 @@ async fn list_chains(
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "chains": ["bitcoin", "stacks", "evm", "cosmos"]
+        "chains": ["bitcoin", "stacks", "evm", "cosmos"],
+        "semantics": "legacy-interface-families-not-live-support",
+        "adapter_discovery": crate::api::capabilities::registered_observation_adapters(&state)
     })))
 }
 
@@ -686,11 +688,16 @@ async fn get_chain_status(
     Path(chain): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "chain": chain,
-        "height": 840000,
-        "synchronized": true
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "chain": chain,
+            "error": "chain_observation_unavailable",
+            "height": null,
+            "synchronized": null
+        })),
+    )
+        .into_response())
 }
 
 async fn list_attestations(
@@ -709,10 +716,15 @@ async fn get_attestation(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "id": id,
-        "verified": true
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "id": id,
+            "error": "attestation_evidence_unavailable",
+            "verified": null
+        })),
+    )
+        .into_response())
 }
 
 async fn get_drift(
@@ -720,10 +732,15 @@ async fn get_drift(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "drift_ms": 12,
-        "status": "low"
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "error": "drift_observation_unavailable",
+            "drift_ms": null,
+            "status": "unavailable"
+        })),
+    )
+        .into_response())
 }
 
 async fn get_safety_mode(

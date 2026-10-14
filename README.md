@@ -2,6 +2,8 @@
 
 Conxian Nexus is a universal chain node and proof layer, serving as the primary observation, synchronization, and verification point for Tier 1 Chain Families in the Conxian ecosystem.
 
+Read [architecture](ARCHITECTURE.md) and [capability discovery](docs/CAPABILITY_DISCOVERY.md) for current evidence semantics. Registered observation components and legacy family lists do not establish live chain connections or production-qualified verification.
+
 ## Public protocol and managed service boundary
 
 Nexus owns observation, state commitments, and proof verification. Its public-protocol role is the deterministic, Bitcoin-anchored verification interface. Conxian-Labs may operate managed Nexus nodes with availability and support commitments, but those commercial operations do not change proof validity or introduce a native token, staking asset, or protocol tokenomics.

@@ -1,0 +1,13 @@
+# Nexus observation discovery
+
+Nexus observes and verifies universal-chain state for the public conxian.org protocol boundary. Managed deployments and SLAs belong to conxian-labs.com; execution belongs to Gateway and signing authority stays with users/providers. Bitcoin L1 is the canonical trust/finality root. External chains, layers, and assets are valid; there is no native Conxian token or staking incentive.
+
+`GET /v1/capabilities` returns `Cache-Control: no-store` and a diagnostic registration manifest derived from actual typed state/executor components. It reports ten registrations, including coarse families/protocols. Ten registrations are not ten exact-chain connections. Each remains `health: not-observed`, `production_support: not-evidenced`, with no qualified operations. Discovery performs no RPC, signing, or execution.
+
+The proof manifest and authenticated admin chain list include the same discovery information. Legacy four-element chain arrays remain for compatibility, labelled `legacy-interface-families-not-live-support`.
+
+Admin chain status, attestation lookup, and drift endpoints previously returned hard-coded successful observations. They now return authenticated HTTP 503 with explicit unavailability and null evidence fields until real observation/evidence providers are wired. Clients must handle unavailable observations instead of displaying sample heights, fabricated verification, or reassuring drift values.
+
+SP1/RISC Zero backend interfaces remain fail-closed without configured cryptographic providers. Registration and tests do not establish production ZK verification. Nexus #418 tracks exact chain/network/operation manifests and authenticated provider evidence after the Core contract is reviewed and pinned.
+
+Fedimint prefix/length validation remains structural. The previous SHA-256/audit-row path could accept arbitrary text, including when database checks failed. It now reports `Fedimint cryptographic verifier not configured` before any audit insert. A production provider must verify authentic federation signatures/keysets and atomic spentness; this is tracked in #418. The FROST response explicitly scopes success to a final BIP-340 signature under the supplied key, with `threshold_enforcement_verified: false` and `group_key_authority_verified: false`. Participant metadata cannot prove independent threshold custody.

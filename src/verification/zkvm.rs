@@ -141,7 +141,9 @@ pub fn validate_envelope(
     payload: &ZkVmVerificationPayload,
 ) -> Result<ValidatedZkVmProof, ZkVmError> {
     if payload.envelope_version != ZKVM_ENVELOPE_VERSION {
-        return Err(ZkVmError::UnsupportedEnvelopeVersion(payload.envelope_version));
+        return Err(ZkVmError::UnsupportedEnvelopeVersion(
+            payload.envelope_version,
+        ));
     }
 
     let program_digest = decode_digest(&payload.program_digest, "program_digest")?;
@@ -177,14 +179,12 @@ pub fn validate_envelope(
 fn decode_digest(value: &str, field: &'static str) -> Result<[u8; 32], ZkVmError> {
     let value = value.strip_prefix("0x").unwrap_or(value);
     let bytes = hex::decode(value).map_err(|_| ZkVmError::InvalidDigest { field })?;
-    bytes.try_into().map_err(|_| ZkVmError::InvalidDigest { field })
+    bytes
+        .try_into()
+        .map_err(|_| ZkVmError::InvalidDigest { field })
 }
 
-fn decode_bounded(
-    value: &str,
-    field: &'static str,
-    maximum: usize,
-) -> Result<Vec<u8>, ZkVmError> {
+fn decode_bounded(value: &str, field: &'static str, maximum: usize) -> Result<Vec<u8>, ZkVmError> {
     let estimated = value.len().saturating_mul(3) / 4;
     if estimated > maximum {
         return Err(ZkVmError::PayloadTooLarge { field });
@@ -245,9 +245,6 @@ mod tests {
     #[test]
     fn unavailable_backend_never_verifies_structural_payloads() {
         let error = verify_zkvm_proof(&payload(), &UnavailableZkVmBackend).unwrap_err();
-        assert_eq!(
-            error,
-            ZkVmError::BackendUnavailable(ZkVmEnvironment::Sp1)
-        );
+        assert_eq!(error, ZkVmError::BackendUnavailable(ZkVmEnvironment::Sp1));
     }
 }

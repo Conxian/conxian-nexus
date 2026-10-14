@@ -716,6 +716,48 @@ fn test_openapi_admin_v1_surface_matches_router_contract() {
 }
 
 #[tokio::test]
+async fn admin_observations_fail_closed_without_real_evidence() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+    for (path, error, evidence_field) in [
+        (
+            "/admin/v1/chains/bitcoin/status",
+            "chain_observation_unavailable",
+            "height",
+        ),
+        (
+            "/admin/v1/attestations/attestation-1",
+            "attestation_evidence_unavailable",
+            "verified",
+        ),
+        (
+            "/admin/v1/drift",
+            "drift_observation_unavailable",
+            "drift_ms",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::HOST, "nexus.test")
+                    .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(response.into_body(), 8192).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["error"], error);
+        assert!(value[evidence_field].is_null());
+    }
+}
+
+#[tokio::test]
 async fn test_admin_write_rejects_single_signature() {
     let _env_lock = admin_api_token_lock().lock().await;
     let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
