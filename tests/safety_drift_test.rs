@@ -8,6 +8,26 @@
 
 use conxian_nexus::safety::NexusSafety;
 
+#[tokio::test]
+async fn unavailable_safety_backend_blocks_executor_before_submission() {
+    use conxian_nexus::{
+        executor::{rgb::RGBRolloutMode, NexusExecutor},
+        storage::Storage,
+    };
+    use std::{collections::HashSet, sync::Arc};
+    let storage =
+        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1:1/").unwrap());
+    let executor = NexusExecutor::new(storage, RGBRolloutMode::Disabled, HashSet::new());
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        executor.check_safety_mode(),
+    )
+    .await;
+    assert!(result
+        .expect("local backend refusal must terminate")
+        .is_err());
+}
+
 #[test]
 fn drift_is_zero_when_heights_are_equal() {
     assert_eq!(NexusSafety::calculate_drift(42, 42), 0);

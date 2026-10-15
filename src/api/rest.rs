@@ -85,7 +85,7 @@ pub struct RGBContractParams {
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
-    pub safety_mode: bool,
+    pub safety_mode: Option<bool>,
 }
 
 /// Proof manifest for the narrow proof surface (Issue #149)
@@ -102,7 +102,7 @@ pub struct ProofManifest {
 pub struct HealthStatus {
     pub status: String,
     pub version: String,
-    pub safety_mode: bool,
+    pub safety_mode: Option<bool>,
     pub uptime_seconds: Option<u64>,
 }
 
@@ -133,6 +133,10 @@ pub struct ServiceMetadata {
     pub version: String,
     pub proof_surface_version: String,
     pub supported_chains: Vec<String>,
+    #[serde(default)]
+    pub supported_chains_semantics: String,
+    #[serde(default)]
+    pub adapter_discovery: Option<crate::api::capabilities::ObservationDiscoveryManifest>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -192,6 +196,10 @@ pub fn app_router(
         .route("/metrics", get(prometheus_metrics_handler))
         .route("/v1/proof", get(get_proof))
         .route("/v1/proof/manifest", get(get_proof_manifest)) // Narrow proof surface
+        .route(
+            "/v1/capabilities",
+            get(crate::api::capabilities::get_capabilities),
+        )
         .route("/v1/submit", post(submit_transaction))
         .route("/v1/status", get(health_handler))
         .route("/v1/mmr-proof", get(get_mmr_proof))
@@ -455,22 +463,29 @@ async fn submit_transaction(
 }
 
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
-    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
-        .await
-        .unwrap_or(false);
+    safety_health_response(crate::safety::is_safety_mode_active(&state.storage).await)
+}
 
-    Json(HealthResponse {
-        status: "ok".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        safety_mode,
-    })
+fn safety_health_response(result: anyhow::Result<bool>) -> (StatusCode, Json<HealthResponse>) {
+    let (code, status, safety_mode) = match result {
+        Ok(false) => (StatusCode::OK, "ok", Some(false)),
+        Ok(true) => (StatusCode::SERVICE_UNAVAILABLE, "safety-mode", Some(true)),
+        Err(_) => (StatusCode::SERVICE_UNAVAILABLE, "unavailable", None),
+    };
+    (
+        code,
+        Json(HealthResponse {
+            status: status.into(),
+            version: env!("CARGO_PKG_VERSION").into(),
+            safety_mode,
+        }),
+    )
 }
 
 /// Proof manifest handler for the narrow proof surface (Issue #149)
 async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse {
-    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
-        .await
-        .unwrap_or(false);
+    let (health_code, Json(health)) =
+        safety_health_response(crate::safety::is_safety_mode_active(&state.storage).await);
 
     // Get MMR information from nexus state using the public get_mmr_state method
     let (mmr_peaks_raw, mmr_leaf_count) = state.nexus_state.get_mmr_state();
@@ -486,36 +501,43 @@ async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse 
         }
     };
 
-    Json(ProofManifest {
-        health: HealthStatus {
-            status: "ok".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            safety_mode,
-            uptime_seconds: None,
-        },
-        proof_routes: ProofRoutes {
-            proof_endpoint: "/v1/proof?key=<key>".to_string(),
-            mmr_proof_endpoint: "/v1/mmr-proof?index=<n>".to_string(),
-            health_endpoint: "/health".to_string(),
-            submit_endpoint: "/v1/submit".to_string(),
-        },
-        state_root,
-        mmr_info: MmrInfo {
-            leaf_count: Some(mmr_leaf_count),
-            peaks: mmr_peaks,
-            initialized: true,
-        },
-        service: ServiceMetadata {
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            proof_surface_version: "1.0.0".to_string(),
-            supported_chains: vec![
-                "stacks".to_string(),
-                "bitcoin".to_string(),
-                "evm".to_string(),
-                "cosmos".to_string(),
-            ],
-        },
-    })
+    (
+        health_code,
+        Json(ProofManifest {
+            health: HealthStatus {
+                status: health.status,
+                version: health.version,
+                safety_mode: health.safety_mode,
+                uptime_seconds: None,
+            },
+            proof_routes: ProofRoutes {
+                proof_endpoint: "/v1/proof?key=<key>".to_string(),
+                mmr_proof_endpoint: "/v1/mmr-proof?index=<n>".to_string(),
+                health_endpoint: "/health".to_string(),
+                submit_endpoint: "/v1/submit".to_string(),
+            },
+            state_root,
+            mmr_info: MmrInfo {
+                leaf_count: Some(mmr_leaf_count),
+                peaks: mmr_peaks,
+                initialized: true,
+            },
+            service: ServiceMetadata {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                proof_surface_version: "1.0.0".to_string(),
+                supported_chains_semantics: "legacy-interface-families-not-live-support".into(),
+                adapter_discovery: Some(crate::api::capabilities::registered_observation_adapters(
+                    &state,
+                )),
+                supported_chains: vec![
+                    "stacks".to_string(),
+                    "bitcoin".to_string(),
+                    "evm".to_string(),
+                    "cosmos".to_string(),
+                ],
+            },
+        }),
+    )
 }
 
 fn init_prometheus_metrics() {
@@ -541,6 +563,9 @@ mod tests {
     ) -> axum::Router {
         let mut config = Config::default_test();
         config.experimental_apis_enabled = enabled;
+        // These tests intentionally have no safety-state backend, even when CI
+        // provides a separate Redis service on its default port.
+        config.redis_url = "redis://127.0.0.1:1/".into();
         let config = Arc::new(config);
         let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
         let nexus_state = Arc::new(NexusState::new());
@@ -580,10 +605,28 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let res: HealthResponse = serde_json::from_slice(&body).unwrap();
-        assert_eq!(res.status, "ok");
+        assert_eq!(res.status, "unavailable");
+        assert_eq!(res.safety_mode, None);
+    }
+
+    #[test]
+    fn health_distinguishes_observed_safe_active_and_unavailable_states() {
+        let (code, Json(health)) = safety_health_response(Ok(false));
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(health.safety_mode, Some(false));
+        let (code, Json(health)) = safety_health_response(Ok(true));
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(health.safety_mode, Some(true));
+        let (code, Json(health)) =
+            safety_health_response(Err(anyhow::anyhow!("private backend detail")));
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(health.safety_mode, None);
+        assert!(!serde_json::to_string(&health)
+            .unwrap()
+            .contains("private backend detail"));
     }
 
     #[tokio::test]
@@ -660,12 +703,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let manifest: ProofManifest = serde_json::from_slice(&body).unwrap();
 
         // Verify health status
-        assert_eq!(manifest.health.status, "ok");
+        assert_eq!(manifest.health.status, "unavailable");
+        assert_eq!(manifest.health.safety_mode, None);
         assert_eq!(manifest.health.version, env!("CARGO_PKG_VERSION"));
 
         // Verify proof routes are documented
@@ -857,7 +901,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
         let headers = response.headers();
         assert_eq!(headers.get("X-Frame-Options").unwrap(), "DENY");
