@@ -210,6 +210,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety mode active or safety state unavailable
   /admin/v1/runtime/readiness:
     get:
       summary: Get runtime readiness
@@ -270,6 +272,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety state unavailable; active and safety_mode are null
   /admin/v1/safety-mode/ack:
     post:
       summary: Acknowledge safety mode
@@ -602,6 +606,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety mode active or safety state unavailable; unknown safety_mode is null
   /v1/billing/generate-key:
     post:
       summary: Generate developer API key
@@ -1238,6 +1244,7 @@ components:
               example: "0.4.22"
             safety_mode:
               type: boolean
+              nullable: true
             uptime_seconds:
               type: integer
               nullable: true

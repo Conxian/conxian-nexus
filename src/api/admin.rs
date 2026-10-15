@@ -628,11 +628,24 @@ async fn get_runtime_health(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+    let safety_mode = crate::safety::is_safety_mode_active(&state.storage)
+        .await
+        .map_err(|_| safety_state_unavailable())?;
+    if safety_mode {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "status": "safety-mode", "safety_mode": true,
+                "version": env!("CARGO_PKG_VERSION"), "timestamp": current_timestamp()
+            })),
+        )
+            .into_response());
+    }
     Ok(Json(json!({
         "status": "healthy",
         "timestamp": current_timestamp(),
-        "version": "v0.4.18",
-        "safety_mode": crate::safety::is_safety_mode_active(&state.storage).await.unwrap_or(false)
+        "version": env!("CARGO_PKG_VERSION"),
+        "safety_mode": safety_mode
     })))
 }
 
@@ -676,7 +689,9 @@ async fn list_chains(
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
     Ok(Json(json!({
-        "chains": ["bitcoin", "stacks", "evm", "cosmos"]
+        "chains": ["bitcoin", "stacks", "evm", "cosmos"],
+        "semantics": "legacy-interface-families-not-live-support",
+        "adapter_discovery": crate::api::capabilities::registered_observation_adapters(&state)
     })))
 }
 
@@ -686,11 +701,16 @@ async fn get_chain_status(
     Path(chain): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "chain": chain,
-        "height": 840000,
-        "synchronized": true
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "chain": chain,
+            "error": "chain_observation_unavailable",
+            "height": null,
+            "synchronized": null
+        })),
+    )
+        .into_response())
 }
 
 async fn list_attestations(
@@ -709,10 +729,15 @@ async fn get_attestation(
     Path(id): Path<String>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "id": id,
-        "verified": true
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "id": id,
+            "error": "attestation_evidence_unavailable",
+            "verified": null
+        })),
+    )
+        .into_response())
 }
 
 async fn get_drift(
@@ -720,10 +745,15 @@ async fn get_drift(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "drift_ms": 12,
-        "status": "low"
-    })))
+    Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "error": "drift_observation_unavailable",
+            "drift_ms": null,
+            "status": "unavailable"
+        })),
+    )
+        .into_response())
 }
 
 async fn get_safety_mode(
@@ -733,11 +763,23 @@ async fn get_safety_mode(
     authorize_for_scope(&state, &headers, "api.read")?;
     let active = crate::safety::is_safety_mode_active(&state.storage)
         .await
-        .unwrap_or(false);
+        .map_err(|_| safety_state_unavailable())?;
     Ok(Json(json!({
         "active": active,
         "triggered_at": Value::Null
     })))
+}
+
+fn safety_state_unavailable() -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "status": "unavailable", "error": "safety_state_unavailable",
+            "active": Value::Null, "safety_mode": Value::Null,
+            "triggered_at": Value::Null
+        })),
+    )
+        .into_response()
 }
 
 async fn ack_safety_mode(
