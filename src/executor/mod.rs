@@ -102,6 +102,7 @@ pub struct NexusExecutor {
     pub solana_adapter: solana::SolanaAdapter,
     pub sui_adapter: sui::SuiAdapter,
     pub aptos_adapter: aptos::AptosAdapter,
+    pub bitvm3_verifier: bitvm3::Bitvm3Verifier,
     /// When true, execution requests without attestation certificates are rejected.
     /// Defaults to false (soft enforcement) and should be true in production.
     pub require_attestation: bool,
@@ -124,6 +125,7 @@ impl NexusExecutor {
         let solana_adapter = solana::SolanaAdapter::new(storage.clone());
         let sui_adapter = sui::SuiAdapter::new(storage.clone());
         let aptos_adapter = aptos::AptosAdapter::new(storage.clone());
+        let bitvm3_verifier = bitvm3::Bitvm3Verifier;
         Self {
             storage,
             latest_event_time_cache: Mutex::new(None),
@@ -137,6 +139,7 @@ impl NexusExecutor {
             solana_adapter,
             sui_adapter,
             aptos_adapter,
+            bitvm3_verifier,
             require_attestation: false,
             trusted_enclave_measurements: std::collections::HashSet::new(),
         }
@@ -153,6 +156,14 @@ impl NexusExecutor {
     pub fn add_trusted_enclave_measurement(&mut self, measurement: impl Into<String>) {
         self.trusted_enclave_measurements
             .insert(measurement.into().to_lowercase());
+    }
+
+    /// [CXIP-1317 / BitVM3] Verifies a BitVM3 garbled-circuit fraud proof dispute payload.
+    pub fn verify_bitvm3_fraud_proof(
+        &self,
+        payload: &bitvm3::Bitvm3VerificationPayload,
+    ) -> Result<bitvm3::Bitvm3VerificationResponse, bitvm3::Bitvm3VerificationError> {
+        bitvm3::Bitvm3Verifier::verify_fraud_proof(payload)
     }
 
     pub fn with_canonical_bitvm_service(
@@ -340,6 +351,66 @@ impl NexusExecutor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn test_executor_verify_bitvm3_fraud_proof() {
+        use crate::config::Config;
+        use crate::executor::bitvm3::*;
+        use std::collections::HashSet;
+
+        let config = Arc::new(Config::default_test());
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let executor = NexusExecutor::new(storage, rgb::RGBRolloutMode::Disabled, HashSet::new());
+
+        let gate_id: u32 = 7;
+        let nonce = hex::encode([10u8; 32]);
+        let l0 = hex::encode([11u8; 32]);
+        let l1 = hex::encode([12u8; 32]);
+        let claimed_out = hex::encode([13u8; 32]);
+
+        let mut hasher = Sha256::new();
+        hasher.update(gate_id.to_be_bytes());
+        hasher.update(hex::decode(&nonce).unwrap());
+        hasher.update(hex::decode(&l0).unwrap());
+        hasher.update(hex::decode(&l1).unwrap());
+        hasher.update(hex::decode(&claimed_out).unwrap());
+        let entry_hash = hex::encode(hasher.finalize());
+
+        let payload = Bitvm3VerificationPayload {
+            circuit_id: "cxip-1317-circuit".to_string(),
+            challenge_nonce: nonce,
+            gate_commitments: vec![GateCommitment {
+                gate_id,
+                gate_type: Bitvm3GateType::And,
+                garbled_table_hashes: vec![entry_hash],
+            }],
+            dispute: DisputeAssertion {
+                disputed_gate_id: gate_id,
+                input_labels: vec![
+                    WireLabel {
+                        wire_id: 1,
+                        label: l0,
+                        value: true,
+                    },
+                    WireLabel {
+                        wire_id: 2,
+                        label: l1,
+                        value: true,
+                    },
+                ],
+                claimed_output_label: WireLabel {
+                    wire_id: 3,
+                    label: claimed_out,
+                    value: false, // AND(true, true) = true, claimed false => Fraud!
+                },
+                expected_output_digest: hex::encode([99u8; 32]),
+            },
+        };
+
+        let res = executor.verify_bitvm3_fraud_proof(&payload).unwrap();
+        assert!(res.is_valid_fraud_proof);
+        assert_eq!(res.circuit_id, "cxip-1317-circuit");
+        assert_eq!(res.disputed_gate_id, 7);
+    }
     use chrono::Utc;
 
     /// A syntactically valid, currently-dated, self-signed EC P-256 X.509

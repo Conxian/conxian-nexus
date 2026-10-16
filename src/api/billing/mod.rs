@@ -169,6 +169,14 @@ pub fn billing_routes() -> Router<AppState> {
         .route("/telemetry/track-signature", post(track_signature))
         .route("/upgrade", post(upgrade_tier))
         .route("/verify-payment", post(verify_payment))
+        .route(
+            "/sla/scorecard",
+            axum::routing::get(get_sla_scorecard_handler),
+        )
+        .route(
+            "/telemetry/yield-split",
+            axum::routing::get(get_sla_scorecard_handler),
+        )
 }
 
 #[derive(Debug, PartialEq)]
@@ -189,6 +197,41 @@ enum QuotaDecision {
     GraceAllowed { grace_start_to_set: Option<i64> },
     GraceThrottled { remaining: i64 },
     GraceExpired,
+}
+
+// ---- CON-1329 / CON-1600 Multi-Cloud Telemetry & Autonomous SLA Engine ----
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct MultiCloudTelemetryScorecard {
+    pub supabase_bos_health_pct: f64,
+    pub neon_postgres_health_pct: f64,
+    pub render_deployment_health_pct: f64,
+    pub aggregate_sla_compliance: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct RealtimeYieldSplitBreakdown {
+    pub node_operator_yield_pct: f64,
+    pub protocol_security_reserve_pct: f64,
+    pub sla_liquidity_pool_pct: f64,
+    pub sla_rebalance_applied: bool,
+    pub validated_realtime: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct AutonomousSlaScorecardResponse {
+    pub telemetry: MultiCloudTelemetryScorecard,
+    pub yield_split: RealtimeYieldSplitBreakdown,
+    pub timestamp: i64,
+    pub engine_status: String,
+}
+
+/// Unavailable until every required cloud observation and allocation policy is qualified.
+/// Reachability alone cannot establish uptime, live yield or permission to rebalance.
+pub async fn get_sla_scorecard_handler(
+    State(_state): State<AppState>,
+) -> Result<Json<AutonomousSlaScorecardResponse>, StatusCode> {
+    Err(StatusCode::SERVICE_UNAVAILABLE)
 }
 
 fn determine_grace_status(now: i64, grace_start: i64, roll: f32) -> GraceStatus {
@@ -815,5 +858,47 @@ mod tests {
         assert!(!SubscriptionTier::Free.enterprise_fee_cap());
         assert!(!SubscriptionTier::Pro.enterprise_fee_cap());
         assert!(SubscriptionTier::Enterprise.enterprise_fee_cap());
+    }
+
+    #[tokio::test]
+    async fn test_unqualified_sla_is_unavailable_without_querying_storage() {
+        use crate::config::Config;
+        use crate::executor::NexusExecutor;
+        use crate::state::NexusState;
+        use crate::storage::tableland::TablelandAdapter;
+        use crate::storage::Storage;
+        use std::collections::HashSet;
+        use std::sync::Arc;
+
+        let config = Arc::new(Config::default_test());
+        let storage = Arc::new(Storage::from_config_lazy(&config).unwrap());
+        let nexus_state = Arc::new(NexusState::new());
+        let executor = Arc::new(NexusExecutor::new(
+            storage.clone(),
+            crate::executor::rgb::RGBRolloutMode::Disabled,
+            HashSet::new(),
+        ));
+        let tableland = Arc::new(TablelandAdapter::new(storage.clone(), "test".to_string()));
+
+        let state = AppState {
+            config,
+            storage,
+            nexus_state,
+            executor,
+            oracle: None,
+            tableland,
+            kwil: None,
+            nostr: None,
+            gateway_url: None,
+            http_client: reqwest::Client::new(),
+        };
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            get_sla_scorecard_handler(State(state)),
+        )
+        .await
+        .expect("unqualified diagnostics must not wait for storage");
+        assert_eq!(result.unwrap_err(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
