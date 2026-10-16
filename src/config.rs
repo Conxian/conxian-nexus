@@ -393,10 +393,7 @@ impl Config {
             kwil_private_key_hex,
             database_url,
             redis_url,
-            rest_port: env::var("REST_PORT")
-                .unwrap_or_else(|_| "3000".to_string())
-                .parse()
-                .context("Invalid REST_PORT")?,
+            rest_port: resolve_rest_port_with(|key| env::var(key))?,
             grpc_port: env::var("GRPC_PORT")
                 .unwrap_or_else(|_| "50051".to_string())
                 .parse()
@@ -430,6 +427,27 @@ impl Config {
     }
 }
 
+fn resolve_rest_port_with(
+    get: impl Fn(&str) -> Result<String, env::VarError>,
+) -> anyhow::Result<u16> {
+    use anyhow::{bail, Context};
+
+    for key in ["REST_PORT", "PORT"] {
+        match get(key) {
+            Ok(raw) => {
+                let port: u16 = raw.parse().with_context(|| format!("Invalid {key}"))?;
+                if port == 0 {
+                    bail!("{key} must be a non-zero TCP port");
+                }
+                return Ok(port);
+            }
+            Err(env::VarError::NotPresent) => continue,
+            Err(env::VarError::NotUnicode(_)) => bail!("{key} must be valid unicode"),
+        }
+    }
+    Ok(3000)
+}
+
 pub fn env_flag(key: &str) -> bool {
     env::var(key).map(|v| parse_flag(&v)).unwrap_or(false)
 }
@@ -442,6 +460,32 @@ pub fn parse_flag(v: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosting_port_respects_explicit_override_and_rejects_invalid_values() {
+        let resolve = |rest: Option<&str>, hosting: Option<&str>| {
+            resolve_rest_port_with(|key| {
+                match key {
+                    "REST_PORT" => rest,
+                    "PORT" => hosting,
+                    _ => None,
+                }
+                .map(str::to_owned)
+                .ok_or(env::VarError::NotPresent)
+            })
+        };
+        assert_eq!(resolve(None, None).unwrap(), 3000);
+        assert_eq!(resolve(None, Some("10000")).unwrap(), 10000);
+        assert_eq!(resolve(Some("3001"), Some("10000")).unwrap(), 3001);
+        assert_eq!(resolve(Some("3001"), Some("invalid")).unwrap(), 3001);
+        for invalid in ["", "invalid", "0", "65536", "-1", " 10000 "] {
+            assert!(resolve(None, Some(invalid)).is_err());
+            assert!(resolve(Some(invalid), Some("10000")).is_err());
+        }
+        let error =
+            resolve_rest_port_with(|_| Err(env::VarError::NotUnicode(std::ffi::OsString::new())));
+        assert!(error.is_err());
+    }
 
     #[test]
     fn test_config_from_env_consolidation() {

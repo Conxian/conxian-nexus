@@ -193,6 +193,7 @@ pub fn app_router(
 
     Router::new()
         .route("/health", get(health_handler))
+        .route("/live", get(health_check))
         .route("/metrics", get(prometheus_metrics_handler))
         .route("/v1/proof", get(get_proof))
         .route("/v1/proof/manifest", get(get_proof_manifest)) // Narrow proof surface
@@ -463,7 +464,24 @@ async fn submit_transaction(
 }
 
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
-    safety_health_response(crate::safety::is_safety_mode_active(&state.storage).await)
+    observed_health(&state.storage).await
+}
+
+async fn bounded_health_observation(
+    observation: impl std::future::Future<Output = anyhow::Result<bool>>,
+) -> (StatusCode, Json<HealthResponse>) {
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), observation)
+        .await
+        .unwrap_or_else(|_| Err(anyhow::anyhow!("health observation timed out")));
+    safety_health_response(result)
+}
+
+async fn observed_health(storage: &Storage) -> (StatusCode, Json<HealthResponse>) {
+    bounded_health_observation(async {
+        sqlx::query("SELECT 1").execute(&storage.pg_pool).await?;
+        crate::safety::is_safety_mode_active(storage).await
+    })
+    .await
 }
 
 fn safety_health_response(result: anyhow::Result<bool>) -> (StatusCode, Json<HealthResponse>) {
@@ -484,8 +502,7 @@ fn safety_health_response(result: anyhow::Result<bool>) -> (StatusCode, Json<Hea
 
 /// Proof manifest handler for the narrow proof surface (Issue #149)
 async fn get_proof_manifest(State(state): State<AppState>) -> impl IntoResponse {
-    let (health_code, Json(health)) =
-        safety_health_response(crate::safety::is_safety_mode_active(&state.storage).await);
+    let (health_code, Json(health)) = observed_health(&state.storage).await;
 
     // Get MMR information from nexus state using the public get_mmr_state method
     let (mmr_peaks_raw, mmr_leaf_count) = state.nexus_state.get_mmr_state();
@@ -627,6 +644,31 @@ mod tests {
         assert!(!serde_json::to_string(&health)
             .unwrap()
             .contains("private backend detail"));
+    }
+
+    #[tokio::test]
+    async fn liveness_does_not_require_backend_availability() {
+        let app = test_router_with_state(true, RGBRolloutMode::Disabled, HashSet::new()).await;
+        let response = app
+            .oneshot(Request::builder().uri("/live").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn health_observation_has_a_deadline_and_redacts_errors() {
+        let start = std::time::Instant::now();
+        let (code, Json(health)) = bounded_health_observation(std::future::pending()).await;
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(health.status, "unavailable");
+        assert!(start.elapsed() < std::time::Duration::from_secs(4));
+        let (code, Json(health)) = bounded_health_observation(async {
+            Err(anyhow::anyhow!("private backend URL and credential"))
+        })
+        .await;
+        assert_eq!(code, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(!serde_json::to_string(&health).unwrap().contains("private"));
     }
 
     #[tokio::test]
