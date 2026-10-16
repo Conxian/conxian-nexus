@@ -169,103 +169,12 @@ pub async fn get_metrics_handler(
     }))
 }
 
-/// [CON-1437 / CON-1440 / CON-1436] Multi-Dimensional Scoring (WPS) & Dynamic Valuation Handler.
-///
-/// Shifts away from static erp_mock schema towards consuming real-world ERC-8183 escrow state
-/// from  and external x402 payment volume from .
+/// Unavailable until source-bound settlement and escrow evidence is qualified.
+/// A database row or an unavailable database must not imply a live score or valuation.
 pub async fn get_wps_scoring_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<Json<MultiDimensionalWpsResponse>, StatusCode> {
-    // 1. Consume real-world ERC-8183 escrow state
-    let escrow_row: Option<sqlx::postgres::PgRow> = sqlx::query(
-        "SELECT
-            COALESCE(SUM(amount)::float8, 0.0) as total_locked_amount,
-            COUNT(*)::int8 as active_escrow_contracts,
-            COALESCE(SUM(CASE WHEN escrow_status IN ('SETTLED', 'RELEASED') THEN 1 ELSE 0 END), 0)::int8 as settled_contracts_count
-         FROM enterprise_sme_escrow_sync",
-    )
-    .fetch_optional(&state.storage.pg_pool)
-    .await
-    .ok()
-    .flatten();
-
-    let (total_locked_amount, active_escrow_contracts, settled_contracts_count) = match escrow_row {
-        Some(row) => (
-            row.get::<f64, _>("total_locked_amount"),
-            row.get::<i64, _>("active_escrow_contracts"),
-            row.get::<i64, _>("settled_contracts_count"),
-        ),
-        None => (0.0, 0, 0),
-    };
-
-    let settlement_success_rate = if active_escrow_contracts > 0 {
-        settled_contracts_count as f64 / active_escrow_contracts as f64
-    } else {
-        1.0 // default 100% baseline when no failures
-    };
-
-    let erc8183_escrow = Erc8183EscrowMetrics {
-        total_locked_amount,
-        active_escrow_contracts,
-        settled_contracts_count,
-        settlement_success_rate,
-    };
-
-    // 2. Consume external x402 transaction volume
-    let x402_row: Option<sqlx::postgres::PgRow> = sqlx::query(
-        "SELECT
-            COALESCE(SUM(fiat_value_pegged)::float8, 0.0) as total_settled_volume_usd,
-            COUNT(*)::int8 as transaction_count
-         FROM cxn_external_settlement_logs",
-    )
-    .fetch_optional(&state.storage.pg_pool)
-    .await
-    .ok()
-    .flatten();
-
-    let (total_settled_volume_usd, transaction_count) = match x402_row {
-        Some(row) => (
-            row.get::<f64, _>("total_settled_volume_usd"),
-            row.get::<i64, _>("transaction_count"),
-        ),
-        None => (0.0, 0),
-    };
-
-    let x402_volume = X402VolumeMetrics {
-        total_settled_volume_usd,
-        transaction_count,
-    };
-
-    // 3. Compute Multi-Dimensional Weighted Performance Score (WPS)
-    let dimension_weights = DimensionWeights {
-        escrow_reliability_weight: 0.40,
-        payment_velocity_weight: 0.35,
-        settlement_speed_weight: 0.25,
-    };
-
-    let escrow_reliability_score = (settlement_success_rate * 100.0).clamp(0.0, 100.0);
-    let payment_velocity_score = (50.0 + (transaction_count as f64 * 0.5)).clamp(0.0, 100.0);
-    let settlement_speed_score = 98.5; // Benchmark L1 finality speed score
-
-    let wps_score = (escrow_reliability_score * dimension_weights.escrow_reliability_weight)
-        + (payment_velocity_score * dimension_weights.payment_velocity_weight)
-        + (settlement_speed_score * dimension_weights.settlement_speed_weight);
-
-    // 4. Calculate Dynamic Valuation Impact (USD)
-    // Base $1.0B valuation ($1,000,000,000.0) anchor scaled by x402 and ERC-8183 live volume
-    let base_valuation_usd = 1_000_000_000.0;
-    let live_volume_sum = total_locked_amount + total_settled_volume_usd;
-    let volume_scale = (1.0 + live_volume_sum).ln() / 100.0;
-    let valuation_impact_usd = base_valuation_usd * (1.0 + (volume_scale * (wps_score / 100.0)));
-
-    Ok(Json(MultiDimensionalWpsResponse {
-        wps_score: (wps_score * 100.0).round() / 100.0,
-        valuation_impact_usd: (valuation_impact_usd * 100.0).round() / 100.0,
-        erc8183_escrow,
-        x402_volume,
-        dimension_weights,
-        schema_mode: "live_chain_state".to_string(),
-    }))
+    Err(StatusCode::SERVICE_UNAVAILABLE)
 }
 
 #[cfg(test)]
@@ -333,16 +242,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_wps_scoring_handler_returns_live_chain_state() {
+    async fn test_unqualified_wps_is_unavailable_without_querying_storage() {
         let state = mock_app_state();
-        let response = get_wps_scoring_handler(State(state)).await.unwrap();
-        let body = response.0;
-
-        assert_eq!(body.schema_mode, "live_chain_state");
-        assert!(body.wps_score > 0.0);
-        assert!(body.valuation_impact_usd >= 1_000_000_000.0);
-        assert_eq!(body.dimension_weights.escrow_reliability_weight, 0.40);
-        assert_eq!(body.dimension_weights.payment_velocity_weight, 0.35);
-        assert_eq!(body.dimension_weights.settlement_speed_weight, 0.25);
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            get_wps_scoring_handler(State(state)),
+        )
+        .await
+        .expect("unqualified diagnostics must not wait for storage");
+        assert_eq!(result.unwrap_err(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

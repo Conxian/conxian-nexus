@@ -236,6 +236,116 @@ mod tests {
 mod extra_tests {
     use super::*;
 
+    fn recovery_intent() -> PaymentIntent {
+        let old = Utc::now() - chrono::Duration::seconds(700);
+        PaymentIntent {
+            payment_id: "recovery-contract".to_string(),
+            payment_hash: "unchanged-payment-hash".to_string(),
+            amount_msat: 1000,
+            status: LightningPaymentStatus::Failed,
+            failure_type: Some(LightningFailureType::Transient),
+            retry_count: 2,
+            created_at: old,
+            last_updated_at: old,
+        }
+    }
+
+    #[test]
+    fn completed_and_exhausted_payments_are_not_restarted() {
+        let adapter = LightningResilienceAdapter::new();
+        for (status, failure, retries) in [
+            (
+                LightningPaymentStatus::Succeeded,
+                Some(LightningFailureType::Indeterminate),
+                0,
+            ),
+            (
+                LightningPaymentStatus::Failed,
+                Some(LightningFailureType::Transient),
+                3,
+            ),
+            (
+                LightningPaymentStatus::Failed,
+                Some(LightningFailureType::Permanent),
+                0,
+            ),
+        ] {
+            let mut intent = recovery_intent();
+            intent.status = status;
+            intent.failure_type = failure;
+            intent.retry_count = retries;
+            let updated = intent.last_updated_at;
+            assert_eq!(adapter.process_recovery(&mut intent), None);
+            assert_eq!(intent.status, status);
+            assert_eq!(intent.retry_count, retries);
+            assert_eq!(intent.last_updated_at, updated);
+        }
+    }
+
+    #[test]
+    fn pending_and_split_recovery_use_their_own_clocks() {
+        let adapter = LightningResilienceAdapter::new();
+        let mut intent = recovery_intent();
+        intent.failure_type = None;
+        intent.status = LightningPaymentStatus::Pending;
+        intent.last_updated_at = Utc::now();
+        assert!(adapter.should_recover(&intent));
+        intent.created_at = Utc::now();
+        assert!(!adapter.should_recover(&intent));
+        intent.created_at = Utc::now() - chrono::Duration::seconds(700);
+        intent.status = LightningPaymentStatus::MppSplitting;
+        assert!(!adapter.should_recover(&intent));
+        intent.last_updated_at = Utc::now() - chrono::Duration::seconds(700);
+        assert!(adapter.should_recover(&intent));
+    }
+
+    #[test]
+    fn recovery_keeps_payment_identity_and_reconciles_ambiguous_outcomes() {
+        use LightningFailureType::*;
+        use LightningPaymentStatus::*;
+        let adapter = LightningResilienceAdapter::new();
+        for (failure, initial, expected, retries, event) in [
+            (Some(Transient), Failed, Recovering, 3, "retry_initiated"),
+            (
+                Some(MppPartial),
+                Failed,
+                MppSplitting,
+                2,
+                "split_recovery_triggered",
+            ),
+            (
+                Some(Indeterminate),
+                Failed,
+                Recovering,
+                2,
+                "reconciliation_requested",
+            ),
+            (None, Pending, Recovering, 2, "stale_payment_recovery"),
+        ] {
+            let mut intent = recovery_intent();
+            intent.failure_type = failure;
+            intent.status = initial;
+            let created = intent.created_at;
+            let before = Utc::now();
+            assert_eq!(adapter.process_recovery(&mut intent), Some(event));
+            assert_eq!(intent.status, expected);
+            assert_eq!(intent.retry_count, retries);
+            assert_eq!(intent.failure_type, failure);
+            assert_eq!(intent.payment_id, "recovery-contract");
+            assert_eq!(intent.payment_hash, "unchanged-payment-hash");
+            assert_eq!(intent.amount_msat, 1000);
+            assert_eq!(intent.created_at, created);
+            assert!(intent.last_updated_at >= before);
+        }
+        let mut intent = recovery_intent();
+        intent.status = Recovering;
+        intent.failure_type = None;
+        let updated = intent.last_updated_at;
+        assert!(adapter.should_recover(&intent));
+        assert_eq!(adapter.process_recovery(&mut intent), None);
+        assert_eq!(intent.last_updated_at, updated);
+    }
+
     #[test]
     fn test_failure_type_display() {
         assert_eq!(format!("{}", LightningFailureType::Permanent), "permanent");
