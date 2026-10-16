@@ -253,4 +253,3 @@ mod tests {
         assert_eq!(result.unwrap_err(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }
-
