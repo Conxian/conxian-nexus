@@ -7,9 +7,15 @@ use crate::api::rest::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use chrono::Utc;
 use hmac::{Hmac, KeyInit, Mac};
+use lib_conxian_core::billing::nexus::SubscriptionTier as CanonicalSubscriptionTier;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+
+pub use lib_conxian_core::billing::nexus::{
+    ENTERPRISE_UPGRADE_SATS, INVOICE_EXPIRY_SECONDS, PRO_UPGRADE_SATS,
+};
+pub use lib_conxian_core::billing::{billing_catalog, BillingCatalog};
 
 pub mod nostr;
 
@@ -18,9 +24,6 @@ type HmacSha256 = Hmac<Sha256>;
 const GRACE_PERIOD_DURATION_SECONDS: i64 = 86400; // 24 hours
 const GRACE_PERIOD_EFFICIENCY: f32 = 0.4;
 const MAX_ORGANIZATION_ID_LEN: usize = 128;
-const FREE_TIER_SIGNATURE_LIMIT: u64 = 50_000;
-const PRO_TIER_SIGNATURE_LIMIT: u64 = 500_000;
-const ENTERPRISE_TIER_SIGNATURE_LIMIT: u64 = 5_000_000;
 
 // ---- Tier System (CON-24) ----
 
@@ -41,32 +44,38 @@ pub enum SubscriptionTier {
 }
 
 impl SubscriptionTier {
-    pub fn signature_limit(&self) -> u64 {
+    // Retain the public Nexus enum/type identity and serde values. Only the
+    // configured definitions move to Core; tenancy/payment enforcement stays here.
+    fn canonical(&self) -> CanonicalSubscriptionTier {
         match self {
-            Self::Free => FREE_TIER_SIGNATURE_LIMIT,
-            Self::Pro => PRO_TIER_SIGNATURE_LIMIT,
-            Self::Enterprise => ENTERPRISE_TIER_SIGNATURE_LIMIT,
+            Self::Free => CanonicalSubscriptionTier::Free,
+            Self::Pro => CanonicalSubscriptionTier::Pro,
+            Self::Enterprise => CanonicalSubscriptionTier::Enterprise,
         }
+    }
+
+    pub fn signature_limit(&self) -> u64 {
+        self.canonical().signature_limit()
     }
 
     /// DLC (Discreet Log Contract) settlement is Pro+ only.
     pub fn can_use_dlc(&self) -> bool {
-        matches!(self, Self::Pro | Self::Enterprise)
+        self.canonical().can_use_dlc()
     }
 
     /// ZKML verification is Enterprise-only.
     pub fn can_use_zkml(&self) -> bool {
-        matches!(self, Self::Enterprise)
+        self.canonical().can_use_zkml()
     }
 
     /// Tableland storage is Pro+.
     pub fn can_use_tableland(&self) -> bool {
-        matches!(self, Self::Pro | Self::Enterprise)
+        self.canonical().can_use_tableland()
     }
 
     /// Canonical BitVM is Enterprise-only.
     pub fn can_use_bitvm(&self) -> bool {
-        matches!(self, Self::Enterprise)
+        self.canonical().can_use_bitvm()
     }
 
     /// Maps this subscription tier to the ADR-004 fee model's
@@ -74,12 +83,12 @@ impl SubscriptionTier {
     ///
     /// The nexus tiers (CON-24) gate *monthly signature volume and features*;
     /// the core fee model (ADR-004, `lib-conxian-core/src/fee.rs`) prices
-    /// *per-settlement*. The link: an Enterprise subscriber has already paid the
-    /// committed-use subscription (1M sats/mo), so their per-settlement
-    /// percentage component is replaced by the flat floor
-    /// (`FeeOptions::enterprise_subscription_cap`).
+    /// *per-settlement*. This flag indicates configured percentage-to-floor
+    /// eligibility only. It does not prove payment, renewal or expiry and does
+    /// not change Gateway's independent MRR volume discount. The runtime must
+    /// authenticate the tenant and verify its actual entitlement separately.
     pub fn enterprise_fee_cap(&self) -> bool {
-        matches!(self, Self::Enterprise)
+        self.canonical().enterprise_fee_cap()
     }
 
     pub fn parse(s: &str) -> Option<Self> {
@@ -93,13 +102,6 @@ impl SubscriptionTier {
 }
 
 // ---- Lightning Upgrade Types (CON-24) ----
-
-/// Upgrade pricing in satoshis (LN invoice amounts).
-pub const PRO_UPGRADE_SATS: u64 = 100_000; // 100k sats (~$50 at 5c/sat)
-pub const ENTERPRISE_UPGRADE_SATS: u64 = 1_000_000; // 1M sats (~$500)
-
-/// Invoice expiry: 1 hour for upgrades.
-pub const INVOICE_EXPIRY_SECONDS: u64 = 3600;
 
 #[derive(Debug, Deserialize)]
 pub struct UpgradeRequest {
@@ -387,7 +389,7 @@ async fn track_signature(
             .get("tier")
             .and_then(|t| SubscriptionTier::parse(t))
             .map(|t| t.signature_limit())
-            .unwrap_or(FREE_TIER_SIGNATURE_LIMIT);
+            .unwrap_or(SubscriptionTier::Free.signature_limit());
         let roll: f32 = rand::random();
         evaluate_quota_decision(new_usage, now, grace_start, roll, limit)
     };
@@ -410,7 +412,7 @@ async fn track_signature(
                 StatusCode::PAYMENT_REQUIRED,
                 Json(TelemetryResponse {
                     current_usage: new_usage,
-                    limit: FREE_TIER_SIGNATURE_LIMIT,
+                    limit: SubscriptionTier::Free.signature_limit(),
                     status: "THROTTLED".to_string(),
                     grace_period_remaining: Some(remaining),
                     efficiency: Some(GRACE_PERIOD_EFFICIENCY),
@@ -425,7 +427,7 @@ async fn track_signature(
 
     Json(TelemetryResponse {
         current_usage: new_usage,
-        limit: FREE_TIER_SIGNATURE_LIMIT,
+        limit: SubscriptionTier::Free.signature_limit(),
         status: "OK".to_string(),
         grace_period_remaining: None,
         efficiency: None,
@@ -564,7 +566,7 @@ async fn verify_payment(
         return Json(PaymentVerifyResponse {
             verified: false,
             tier: "free".to_string(),
-            new_limit: FREE_TIER_SIGNATURE_LIMIT,
+            new_limit: SubscriptionTier::Free.signature_limit(),
             message: "Invoice not found or expired".to_string(),
         })
         .into_response();
@@ -584,7 +586,7 @@ async fn verify_payment(
         return Json(PaymentVerifyResponse {
             verified: false,
             tier: "free".to_string(),
-            new_limit: FREE_TIER_SIGNATURE_LIMIT,
+            new_limit: SubscriptionTier::Free.signature_limit(),
             message:
                 "Lightning payment verification not configured; upgrade requires manual review"
                     .to_string(),
@@ -688,11 +690,11 @@ mod tests {
     #[test]
     fn test_evaluate_quota_decision_within_limit() {
         let decision = evaluate_quota_decision(
-            FREE_TIER_SIGNATURE_LIMIT,
+            SubscriptionTier::Free.signature_limit(),
             1000,
             Some(900),
             0.9,
-            FREE_TIER_SIGNATURE_LIMIT,
+            SubscriptionTier::Free.signature_limit(),
         );
         assert_eq!(decision, QuotaDecision::WithinLimit);
     }
@@ -701,11 +703,11 @@ mod tests {
     fn test_evaluate_quota_decision_sets_grace_start_and_allows() {
         let now = 1_000_000;
         let decision = evaluate_quota_decision(
-            FREE_TIER_SIGNATURE_LIMIT + 1,
+            SubscriptionTier::Free.signature_limit() + 1,
             now,
             None,
             0.3,
-            FREE_TIER_SIGNATURE_LIMIT,
+            SubscriptionTier::Free.signature_limit(),
         );
         assert_eq!(
             decision,
@@ -720,11 +722,11 @@ mod tests {
         let now = 1_000_000;
         let grace_start = now - 60;
         let decision = evaluate_quota_decision(
-            FREE_TIER_SIGNATURE_LIMIT + 1,
+            SubscriptionTier::Free.signature_limit() + 1,
             now,
             Some(grace_start),
             0.95,
-            FREE_TIER_SIGNATURE_LIMIT,
+            SubscriptionTier::Free.signature_limit(),
         );
 
         assert_eq!(
@@ -740,11 +742,11 @@ mod tests {
         let now = 1_000_000;
         let grace_start = now - (GRACE_PERIOD_DURATION_SECONDS + 1);
         let decision = evaluate_quota_decision(
-            FREE_TIER_SIGNATURE_LIMIT + 1,
+            SubscriptionTier::Free.signature_limit() + 1,
             now,
             Some(grace_start),
             0.1,
-            FREE_TIER_SIGNATURE_LIMIT,
+            SubscriptionTier::Free.signature_limit(),
         );
 
         assert_eq!(decision, QuotaDecision::GraceExpired);
@@ -796,10 +798,15 @@ mod tests {
 
     #[test]
     fn test_pro_tier_quota_is_higher() {
-        let pro_limit = PRO_TIER_SIGNATURE_LIMIT;
+        let pro_limit = SubscriptionTier::Pro.signature_limit();
         // Usage at free-tier limit should still be within pro limit
-        let decision =
-            evaluate_quota_decision(FREE_TIER_SIGNATURE_LIMIT, 1_000_000, None, 0.5, pro_limit);
+        let decision = evaluate_quota_decision(
+            SubscriptionTier::Free.signature_limit(),
+            1_000_000,
+            None,
+            0.5,
+            pro_limit,
+        );
         assert_eq!(decision, QuotaDecision::WithinLimit);
     }
 

@@ -12,7 +12,7 @@ from typing import Any
 CORE_NAME = "lib-conxian-core"
 CORE_VERSION = "0.3.3"
 CORE_URL = "https://github.com/Conxian/lib-conxian-core"
-CORE_REV = "b85625f7be8c77f9b656e32442f43e02eca77f1e"
+CORE_REV = "9dd3676bb64a5ba327cc2717d9e9d32bd09a2c95"
 CORE_LOCK_SOURCE = (
     "git+https://github.com/Conxian/lib-conxian-core"
     f"?rev={CORE_REV}#{CORE_REV}"

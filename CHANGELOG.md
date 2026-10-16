@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Pin Core's shared billing configuration and SDK hardening source; retain the public Nexus tier type/wire behavior while sharing quota/upgrade definitions. Dependency policy and conformance checks bind the same revision. Configuration is not paid entitlement (Business #1343/#1390).
+
 ## [0.4.23] - 2026-08-18
 
 - Implemented Cross-Repo Proof Surface & Verifier Ownership Contract Alignment (`Candidate C`) in `src/verification/proof_envelope.rs`, establishing standardized proof envelope validation, curve alignment, SHA-256 verifying key and public input hash commitments, state root binding, verifier ownership assertions, and `/v1/verify/proof-envelope` REST API endpoint.
