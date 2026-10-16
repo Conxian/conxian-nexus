@@ -135,6 +135,8 @@ def main():
             wait_for(base, "/health", 200, "ok")
         CURRENT_PHASE = "restart"
         docker("restart", app)
+        port = docker("port", app, "10000/tcp").rsplit(":", 1)[1]
+        base = "http://127.0.0.1:" + port
         wait_for(base, "/health", 200, "ok")
         print(json.dumps({"result": "pass", "scope": "isolated-container-initialization",
                           "checks": ["hosting-port", "migrations", "backend-health",
