@@ -3,7 +3,7 @@ name: Container initialization
 on:
   pull_request:
     branches: [dev, staged, main]
-    paths: [Dockerfile, .dockerignore, 'src/**', 'migrations/**', Cargo.toml, Cargo.lock, 'scripts/container_init_smoke.py', '.github/workflows/container-init.yml']
+    paths: [Dockerfile, .dockerignore, 'src/**', 'migrations/**', Cargo.toml, Cargo.lock, 'scripts/container_init_smoke.py', 'scripts/container_rpc_fixture.py', 'scripts/test_container_rpc_fixture.py', '.github/workflows/container-init.yml']
   workflow_dispatch:
 
 permissions:
@@ -17,7 +17,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Verify inert transport fixture
+        run: python3 -m unittest discover -s scripts -p test_container_rpc_fixture.py
       - name: Build locked release image
         run: docker build --tag conxian-nexus:init .
       - name: Exercise initialization, outage, recovery and restart
         run: python3 scripts/container_init_smoke.py --image conxian-nexus:init
+

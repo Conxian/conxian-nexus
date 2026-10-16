@@ -6,11 +6,14 @@ Docker resources created by this run are removed on both success and failure.
 """
 import argparse
 import json
+from pathlib import Path
 import secrets
 import subprocess
 import time
 import urllib.error
 import urllib.request
+
+CURRENT_PHASE = "setup"
 
 
 def docker(*args, timeout=60):
@@ -46,15 +49,17 @@ def wait_for(base, path, status, expected=None):
 
 
 def main():
+    global CURRENT_PHASE
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--image", required=True)
     args = parser.parse_args()
     prefix = "nexus-init-" + secrets.token_hex(6)
     password = secrets.token_hex(32)
-    pg, redis, app = (prefix + suffix for suffix in ("-pg", "-redis", "-app"))
+    pg, redis, app, rpc = (prefix + suffix for suffix in ("-pg", "-redis", "-app", "-rpc"))
     created = []
     docker("network", "create", prefix)
     try:
+        CURRENT_PHASE = "dependency-start"
         for name, command in [
             (pg, ["--env", "POSTGRES_USER=nexus", "--env", "POSTGRES_DB=nexus",
                   "--env", "POSTGRES_PASSWORD=" + password, "postgres:16-bookworm"]),
@@ -73,6 +78,26 @@ def main():
             if time.monotonic() > deadline:
                 raise RuntimeError("Dependencies did not initialize")
             time.sleep(1)
+        # The sync worker is critical: a refused WebSocket correctly stops the
+        # process. Supply an explicitly synthetic, inert transport fixture for
+        # this initialization-only check; never weaken production supervision.
+        CURRENT_PHASE = "fixture-start"
+        fixture = Path(__file__).with_name("container_rpc_fixture.py").resolve()
+        docker("run", "--detach", "--name", rpc, "--network", prefix,
+               "--mount", f"type=bind,src={fixture},dst=/fixture.py,readonly",
+               "python:3.12-alpine", "python", "/fixture.py")
+        created.append(rpc)
+        deadline = time.monotonic() + 60
+        while True:
+            try:
+                docker("exec", rpc, "python", "-c",
+                       "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v2/info', timeout=2).close()")
+                break
+            except RuntimeError:
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Inert transport fixture did not initialize")
+                time.sleep(1)
+        CURRENT_PHASE = "application-start"
         docker(
             "run", "--detach", "--name", app, "--network", prefix,
             "--publish", "127.0.0.1::10000", "--env", "PORT=10000",
@@ -80,21 +105,24 @@ def main():
             "--env", f"REDIS_URL=redis://:{password}@{redis}:6379",
             "--env", "NEXUS_ADMIN_API_TOKEN=" + secrets.token_hex(32),
             "--env", "ORACLE_ENABLED=false", "--env", "NEXUS_EXPERIMENTAL_APIS=false",
-            "--env", "STACKS_NODE_RPC_URL=http://127.0.0.1:9",
-            "--env", "STACKS_NODE_WS_URL=ws://127.0.0.1:9", args.image,
+            "--env", f"STACKS_NODE_RPC_URL=http://{rpc}:8080",
+            "--env", f"STACKS_NODE_WS_URL=ws://{rpc}:8080", args.image,
         )
         created.append(app)
         port = docker("port", app, "10000/tcp").rsplit(":", 1)[1]
         base = "http://127.0.0.1:" + port
+        CURRENT_PHASE = "initial-readiness"
         wait_for(base, "/health", 200, "ok")
         wait_for(base, "/live", 200)
         wait_for(base, "/admin/v1/status", 401)
         # Verify Redis safety observations and dependency loss separately.
+        CURRENT_PHASE = "safety-mode"
         docker("exec", redis, "redis-cli", "-a", password, "SET", "nexus:safety_mode", "true")
         wait_for(base, "/health", 503, "safety-mode")
         docker("exec", redis, "redis-cli", "-a", password, "SET", "nexus:safety_mode", "false")
         wait_for(base, "/health", 200, "ok")
         for dependency in (pg, redis):
+            CURRENT_PHASE = "postgres-outage" if dependency == pg else "redis-outage"
             docker("pause", dependency)
             try:
                 code, body = response(base, "/health")
@@ -103,7 +131,9 @@ def main():
                 wait_for(base, "/live", 200)
             finally:
                 docker("unpause", dependency)
+            CURRENT_PHASE = "dependency-recovery"
             wait_for(base, "/health", 200, "ok")
+        CURRENT_PHASE = "restart"
         docker("restart", app)
         wait_for(base, "/health", 200, "ok")
         print(json.dumps({"result": "pass", "scope": "isolated-container-initialization",
@@ -121,4 +151,7 @@ if __name__ == "__main__":
     try:
         main()
     except (RuntimeError, OSError, subprocess.TimeoutExpired):
-        raise SystemExit("Container initialization failed; no production acceptance is implied.")
+        print(json.dumps({"result": "fail", "phase": CURRENT_PHASE,
+                          "scope": "isolated-container-initialization"}))
+        raise SystemExit(1)
+
