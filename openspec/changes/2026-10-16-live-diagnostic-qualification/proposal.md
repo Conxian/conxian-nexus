@@ -17,3 +17,10 @@ Run the existing read-only Rust workflow for dev pushes and PRs as well as
 staged/main, so feature integration receives actual formatting, strict lint,
 build and workspace regression checks before promotion. Existing jobs and
 permissions are preserved; no branch-protection or acceptance rule is changed.
+
+Native CI exposed stale numeric Lightning coverage ranges after source movement.
+Resolve the same billing/auth/quota, Nostr, DLC and REST blocks from unique source
+anchors, and include the full Lightning recovery adapter rather than truncating it
+at line 140. Missing or ambiguous anchors fail the gate. Exercise recovery refusal,
+ambiguous-payment reconciliation and independent pending/split clocks. Enforce the
+documented 90 percent minimum; retain Bitcoin's existing 92 percent requirement.

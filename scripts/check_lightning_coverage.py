@@ -15,29 +15,50 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Lightning-focused ranges (inclusive line numbers).
-# Keep these in sync with source edits that move logic blocks.
-SCOPED_LINE_RANGES: dict[str, list[tuple[int, int]]] = {
+# Resolve the intended source blocks on every run. Numeric ranges silently became
+# stale when new diagnostic types/handlers moved the billing and REST code.
+# Missing, duplicate or reordered anchors must fail instead of measuring other code.
+SCOPED_SOURCE_BLOCKS: dict[str, list[tuple[str, str]]] = {
     "src/api/billing/mod.rs": [
-        (151, 157),  # billing route wiring (billing_routes)
-        (179, 254),  # grace/auth/quota policy helpers
+        ("pub fn billing_routes()", "\n#[derive(Debug, PartialEq)]\nenum GraceStatus"),
+        ("fn determine_grace_status(", "\n#[cfg(test)]\nfn compute_expected_hmac"),
+        ("fn validate_telemetry_auth(", "\n/// [NEXUS-01]"),
     ],
     "src/api/billing/nostr.rs": [
-        (11, 59),  # collector filtering + key parsing + dedup/bridge decisions
+        ("const TELEMETRY_EVENT_KIND:", "\npub struct NostrTelemetry"),
     ],
     "src/api/dlc.rs": [
-        (45, 113),  # request validation + announcement/signing + attestation verifier
-        (122, 134), # create_dlc_bond_handler invalid-request branch
-        (193, 210), # verify_dlc_cet_outcome_handler invalid-request branch
+        ("fn validate_dlc_request(", "\n/// [NEXUS-DLC-01]"),
+        ("    // 1. Validation", "\n    // 2. Generate DLC Announcement"),
+        ("    if payload.dlc_contract_id.trim().is_empty()", "\n    // Compute canonical outcome digest"),
     ],
     "src/api/rest.rs": [
-        (36, 50),   # AppState struct
-        (204, 204), # DLC route wiring
+        ('        .nest("/v1/dlc", dlc_routes())', '\n        .nest("/v1/erp", erp_routes())'),
     ],
     "src/executor/lightning.rs": [
-        (1, 140),  # failure taxonomy + state machine + intent models
+        ("impl fmt::Display for LightningFailureType {", "\n#[cfg(test)]\nmod tests"),
     ],
 }
+
+
+def resolve_scoped_ranges(
+    source_root: Path,
+    blocks: dict[str, list[tuple[str, str]]] = SCOPED_SOURCE_BLOCKS,
+) -> dict[str, list[tuple[int, int]]]:
+    ranges: dict[str, list[tuple[int, int]]] = {}
+    for rel_path, markers in blocks.items():
+        source = (source_root / rel_path).read_text()
+        ranges[rel_path] = []
+        for start, end in markers:
+            if source.count(start) != 1 or source.count(end) != 1:
+                raise RuntimeError(f"Missing or ambiguous coverage anchors in {rel_path}")
+            first, last = source.index(start), source.index(end)
+            if last <= first:
+                raise RuntimeError(f"Reordered coverage anchors in {rel_path}")
+            ranges[rel_path].append(
+                (source.count("\n", 0, first) + 1, source.count("\n", 0, last) + 1)
+            )
+    return ranges
 
 
 def active_toolchain() -> str:
@@ -79,12 +100,12 @@ def load_report(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
-def index_file_entries(report: dict) -> dict[str, dict]:
+def index_file_entries(report: dict, ranges: dict[str, list[tuple[int, int]]]) -> dict[str, dict]:
     entries = report["data"][0]["files"]
     indexed: dict[str, dict] = {}
     for entry in entries:
         filename = entry["filename"]
-        for rel_path in SCOPED_LINE_RANGES:
+        for rel_path in ranges:
             if filename.endswith(rel_path):
                 indexed[rel_path] = entry
     return indexed
@@ -103,9 +124,10 @@ def line_hit_map(file_entry: dict) -> dict[int, tuple[bool, bool]]:
 
 
 def compute_scoped_coverage(report: dict) -> tuple[list[tuple[str, int, int, float]], int, int, float]:
-    indexed = index_file_entries(report)
+    scoped_ranges = resolve_scoped_ranges(Path(__file__).resolve().parents[1])
+    indexed = index_file_entries(report, scoped_ranges)
 
-    missing_files = [path for path in SCOPED_LINE_RANGES if path not in indexed]
+    missing_files = [path for path in scoped_ranges if path not in indexed]
     if missing_files:
         raise RuntimeError(f"Scoped files missing from report: {', '.join(missing_files)}")
 
@@ -113,7 +135,7 @@ def compute_scoped_coverage(report: dict) -> tuple[list[tuple[str, int, int, flo
     total_covered = 0
     total_instrumented = 0
 
-    for rel_path, ranges in SCOPED_LINE_RANGES.items():
+    for rel_path, ranges in scoped_ranges.items():
         line_map = line_hit_map(indexed[rel_path])
         covered = 0
         instrumented = 0
