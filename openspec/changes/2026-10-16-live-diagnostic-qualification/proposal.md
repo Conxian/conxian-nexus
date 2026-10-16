@@ -12,3 +12,8 @@ Acceptance: both handlers return unavailable without querying an absent database
 existing analytics and billing behavior passes its regression suites. Future live
 integration must have authenticated source identity, exact asset units, sampling
 windows, finality/replay/durability and explicit financial-policy acceptance.
+
+Run the existing read-only Rust workflow for dev pushes and PRs as well as
+staged/main, so feature integration receives actual formatting, strict lint,
+build and workspace regression checks before promotion. Existing jobs and
+permissions are preserved; no branch-protection or acceptance rule is changed.

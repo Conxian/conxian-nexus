@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
   pull_request:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
 
 permissions:
   contents: read
