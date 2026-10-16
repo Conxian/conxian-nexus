@@ -306,8 +306,20 @@ mod extra_tests {
         let adapter = LightningResilienceAdapter::new();
         for (failure, initial, expected, retries, event) in [
             (Some(Transient), Failed, Recovering, 3, "retry_initiated"),
-            (Some(MppPartial), Failed, MppSplitting, 2, "split_recovery_triggered"),
-            (Some(Indeterminate), Failed, Recovering, 2, "reconciliation_requested"),
+            (
+                Some(MppPartial),
+                Failed,
+                MppSplitting,
+                2,
+                "split_recovery_triggered",
+            ),
+            (
+                Some(Indeterminate),
+                Failed,
+                Recovering,
+                2,
+                "reconciliation_requested",
+            ),
             (None, Pending, Recovering, 2, "stale_payment_recovery"),
         ] {
             let mut intent = recovery_intent();
