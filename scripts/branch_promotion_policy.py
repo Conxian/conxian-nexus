@@ -128,11 +128,13 @@ def _validate_generated_evidence(
 
     window_target, window_source = (value.lower() for value in window.groups())
     expected_source = branch_source_sha.lower()
-    if not SHA_RE.fullmatch(ctx.head_sha):
+    if not isinstance(ctx.head_sha, str) or not SHA_RE.fullmatch(ctx.head_sha):
         errors.append("PR head SHA must be a valid 40-character commit SHA.")
+    elif ctx.head_sha != expected_source:
+        errors.append("Generated candidate PR head SHA must match its immutable source SHA.")
     if source_sha != expected_source or window_source != expected_source:
         errors.append("Generated candidate source SHA evidence does not match its branch/head SHA.")
-    if not SHA_RE.fullmatch(ctx.base_sha) or target_sha != ctx.base_sha.lower():
+    if not isinstance(ctx.base_sha, str) or not SHA_RE.fullmatch(ctx.base_sha) or target_sha != ctx.base_sha.lower():
         errors.append("Generated candidate target-base SHA evidence does not match the PR base SHA.")
     if window_target != target_sha:
         errors.append("Generated candidate commit window must start at the recorded target-base SHA.")

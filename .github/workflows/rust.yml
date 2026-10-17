@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
   pull_request:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
 
 permissions:
   contents: read
@@ -36,6 +36,8 @@ jobs:
       run: ./scripts/check_production_boundary.sh
     - name: Parse all workflow YAML
       run: ruby scripts/check_workflow_yaml.rb
+    - name: Check Lightning coverage source contracts
+      run: python3 -m unittest discover -s scripts -p test_check_lightning_coverage.py
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -71,7 +73,7 @@ jobs:
       with:
         submodules: recursive
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f
       with:
         toolchain: "1.98.1"
         components: clippy, rustfmt
@@ -86,7 +88,7 @@ jobs:
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)
-      run: python3 scripts/check_lightning_coverage.py --min-percent 89
+      run: python3 scripts/check_lightning_coverage.py --min-percent 90
     - name: Enforce Bitcoin scoped coverage (>=92%)
       run: ./scripts/coverage_bitcoin.sh 92
     - name: Publish Bitcoin coverage summary
@@ -97,7 +99,7 @@ jobs:
         fi
     - name: Upload Bitcoin coverage artifacts
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: bitcoin-coverage
         path: |

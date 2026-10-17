@@ -53,16 +53,16 @@ impl AutonomousOrchestrator {
         }
 
         // 1. Check for sync drift
-        let drift: u64 = redis::cmd("GET")
+        let drift: Option<u64> = redis::cmd("GET")
             .arg("nexus:drift")
             .query_async(&mut conn)
-            .await
-            .unwrap_or(0);
-        let safety_mode: bool = redis::cmd("GET")
+            .await?;
+        let drift = drift.unwrap_or(0);
+        let safety_raw: Option<String> = redis::cmd("GET")
             .arg("nexus:safety_mode")
             .query_async(&mut conn)
-            .await
-            .unwrap_or(false);
+            .await?;
+        let safety_mode = crate::safety::decode_safety_mode(safety_raw.as_deref())?;
 
         if safety_mode && drift > 10 {
             tracing::warn!(
