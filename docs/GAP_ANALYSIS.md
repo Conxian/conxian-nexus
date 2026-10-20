@@ -127,7 +127,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.17 Idempotency Locks & Neon PostgreSQL Conformance (#251)
 - **Gap**: Storage layer required distributed transactional lock primitives for multi-node execution safety and fail-closed consume-once idempotency conformance.
-- **Status**: **Completed (v0.4.23)**. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
+- **Status**: **Source implemented; P0 qualification in #439 remains open**. Disposable fixture isolation and mandatory CI conformance correct the earlier generic-URL reset/skip behavior. This does not establish connected Neon or SDK-contract production acceptance. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
 - **Code**: `migrations/20260912000000_idempotency_locks.sql`, `src/storage/idempotency.rs`, `tests/idempotency_conformance.rs`
 
 

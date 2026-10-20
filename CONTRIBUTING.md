@@ -30,7 +30,7 @@ To set up your local environment for development:
    cargo install sqlx-cli --no-default-features --features postgres
    sqlx migrate run
    ```
-3. **Build & Test**: Run workspace compilation and test suites:
+3. **Build & Test**: Provision the explicitly disposable fixture in [Replay conformance](docs/REPLAY_CONFORMANCE.md) before running the workspace suite. Generic DATABASE_URL is never used by destructive conformance setup. Then run workspace compilation and test suites:
    ```bash
    cargo build --workspace
    cargo test --workspace
