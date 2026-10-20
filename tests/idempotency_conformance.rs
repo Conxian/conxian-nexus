@@ -2,53 +2,29 @@
 //!
 //! Mirrors the enclave SDK's backend-neutral `ReplayStore` conformance suite,
 //! adapted to the Nexus consume-once contract and transactional idempotency locks (#251).
-//! Every case requires a live PostgreSQL database and is skipped when `DATABASE_URL` is unset.
+//! Every case requires an explicit disposable CONFORMANCE_DATABASE_URL; missing configuration fails.
 
 use chrono::{Duration, Utc};
 use conxian_nexus::storage::idempotency::{ConsumeOutcome, IdempotencyError, IdempotencyStore};
-use sqlx::postgres::PgPoolOptions;
+#[path = "support/conformance_database.rs"]
+mod conformance_database;
+use conformance_database::ConformanceDatabase;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Serializes the suite so each case's `TRUNCATE`-based reset cannot race a
-/// concurrently-running case against the same tables.
+/// Bound concurrent connection usage; every case has an independent schema.
 static SUITE_LOCK: Mutex<()> = Mutex::const_new(());
 
-fn database_url() -> Option<String> {
-    std::env::var("DATABASE_URL").ok().filter(|u| !u.is_empty())
-}
-
-async fn connect(url: &str) -> IdempotencyStore {
-    let pool = PgPoolOptions::new()
-        .max_connections(64)
-        .connect(url)
-        .await
-        .expect("failed to connect to DATABASE_URL");
-    IdempotencyStore::new(pool)
-}
-
-/// Clear all idempotency tables so each case runs against an isolated, re-runnable state.
-async fn reset(url: &str) {
-    let pool = PgPoolOptions::new()
-        .connect(url)
-        .await
-        .expect("failed to connect to DATABASE_URL");
-    sqlx::query("TRUNCATE idempotency_records, idempotency_high_water, idempotency_locks")
-        .execute(&pool)
-        .await
-        .expect("failed to reset conformance tables");
-    pool.close().await;
+async fn connect(database: &ConformanceDatabase) -> IdempotencyStore {
+    IdempotencyStore::new(database.pool().await)
 }
 
 /// 1. Single consume-once: accept then duplicate.
 #[tokio::test]
 async fn conformance_single_consume_once() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
 
     assert_eq!(
@@ -70,12 +46,9 @@ async fn conformance_single_consume_once() {
 /// 2. All-or-nothing batch: partial conflict rolls back, retry succeeds atomically.
 #[tokio::test]
 async fn conformance_batch_all_or_nothing() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
 
     let first = store
@@ -115,16 +88,13 @@ async fn conformance_batch_all_or_nothing() {
     assert_eq!(retry, vec![ConsumeOutcome::Fresh, ConsumeOutcome::Fresh]);
 }
 
-/// 3. Restart durability: consumption survives a reconnect.
+/// 3. Reconnect durability; this does not simulate a server restart or failover.
 #[tokio::test]
-async fn conformance_restart_durability() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+async fn conformance_reconnect_durability() {
+    let url = ConformanceDatabase::from_environment();
 
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     {
         let store = connect(&url).await;
         assert_eq!(
@@ -150,12 +120,9 @@ async fn conformance_restart_durability() {
 /// 4. Anti-rollback high-water clock.
 #[tokio::test]
 async fn conformance_high_water_clock() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
 
     store
@@ -179,12 +146,9 @@ async fn conformance_high_water_clock() {
 /// 5. Expiry/retention: expired records are reclaimed and re-consumable.
 #[tokio::test]
 async fn conformance_expiry_retention() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
     let now = Utc::now();
     let retain_until = now + Duration::seconds(1);
@@ -223,12 +187,9 @@ async fn conformance_expiry_retention() {
 /// 6. Validation precedes time observation (invalid input never advances state).
 #[tokio::test]
 async fn conformance_validation_before_time_observation() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
 
     assert!(matches!(
@@ -248,12 +209,9 @@ async fn conformance_validation_before_time_observation() {
 /// 7. Contention: 32 concurrent consumers of the same key produce exactly one Fresh.
 #[tokio::test(flavor = "multi_thread")]
 async fn conformance_contention() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = Arc::new(connect(&url).await);
 
     let mut handles = Vec::new();
@@ -312,12 +270,9 @@ async fn conformance_contention() {
 /// 8. Idempotency lock lifecycle and owner-based release/extension (#251).
 #[tokio::test]
 async fn conformance_lock_lifecycle() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = connect(&url).await;
 
     let payload = serde_json::json!({"node_id": "nexus-worker-01", "step": "settlement"});
@@ -398,12 +353,9 @@ async fn conformance_lock_lifecycle() {
 /// 9. Lock contention: 32 concurrent workers competing for the same lock key (#251).
 #[tokio::test(flavor = "multi_thread")]
 async fn conformance_lock_contention() {
-    let Some(url) = database_url() else {
-        eprintln!("skipping: DATABASE_URL unset");
-        return;
-    };
+    let url = ConformanceDatabase::from_environment();
     let _guard = SUITE_LOCK.lock().await;
-    reset(&url).await;
+    url.prepare().await;
     let store = Arc::new(connect(&url).await);
 
     let mut handles = Vec::new();
@@ -427,5 +379,37 @@ async fn conformance_lock_contention() {
     assert_eq!(
         acquired_count, 1,
         "exactly one worker must acquire the active lock"
+    );
+}
+
+#[tokio::test]
+async fn conformance_private_schemas_do_not_reset_other_test_records() {
+    let first = ConformanceDatabase::from_environment();
+    let second = ConformanceDatabase::from_environment();
+    let _guard = SUITE_LOCK.lock().await;
+    first.prepare().await;
+    let first_store = connect(&first).await;
+    assert_eq!(
+        first_store
+            .consume_once("isolation.key", "op")
+            .await
+            .unwrap(),
+        ConsumeOutcome::Fresh
+    );
+    second.prepare().await;
+    let second_store = connect(&second).await;
+    assert_eq!(
+        second_store
+            .consume_once("isolation.key", "op")
+            .await
+            .unwrap(),
+        ConsumeOutcome::Fresh
+    );
+    assert_eq!(
+        first_store
+            .consume_once("isolation.key", "op")
+            .await
+            .unwrap(),
+        ConsumeOutcome::AlreadyConsumed
     );
 }

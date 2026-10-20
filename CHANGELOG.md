@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Require an explicit disposable PostgreSQL fixture for replay conformance; isolate every case in a private schema, reject unsafe configuration before connection and run mandatory fixture-backed CI tests (#439).
+
 - Document the actual zkVM library envelope and unqualified backend boundary without advertising an unregistered REST route; retain trusted promotion-policy behavior.
 
 ### Changed
