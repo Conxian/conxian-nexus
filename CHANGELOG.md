@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Document the actual zkVM library envelope and unqualified backend boundary without advertising an unregistered REST route; retain trusted promotion-policy behavior.
+
 ### Changed
 - Pin Core's shared billing configuration and SDK hardening source; retain the public Nexus tier type/wire behavior while sharing quota/upgrade definitions. Dependency policy and conformance checks bind the same revision. Configuration is not paid entitlement (Business #1343/#1390).
 
