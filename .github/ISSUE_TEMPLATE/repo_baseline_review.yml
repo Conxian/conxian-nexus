@@ -67,9 +67,9 @@ body:
       label: Task for agent & Evidence
       description: Describe the single task selected, why it was chosen, and evidence found in the repo inspection.
       placeholder: |
-        Selected task: Update Repository Baseline Review issue template and add Markdown variant.
-        Why chosen: Ensure full alignment with Conxian Linear issue template standards across org.
-        Evidence found: Existing template lacked explicit markdown sections and Linear baseline alignment.
+        Selected task: Address an evidenced repository gap under its existing GitHub issue.
+        Why chosen: Highest executable priority in the P0, P1, P2 queue.
+        Evidence found: Link the current code, failure, or missing evidence.
     validations:
       required: true
   - type: markdown
@@ -77,11 +77,13 @@ body:
       value: |
         ### Required workflow
         - inspect the repo before making changes
-        - select one task only
+        - use GitHub as the work tracker and address executable P0 work before P1, P2, and lower priorities
+        - select one bounded task under the existing issue where possible
         - record evidence for why it was selected
         - implement the change fully
         - run relevant validation
         - update all related docs
+        - preserve the existing feature -> dev -> staged -> main delivery path and all required evidence and reviews
         - prepare approval-ready notes
   - type: textarea
     id: deliverables
@@ -90,7 +92,7 @@ body:
       description: Provide selected task, evidence found, files changed, validation results, documentation updated, and follow-up items.
       placeholder: |
         - Selected task: Standardize repository baseline review templates
-        - Files changed: .github/ISSUE_TEMPLATE/repo_baseline_review.yml, .github/ISSUE_TEMPLATE/repo_baseline_review.md
+        - Files changed: List the actual implementation paths
         - Validation results: python3 scripts/verify_contamination_guard.py, ./scripts/check_production_boundary.sh, cargo test --lib
         - Documentation updated: Issue template documentation synced
         - Follow-up items: None
@@ -105,6 +107,8 @@ body:
         - avoid broad speculative refactors
         - prefer minimal, high-confidence changes
         - improve existing governance/docs rather than duplicating them
+        - do not modify CI workflows, promotion validators, approval requirements, soak periods, CODEOWNERS, or release/production gates as part of an implementation task
+        - workflow changes require a separate explicit owner request and review; never weaken checks to obtain a green result
 
         ### Definition of done
         - one meaningful repo improvement completed
