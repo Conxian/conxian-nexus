@@ -78,6 +78,21 @@ jobs:
         ports:
           - "5432"
         options: >-
+          --label conxian.fixture=nexus-workflow-recovery
+          --label conxian.fixture.role=source
+          --health-cmd "pg_isready -U postgres -d conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      workflow_restore:
+        image: postgres:17
+        env:
+          POSTGRES_DB: conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-fixture-only
+        options: >-
+          --label conxian.fixture=nexus-workflow-recovery
+          --label conxian.fixture.role=restore
           --health-cmd "pg_isready -U postgres -d conformance_test"
           --health-interval 5s
           --health-timeout 5s
@@ -100,8 +115,13 @@ jobs:
     - name: Create dedicated non-superuser conformance role
       env:
         POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        RESTORE_CONTAINER_ID: ${{ job.services.workflow_restore.id }}
       run: |
-        docker exec "$POSTGRES_CONTAINER_ID" psql --username postgres --dbname conformance_test --set ON_ERROR_STOP=1 --command "CREATE ROLE conformance LOGIN PASSWORD 'conformance-fixture-only'; ALTER DATABASE conformance_test OWNER TO conformance;"
+        for fixture in "$POSTGRES_CONTAINER_ID" "$RESTORE_CONTAINER_ID"; do
+          docker exec "$fixture" psql --username postgres --dbname conformance_test --set ON_ERROR_STOP=1 --command "CREATE ROLE conformance LOGIN PASSWORD 'conformance-fixture-only'; ALTER DATABASE conformance_test OWNER TO conformance;"
+        done
+    - name: Verify recovery fixture rejection and receipt checks
+      run: python3 -m unittest discover -s scripts -p test_verify_workflow_restore.py -v
     - name: Verify conformance configuration guards
       run: cargo test --locked --test conformance_config
     - name: Require a fixture and ignore generic application DATABASE_URL
@@ -148,3 +168,20 @@ jobs:
           target/coverage/bitcoin/summary.json
           target/coverage/bitcoin/summary.md
         if-no-files-found: warn
+    # Must stay after every test/coverage command: this stops the source fixture.
+    - name: Recover persisted workflow rows after source instance loss
+      env:
+        SOURCE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        RESTORE_CONTAINER_ID: ${{ job.services.workflow_restore.id }}
+      run: |
+        python3 scripts/verify_workflow_restore.py \
+          --source-container "$SOURCE_CONTAINER_ID" \
+          --restore-container "$RESTORE_CONTAINER_ID" \
+          --source-sha "$GITHUB_SHA" \
+          --output "$RUNNER_TEMP/workflow-recovery.json"
+    - name: Upload bounded workflow recovery measurements
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: workflow-recovery
+        path: ${{ runner.temp }}/workflow-recovery.json
+        if-no-files-found: error
