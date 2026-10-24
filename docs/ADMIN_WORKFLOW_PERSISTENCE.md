@@ -27,8 +27,9 @@ change the same pending entity. Store errors are redacted at the HTTP boundary.
 This is conditional database durability under the selected PostgreSQL storage
 configuration, not a claim of replica quorum, tamper-proof history, crash recovery,
 disaster recovery or independent governance acceptance. The pool-recreation test
-checks process-state independence; a separate cold backup/restore drill remains
-necessary before migration acceptance.
+checks process-state independence. The separate-instance fixture drill below
+adds a bounded backup/restore check; real operator recovery remains necessary
+before migration acceptance.
 
 ## HTTP boundary
 
@@ -102,6 +103,41 @@ operations are restricted. Local compilation/unit/auth-negative checks and the
 hosted PostgreSQL conformance result must therefore be reported separately.
 The existing Rust CI job already runs the complete workspace against PostgreSQL 17
 with that guarded fixture, so it runs the new real-database cases automatically.
+
+### Separate-instance workflow recovery drill
+
+The Rust job now declares two disposable PostgreSQL 17 services. After all tests
+and coverage commands complete, `scripts/verify_workflow_restore.py` checks both
+full container IDs, explicit fixture/role labels, actual database identity and
+non-superuser role. The destination must contain no application schemas/tables.
+The script never reads `DATABASE_URL`, accepts production credentials, drops a
+target schema, or imports a caller-supplied archive. Its fixed fixture password
+is test data, not an operational credential.
+
+It reads actual entity/event rows left by the Rust conformance suite, validates
+stored receipt-to-event bindings, exports the disposable `nexus_conformance_*`
+schemas with `pg_dump`, stops the labelled source instance, and uses a single
+transaction to restore into the separate instance. Canonically ordered workflow
+rows, including notes, fingerprints and receipt JSON, must match exactly. Empty
+input, mismatched records, unavailable tools/services and failed restoration
+fail the job; there is no simulated success or skip fallback. The source remains
+stopped until runner cleanup, so this step must remain after all commands that
+need it.
+
+Only `workflow-recovery.json` measurements/hashes are uploaded. Raw rows, notes,
+credentials and archive bytes are excluded. The receipt binds the actual checked
+out SHA, archive SHA-256, row fingerprint/count and source-stop/restore outcome.
+It explicitly labels fixture-only verification, unverified operator independence
+and no production acceptance. Two containers on one runner do not demonstrate
+independent operators, geographic resilience, production RPO/RTO, application
+recovery after failover, or recovery of keys, external services and all Nexus
+state. Qualify those separately with permitted operational data.
+
+The five local Python rejection/consistency tests check fixture identity, invalid
+container references, incomplete snapshots, receipt binding and changed row
+fingerprints. They do not execute a database restoration. This local environment
+has no Docker daemon/client; the real two-instance drill must pass on the hosted
+candidate before its result can be claimed.
 
 Before adoption: require exact-source checks and independent review, apply the
 migration in staging, verify actual auth policy and proposal intake, reconcile
