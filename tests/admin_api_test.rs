@@ -35,6 +35,18 @@ struct CanonicalEndpoint {
 fn canonical_admin_v1_endpoints() -> Vec<CanonicalEndpoint> {
     vec![
         CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/releases",
+            contract_path: "/admin/v1/releases",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/governance-actions",
+            contract_path: "/admin/v1/governance-actions",
+            body: None,
+        },
+        CanonicalEndpoint {
             method: Method::POST,
             request_path: "/admin/v1/releases/request-approval",
             contract_path: "/admin/v1/releases/request-approval",
@@ -538,7 +550,12 @@ async fn test_admin_write_requires_matching_bearer_when_admin_token_configured()
         )
         .await
         .unwrap();
-    assert_eq!(ok_response.status(), StatusCode::OK);
+    // Authenticated is not committed: this fixture has no workflow database.
+    assert_eq!(ok_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = to_bytes(ok_response.into_body(), 8192).await.unwrap();
+    let value: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["error"], "workflow_storage_unavailable");
+    assert!(value.get("auditEventId").is_none());
 }
 
 #[tokio::test]
@@ -713,6 +730,37 @@ fn test_openapi_admin_v1_surface_matches_router_contract() {
 
     let openapi_paths = parse_openapi_admin_v1_methods();
     assert_eq!(openapi_paths, expected);
+}
+
+#[tokio::test]
+async fn workflow_collections_require_authentication_and_reject_invalid_pagination() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+    for path in [
+        "/admin/v1/releases",
+        "/admin/v1/governance-actions",
+        "/admin/v1/audit-events",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{path}?limit=0"))
+                    .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
 }
 
 #[tokio::test]
