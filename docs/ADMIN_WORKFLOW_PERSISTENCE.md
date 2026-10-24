@@ -94,6 +94,8 @@ concurrent duplicate commands, conflicting keys/decisions, audit-insert rollback
 and retry, missing entities/schema, lifecycle transitions, bounded pages and the
 authenticated HTTP request/decision/audit journey. Signature strings in the debug
 test fixture are test data, not hardware, cryptographic-quorum or live-user proof.
+The separate auth/shape test router uses an intentionally unavailable port-1 database
+and a short acquisition timeout; it never targets a developer application database.
 
 The local runtime cannot start the PostgreSQL fixture because its user-switching
 operations are restricted. Local compilation/unit/auth-negative checks and the

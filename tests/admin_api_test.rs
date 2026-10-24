@@ -199,8 +199,15 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
 }
 fn test_router() -> Router {
     let config = Arc::new(Config::from_env().unwrap_or_else(|_| Config::default_test()));
-    let storage =
-        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1:1/").unwrap());
+    // These auth/shape tests must never reach a developer's application DB.
+    // Positive persistence tests use only the separately guarded conformance fixture.
+    let storage = Arc::new(Storage {
+        pg_pool: sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(std::time::Duration::from_millis(100))
+            .connect_lazy("postgres://unavailable:fixture-only@127.0.0.1:1/unavailable_fixture")
+            .unwrap(),
+        redis_client: redis::Client::open("redis://127.0.0.1:1/").unwrap(),
+    });
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
