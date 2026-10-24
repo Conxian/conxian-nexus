@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Portable PostgreSQL administrative workflow projections and atomic audit receipts, idempotent retries, explicit lifecycle transitions, authenticated release/governance collections and canonical decision IDs. Includes real disposable-database concurrency, rollback and reconnect conformance; production and signing qualification remain separate.
+
 ### Fixed
 - Require an explicit disposable PostgreSQL fixture for replay conformance; isolate every case in a private schema, reject unsafe configuration before connection and run mandatory fixture-backed CI tests (#439).
 
