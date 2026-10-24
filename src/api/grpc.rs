@@ -207,15 +207,10 @@ impl NexusGrpcService {
 
     /// Reads safety-mode and drift flags from Redis.
     ///
-    /// If Redis is unavailable, this logs the error and returns `(true, 0)` to
-    /// keep read-only health/metrics RPCs available while remaining conservative.
-    ///
-    /// In this fallback, `drift=0` means "unknown (Redis unavailable)" and must
-    /// not be interpreted as "in-sync". This helper is intended only for the
-    /// read-only `GetStatus`/`GetMetrics` paths.
+    /// Redis and decoding failures return unavailable. The protobuf cannot
+    /// distinguish unknown drift from an observed zero, so no synthetic flags
+    /// are returned by the read-only `GetStatus`/`GetMetrics` paths.
     async fn read_safety_flags(&self, context: &str) -> Result<(bool, u64), Status> {
-        let default_flags = (true, 0);
-
         let redis_client = self.storage.redis_client.clone();
         let cached_conn = { self.redis_conn.lock().await.clone() };
 
@@ -228,9 +223,9 @@ impl NexusGrpcService {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (connect); defaulting safe"
+                            "Redis error reading safety flags (connect); returning unavailable"
                         );
-                        return Ok(default_flags);
+                        return Err(Status::unavailable("Safety state unavailable"));
                     }
                 };
 
@@ -264,9 +259,9 @@ impl NexusGrpcService {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (connect); defaulting safe"
+                            "Redis error reading safety flags (connect); returning unavailable"
                         );
-                        return Ok(default_flags);
+                        return Err(Status::unavailable("Safety state unavailable"));
                     }
                 };
 
@@ -287,50 +282,23 @@ impl NexusGrpcService {
                         tracing::error!(
                             error = %e,
                             context,
-                            "Redis error reading safety flags (pipeline); defaulting safe"
+                            "Redis error reading safety flags (pipeline); returning unavailable"
                         );
-                        return Ok(default_flags);
+                        return Err(Status::unavailable("Safety state unavailable"));
                     }
                 }
             }
         };
 
-        let safety_mode: bool = match safety_raw.as_deref() {
-            None => false,
-            Some(raw) => {
-                let normalized = raw.trim().to_ascii_lowercase();
-                if crate::config::parse_flag(&normalized) {
-                    true
-                } else if matches!(normalized.as_str(), "" | "0" | "false" | "no" | "off") {
-                    false
-                } else {
-                    tracing::warn!(
-                        context,
-                        value = %raw,
-                        "Unrecognized nexus:safety_mode value in Redis; treating as false"
-                    );
-                    false
-                }
-            }
-        };
+        let safety_mode = crate::safety::decode_safety_mode(safety_raw.as_deref())
+            .map_err(|_| Status::unavailable("Invalid safety state"))?;
 
         let drift: u64 = match drift_raw.as_deref() {
             None => 0,
-            Some(raw) => {
-                let trimmed = raw.trim();
-                if trimmed.is_empty() {
-                    0
-                } else if let Ok(value) = trimmed.parse::<u64>() {
-                    value
-                } else {
-                    tracing::warn!(
-                        context,
-                        value = %raw,
-                        "Unrecognized nexus:drift value in Redis; treating as 0"
-                    );
-                    0
-                }
-            }
+            Some(raw) => raw
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| Status::unavailable("Invalid drift state"))?,
         };
 
         Ok((safety_mode, drift))

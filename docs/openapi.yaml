@@ -210,6 +210,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety mode active or safety state unavailable
   /admin/v1/runtime/readiness:
     get:
       summary: Get runtime readiness
@@ -270,6 +272,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety state unavailable; active and safety_mode are null
   /admin/v1/safety-mode/ack:
     post:
       summary: Acknowledge safety mode
@@ -602,6 +606,8 @@ paths:
       responses:
         '200':
           description: OK
+        '503':
+          description: Safety mode active or safety state unavailable; unknown safety_mode is null
   /v1/billing/generate-key:
     post:
       summary: Generate developer API key
@@ -1238,6 +1244,7 @@ components:
               example: "0.4.22"
             safety_mode:
               type: boolean
+              nullable: true
             uptime_seconds:
               type: integer
               nullable: true
@@ -1428,3 +1435,30 @@ components:
           type: string
         message:
           type: string
+
+    ZkVmVerificationPayload:
+      description: >-
+        Library envelope for the fail-closed zkVM backend interface. This schema
+        does not declare a REST route or establish a qualified SP1/RISC Zero
+        verifier. No /v1/verify/zkvm route is registered in the current source.
+      type: object
+      required: [envelope_version, environment, program_digest, proof_b64, public_values_b64, expected_state_commitment]
+      properties:
+        envelope_version:
+          type: integer
+          enum: [1]
+        environment:
+          type: string
+          enum: [sp1, risc_zero]
+        program_digest:
+          type: string
+          description: Program verifying-key digest or image ID; 32-byte hex validated by the library.
+        proof_b64:
+          type: string
+          description: Base64 proof bytes; requires an independently qualified verifier backend.
+        public_values_b64:
+          type: string
+          description: Base64 JSON BitcoinPublicValues containing bitcoin_network, bitcoin_height and state_commitment.
+        expected_state_commitment:
+          type: string
+          description: Expected Bitcoin block or MMR state commitment; 32-byte hex validated by the library.

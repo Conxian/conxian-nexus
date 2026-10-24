@@ -12,23 +12,23 @@ async fn test_fedimint_adapter_proof_verification_flow() {
 
     let valid_proof = "fed:ecash-blinded-mint-note-sample-payload-for-integration-testing";
 
-    // First verification should succeed
-    let result = adapter
+    // Arbitrary well-prefixed text cannot establish a federation signature.
+    let err = adapter
         .verify_mint_proof_detailed(valid_proof, "fed:fedimint_integration_fed_1", 10000)
         .await
-        .expect("Verification execution failed");
-
-    assert!(result.valid, "Expected valid proof verification result");
-    assert_eq!(result.federation_id, "fed:fedimint_integration_fed_1");
-    assert_eq!(result.amount_sats, 10000);
-    assert!(!result.proof_hash.is_empty());
-    assert!(!result.nonce_hash.is_empty());
+        .unwrap_err();
+    assert!(err
+        .to_string()
+        .contains("cryptographic verifier not configured"));
 
     // Basic helper function call check
     let simple_valid = adapter
         .verify_mint_proof("fed1:another-valid-proof-string-with-sufficient-length")
         .await;
-    assert!(simple_valid.is_ok());
+    assert!(simple_valid
+        .unwrap_err()
+        .to_string()
+        .contains("cryptographic verifier not configured"));
 }
 
 #[tokio::test]

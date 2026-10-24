@@ -1,7 +1,8 @@
 //! FROST (Flexible Round-Optimized Schnorr Threshold Signatures) Verifier
 //!
-//! Provides cryptographic verification of threshold Schnorr signature shares,
-//! commitment sets, and group public key aggregation per CON-1302 and BIP-340/FROST.
+//! Verifies a final BIP-340 signature under the supplied group key.
+//! Participant metadata is structural only: this does not prove a FROST ceremony,
+//! contribution of shares, authenticated key ownership, or independent custody.
 
 use k256::schnorr::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -59,14 +60,17 @@ pub struct FrostVerificationPayload {
 pub struct FrostVerificationResponse {
     /// Protocol identifier.
     pub protocol_id: String,
-    /// Whether the threshold signature and parameters are valid.
+    /// Whether the final signature is valid under the caller-supplied key.
     pub is_valid: bool,
-    /// Verified threshold count.
+    /// Structural threshold metadata supplied by the caller, not proven custody.
     pub threshold: u32,
-    /// Total participant count verified.
+    /// Structural participant count supplied by the caller.
     pub participant_count: u32,
     /// Verified message digest in hex format.
     pub message_hash: String,
+    pub verification_scope: String,
+    pub threshold_enforcement_verified: bool,
+    pub group_key_authority_verified: bool,
 }
 
 /// Verifier instance for FROST Schnorr threshold signatures.
@@ -181,6 +185,9 @@ impl FrostVerifier {
             threshold: payload.threshold,
             participant_count: payload.participant_count,
             message_hash: payload.message_hash.clone(),
+            verification_scope: "final-bip340-signature-only".into(),
+            threshold_enforcement_verified: false,
+            group_key_authority_verified: false,
         })
     }
 }
@@ -213,6 +220,10 @@ mod tests {
 
         let res = verifier.verify_signature(&payload).unwrap();
         assert!(res.is_valid);
+        // This test used one signing key despite declaring several participants.
+        assert_eq!(res.verification_scope, "final-bip340-signature-only");
+        assert!(!res.threshold_enforcement_verified);
+        assert!(!res.group_key_authority_verified);
         assert_eq!(res.threshold, 3);
         assert_eq!(res.participant_count, 5);
         assert_eq!(res.message_hash, hex::encode(msg_bytes));
