@@ -1,5 +1,8 @@
 #![allow(clippy::result_large_err)]
 
+use crate::storage::admin_workflows::{
+    Command, Decision, Operation, Receipt, WorkflowError, WorkflowStore,
+};
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderMap, StatusCode},
@@ -103,6 +106,7 @@ pub struct GovernanceDecisionRequest {
     #[serde(rename = "actionId")]
     pub action_id: String,
     pub decision: String,
+    #[serde(rename = "actorId", alias = "actor_id")]
     pub actor_id: String,
     pub notes: Option<String>,
 }
@@ -142,6 +146,8 @@ pub fn admin_routes(state: crate::api::rest::AppState) -> Router<crate::api::res
     Router::new()
         .route("/login", post(login_handler))
         .route("/status", get(get_protected_status))
+        .route("/releases", get(list_releases))
+        .route("/governance-actions", get(list_governance_actions))
         .route("/releases/request-approval", post(request_release_approval))
         .route("/releases/decision", post(submit_release_decision))
         .route("/governance/decision", post(submit_governance_decision))
@@ -536,87 +542,207 @@ async fn login_handler(
     })))
 }
 
+fn workflow_error(error: WorkflowError) -> Response {
+    let (status, code) = match error {
+        WorkflowError::InvalidInput => (StatusCode::BAD_REQUEST, "invalid_workflow_input"),
+        WorkflowError::NotFound => (StatusCode::NOT_FOUND, "workflow_entity_not_found"),
+        WorkflowError::CommandConflict => (StatusCode::CONFLICT, "workflow_command_conflict"),
+        WorkflowError::InvalidTransition => (StatusCode::CONFLICT, "invalid_workflow_transition"),
+        WorkflowError::Backend(_) | WorkflowError::Receipt(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "workflow_storage_unavailable",
+        ),
+    };
+    (status, Json(json!({"error": code}))).into_response()
+}
+
+async fn commit_workflow(
+    state: &crate::api::rest::AppState,
+    headers: &HeaderMap,
+    command: Command,
+) -> Result<Json<Receipt>, Response> {
+    let fingerprint = command.fingerprint().map_err(workflow_error)?;
+    // An optional caller key binds retries to one semantic command. Older
+    // clients retain deterministic content-key retries without a wire change.
+    // This key is not a signing nonce or proof of independent approval.
+    let command_id = match headers.get("idempotency-key") {
+        Some(value) => {
+            let key = value
+                .to_str()
+                .map_err(|_| workflow_error(WorkflowError::InvalidInput))?;
+            if key.trim().is_empty() {
+                return Err(workflow_error(WorkflowError::InvalidInput));
+            }
+            format!("http:{}", key)
+        }
+        None => format!("content:{}", fingerprint),
+    };
+    let store = WorkflowStore::new(state.storage.pg_pool.clone());
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        store.apply(&command_id, &command),
+    )
+    .await
+    .map_err(|_| workflow_error(WorkflowError::Backend(sqlx::Error::PoolTimedOut)))?;
+    result.map(Json).map_err(workflow_error)
+}
+
 async fn request_release_approval(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseApprovalRequest>,
-) -> Result<Json<ReleaseApprovalResponse>, Response> {
+) -> Result<Json<Receipt>, Response> {
     authorize_admin_write(&state, &headers)?;
     payload
         .validate_dual_signature(&state.config)
         .map_err(|(code, json)| (code, json).into_response())?;
+    commit_workflow(
+        &state,
+        &headers,
+        Command {
+            operation: Operation::RequestRelease,
+            entity_id: payload.artifact_id,
+            actor: payload.requested_by,
+            decision: None,
+            notes: payload.notes,
+        },
+    )
+    .await
+}
 
-    let request_id = format!("req_{}", Uuid::new_v4().simple());
-    let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
-
-    tracing::info!(
-        "Release approval requested for {} by {} (Dual-Sigs Verified)",
-        payload.artifact_id,
-        payload.requested_by
-    );
-
-    Ok(Json(ReleaseApprovalResponse {
-        accepted: true,
-        request_id,
-        audit_event_id,
-        message: "Release approval recorded in audit trail.".to_string(),
-    }))
+fn workflow_decision(value: &str) -> Result<Decision, Response> {
+    match value {
+        "approve" => Ok(Decision::Approve),
+        "reject" => Ok(Decision::Reject),
+        "request_changes" => Ok(Decision::RequestChanges),
+        _ => Err(workflow_error(WorkflowError::InvalidInput)),
+    }
 }
 
 async fn submit_release_decision(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<ReleaseDecisionRequest>,
-) -> Result<Json<ReleaseApprovalResponse>, Response> {
+) -> Result<Json<Receipt>, Response> {
     authorize_admin_write(&state, &headers)?;
     payload
         .validate_dual_signature(&state.config)
         .map_err(|(code, json)| (code, json).into_response())?;
-
-    let request_id = format!("req_{}", Uuid::new_v4().simple());
-    let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
-
-    tracing::info!(
-        "Release decision '{}' for {} by {} (Dual-Sigs Verified)",
-        payload.decision,
-        payload.artifact_id,
-        payload.actor_id
-    );
-
-    Ok(Json(ReleaseApprovalResponse {
-        accepted: true,
-        request_id,
-        audit_event_id,
-        message: format!("Release decision '{}' finalized.", payload.decision),
-    }))
+    let decision = workflow_decision(&payload.decision)?;
+    commit_workflow(
+        &state,
+        &headers,
+        Command {
+            operation: Operation::DecideRelease,
+            entity_id: payload.artifact_id,
+            actor: payload.actor_id,
+            decision: Some(decision),
+            notes: payload.notes,
+        },
+    )
+    .await
 }
 
 async fn submit_governance_decision(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
     Json(payload): Json<GovernanceDecisionRequest>,
-) -> Result<Json<ReleaseApprovalResponse>, Response> {
+) -> Result<Json<Receipt>, Response> {
     authorize_admin_write(&state, &headers)?;
     payload
         .validate_dual_signature(&state.config)
         .map_err(|(code, json)| (code, json).into_response())?;
+    let decision = workflow_decision(&payload.decision)?;
+    commit_workflow(
+        &state,
+        &headers,
+        Command {
+            operation: Operation::DecideGovernance,
+            entity_id: payload.action_id,
+            actor: payload.actor_id,
+            decision: Some(decision),
+            notes: payload.notes,
+        },
+    )
+    .await
+}
 
-    let request_id = format!("req_{}", Uuid::new_v4().simple());
-    let audit_event_id = format!("audit_{}", Uuid::new_v4().simple());
+#[derive(Deserialize)]
+struct WorkflowPage {
+    #[serde(default = "default_workflow_limit")]
+    limit: u32,
+    #[serde(default)]
+    offset: u32,
+}
+fn default_workflow_limit() -> u32 {
+    100
+}
+impl WorkflowPage {
+    fn validate(&self) -> Result<(), Response> {
+        if !(1..=1000).contains(&self.limit) || self.offset > 1_000_000 {
+            return Err(workflow_error(WorkflowError::InvalidInput));
+        }
+        Ok(())
+    }
+}
 
-    tracing::info!(
-        "Governance decision '{}' for action {} by {} (Dual-Sigs Verified)",
-        payload.decision,
-        payload.action_id,
-        payload.actor_id
-    );
+async fn workflow_entities(
+    state: &crate::api::rest::AppState,
+    page: WorkflowPage,
+    kind: &str,
+) -> Result<Json<Value>, Response> {
+    page.validate()?;
+    let store = WorkflowStore::new(state.storage.pg_pool.clone());
+    let rows = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        store.entities(kind, page.limit, page.offset),
+    )
+    .await
+    .map_err(|_| workflow_error(WorkflowError::Backend(sqlx::Error::PoolTimedOut)))?
+    .map_err(workflow_error)?;
+    let rows: Vec<Value> = rows
+        .into_iter()
+        .map(|entity| {
+            let mut value = serde_json::to_value(&entity).expect("typed entity is serializable");
+            if kind == "release" {
+                value["name"] = json!(entity.title);
+            }
+            value
+        })
+        .collect();
+    let key = if kind == "release" {
+        "releases"
+    } else {
+        "governanceActions"
+    };
+    // A full page might have a successor; pagination is explicit, not an
+    // assertion that an unbounded collection has been returned.
+    let next = if rows.len() == page.limit as usize {
+        Some(page.offset + page.limit)
+    } else {
+        None
+    };
+    let mut result = json!({"limit": page.limit, "offset": page.offset, "nextOffset": next});
+    result[key] = json!(rows);
+    Ok(Json(result))
+}
 
-    Ok(Json(ReleaseApprovalResponse {
-        accepted: true,
-        request_id,
-        audit_event_id,
-        message: "Governance decision recorded.".to_string(),
-    }))
+async fn list_releases(
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap,
+    Query(page): Query<WorkflowPage>,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&state, &headers, "api.read")?;
+    workflow_entities(&state, page, "release").await
+}
+
+async fn list_governance_actions(
+    State(state): State<crate::api::rest::AppState>,
+    headers: HeaderMap,
+    Query(page): Query<WorkflowPage>,
+) -> Result<Json<Value>, Response> {
+    authorize_for_scope(&state, &headers, "api.read")?;
+    workflow_entities(&state, page, "governance").await
 }
 
 fn current_timestamp() -> String {
@@ -663,12 +789,26 @@ async fn get_runtime_readiness(
 async fn list_audit_events(
     State(state): State<crate::api::rest::AppState>,
     headers: HeaderMap,
+    Query(page): Query<WorkflowPage>,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "events": [],
-        "total": 0
-    })))
+    page.validate()?;
+    let store = WorkflowStore::new(state.storage.pg_pool.clone());
+    let events = tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        store.audit(page.limit, page.offset),
+    )
+    .await
+    .map_err(|_| workflow_error(WorkflowError::Backend(sqlx::Error::PoolTimedOut)))?
+    .map_err(workflow_error)?;
+    let next = if events.len() == page.limit as usize {
+        Some(page.offset + page.limit)
+    } else {
+        None
+    };
+    Ok(Json(
+        json!({"events": events, "limit": page.limit, "offset": page.offset, "nextOffset": next}),
+    ))
 }
 
 async fn get_environment(

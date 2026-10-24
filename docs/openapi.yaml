@@ -8,6 +8,29 @@ servers:
     description: Local development server
 paths:
 
+  /admin/v1/releases:
+    get:
+      summary: List persisted administrative release projections
+      parameters:
+        - $ref: '#/components/parameters/WorkflowLimit'
+        - $ref: '#/components/parameters/WorkflowOffset'
+      responses:
+        '200':
+          description: Bounded page of release records
+        '503':
+          description: Workflow store or migration unavailable
+  /admin/v1/governance-actions:
+    get:
+      summary: List persisted administrative governance projections
+      parameters:
+        - $ref: '#/components/parameters/WorkflowLimit'
+        - $ref: '#/components/parameters/WorkflowOffset'
+      responses:
+        '200':
+          description: Bounded page of governance action records
+        '503':
+          description: Workflow store or migration unavailable
+
   /v1/verify/proof-envelope:
     post:
       summary: Verify standardized cross-repo proof envelope and verifier ownership contract
@@ -135,6 +158,15 @@ paths:
   /admin/v1/releases/request-approval:
     post:
       summary: Request release approval
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 251
+          description: Retain across retries; not a cryptographic signing nonce
       requestBody:
         required: true
         content:
@@ -153,10 +185,31 @@ paths:
                   type: string
       responses:
         '200':
-          description: Accepted
+          description: Administrative state and audit event committed; not production acceptance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowMutationReceipt'
+        '400':
+          description: Invalid workflow input
+        '404':
+          description: Referenced workflow entity does not exist
+        '409':
+          description: Idempotency-key conflict or invalid lifecycle transition
+        '503':
+          description: Workflow storage unavailable
   /admin/v1/releases/decision:
     post:
       summary: Submit release decision
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 251
+          description: Retain across retries; not a cryptographic signing nonce
       requestBody:
         required: true
         content:
@@ -178,10 +231,31 @@ paths:
                   type: string
       responses:
         '200':
-          description: Accepted
+          description: Administrative state and audit event committed; not production acceptance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowMutationReceipt'
+        '400':
+          description: Invalid workflow input
+        '404':
+          description: Referenced workflow entity does not exist
+        '409':
+          description: Idempotency-key conflict or invalid lifecycle transition
+        '503':
+          description: Workflow storage unavailable
   /admin/v1/governance/decision:
     post:
       summary: Submit governance decision
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 251
+          description: Retain across retries; not a cryptographic signing nonce
       requestBody:
         required: true
         content:
@@ -203,7 +277,19 @@ paths:
                   type: string
       responses:
         '200':
-          description: Accepted
+          description: Administrative state and audit event committed; not production acceptance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowMutationReceipt'
+        '400':
+          description: Invalid workflow input
+        '404':
+          description: Referenced workflow entity does not exist
+        '409':
+          description: Idempotency-key conflict or invalid lifecycle transition
+        '503':
+          description: Workflow storage unavailable
   /admin/v1/runtime/health:
     get:
       summary: Get runtime health
@@ -221,9 +307,15 @@ paths:
   /admin/v1/audit-events:
     get:
       summary: List audit events
+      parameters:
+        - $ref: '#/components/parameters/WorkflowLimit'
+        - $ref: '#/components/parameters/WorkflowOffset'
       responses:
         '200':
-          description: OK
+          description: Persisted audit-event page
+        '503':
+          description: Workflow store or migration unavailable
+
   /admin/v1/chains:
     get:
       summary: List chain runtime status records
@@ -1014,7 +1106,41 @@ paths:
         "422":
           description: Invalid or unprocessable fraud proof assertion
 components:
+  parameters:
+    WorkflowLimit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
+    WorkflowOffset:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        minimum: 0
+        maximum: 1000000
+        default: 0
   schemas:
+    WorkflowMutationReceipt:
+      type: object
+      required: [accepted, message, auditEventId]
+      properties:
+        accepted:
+          type: boolean
+        message:
+          type: string
+        auditEventId:
+          type: string
+        requestId:
+          type: string
+        decisionId:
+          type: string
+      oneOf:
+        - required: [requestId]
+        - required: [decisionId]
     SuiVerificationPayload:
       type: object
       required: [transaction_digest, checkpoint_sequence_number, sender, mutated_object_ids, validator_signatures, gas_budget]

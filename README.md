@@ -157,6 +157,8 @@ For more detailed setup instructions, including production hardening, see the [O
 
 ## Policies & Release Guidance
 
+- [Administrative workflow persistence and portable recovery boundary](./docs/ADMIN_WORKFLOW_PERSISTENCE.md)
+
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)
 - [SUPPORT.md](./SUPPORT.md)
