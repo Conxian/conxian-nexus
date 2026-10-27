@@ -152,3 +152,8 @@ This document maps identified security holes, protocol gaps, and active research
 - **Unavailable without a qualified backend**: `UnavailableZkVmBackend` returns `BackendUnavailable`; envelope/commitment validation alone is not cryptographic proof verification. Real provider wiring, upstream-compatible positive/adversarial fixtures and independent acceptance remain open.
 - **REST boundary**: current `src/api/rest.rs` does not register `/v1/verify/zkvm`. `docs/openapi.yaml` records the library envelope as an unwired component schema rather than advertising a nonexistent endpoint.
 - **Candidate C scope**: the existing proof-envelope REST surface and metadata/hash/ownership assertions do not independently establish cryptographic or deployed verifier ownership. Reconcile completed labels against `docs/CAPABILITY_DISCOVERY.md` and operation-specific acceptance.
+
+### 2.22 Production Readiness Research, Phase 3 Multi-Chain Support & Management Framework
+- **Gap**: Need for expanded production enablement research, Phase 3 decentralized system support strategy (Near, XRPL, Starknet, Monad, Flashbots MEV), business integration models, and a GitHub Issues/Projects (v2)/Knowledge Base management framework.
+- **Status**: **Completed (v0.4.23)**. Expanded research map in `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md` and `docs/RESEARCH.md`. Established comprehensive GitHub Issues, Projects (v2), and Knowledge Base (KB) management procedures in `docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md`.
+- **Code/Docs**: `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md`, `docs/RESEARCH.md`, `docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md`
