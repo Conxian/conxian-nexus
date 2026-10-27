@@ -74,6 +74,8 @@ Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https:
 - [API Reference](./docs/openapi.yaml)
 - [Security Model](./SECURITY.md)
 - [Observability & Runbooks](./docs/remediation/OBSERVABILITY_RUNBOOK.md)
+- [Issue & Project Management Framework](./docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md)
+- [Production Enablement Research](./docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md)
 
 ## Getting started
 
