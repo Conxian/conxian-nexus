@@ -1,0 +1,5 @@
+# Document the actual zkVM library boundary without inventing a REST route
+
+PR #431 proposes a REST path and payload that do not exist in current Nexus routing. Current source provides a versioned ZkVmVerificationPayload, envelope validation and a fail-closed backend interface; it does not register /v1/verify/zkvm. Preserve useful research by documenting that schema as a reusable, unwired OpenAPI component and by recording qualification gaps rather than completed SP1/RISC Zero service claims.
+
+Merge current dev into the candidate, retain all existing routes and newer source, restore scripts/branch_promotion_policy.py byte-for-byte from current dev, and add the actual feature checklist to the PR body. Do not add an endpoint, proof verifier, custody capability, dependency or automatic acceptance fallback. Validate YAML/schema fields against the source payload, route absence, trusted-policy equality, existing promotion tests, retention and whitespace. A new source head needs fresh review and hosted checks.

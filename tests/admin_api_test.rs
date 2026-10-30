@@ -35,6 +35,18 @@ struct CanonicalEndpoint {
 fn canonical_admin_v1_endpoints() -> Vec<CanonicalEndpoint> {
     vec![
         CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/releases",
+            contract_path: "/admin/v1/releases",
+            body: None,
+        },
+        CanonicalEndpoint {
+            method: Method::GET,
+            request_path: "/admin/v1/governance-actions",
+            contract_path: "/admin/v1/governance-actions",
+            body: None,
+        },
+        CanonicalEndpoint {
             method: Method::POST,
             request_path: "/admin/v1/releases/request-approval",
             contract_path: "/admin/v1/releases/request-approval",
@@ -187,8 +199,15 @@ fn parse_openapi_admin_v1_methods() -> BTreeSet<String> {
 }
 fn test_router() -> Router {
     let config = Arc::new(Config::from_env().unwrap_or_else(|_| Config::default_test()));
-    let storage =
-        Arc::new(Storage::new_lazy("postgres://localhost/nexus", "redis://127.0.0.1/").unwrap());
+    // These auth/shape tests must never reach a developer's application DB.
+    // Positive persistence tests use only the separately guarded conformance fixture.
+    let storage = Arc::new(Storage {
+        pg_pool: sqlx::postgres::PgPoolOptions::new()
+            .acquire_timeout(std::time::Duration::from_millis(100))
+            .connect_lazy("postgres://unavailable:fixture-only@127.0.0.1:1/unavailable_fixture")
+            .unwrap(),
+        redis_client: redis::Client::open("redis://127.0.0.1:1/").unwrap(),
+    });
     let nexus_state = Arc::new(NexusState::new());
     let executor = Arc::new(NexusExecutor::new(
         storage.clone(),
@@ -538,7 +557,12 @@ async fn test_admin_write_requires_matching_bearer_when_admin_token_configured()
         )
         .await
         .unwrap();
-    assert_eq!(ok_response.status(), StatusCode::OK);
+    // Authenticated is not committed: this fixture has no workflow database.
+    assert_eq!(ok_response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = to_bytes(ok_response.into_body(), 8192).await.unwrap();
+    let value: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(value["error"], "workflow_storage_unavailable");
+    assert!(value.get("auditEventId").is_none());
 }
 
 #[tokio::test]
@@ -713,6 +737,89 @@ fn test_openapi_admin_v1_surface_matches_router_contract() {
 
     let openapi_paths = parse_openapi_admin_v1_methods();
     assert_eq!(openapi_paths, expected);
+}
+
+#[tokio::test]
+async fn workflow_collections_require_authentication_and_reject_invalid_pagination() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+    for path in [
+        "/admin/v1/releases",
+        "/admin/v1/governance-actions",
+        "/admin/v1/audit-events",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("{path}?limit=0"))
+                    .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+#[tokio::test]
+async fn admin_observations_fail_closed_without_real_evidence() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+    for (path, error, evidence_field) in [
+        (
+            "/admin/v1/chains/bitcoin/status",
+            "chain_observation_unavailable",
+            "height",
+        ),
+        (
+            "/admin/v1/attestations/attestation-1",
+            "attestation_evidence_unavailable",
+            "verified",
+        ),
+        (
+            "/admin/v1/drift",
+            "drift_observation_unavailable",
+            "drift_ms",
+        ),
+        (
+            "/admin/v1/runtime/health",
+            "safety_state_unavailable",
+            "safety_mode",
+        ),
+        (
+            "/admin/v1/safety-mode",
+            "safety_state_unavailable",
+            "active",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::HOST, "nexus.test")
+                    .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = to_bytes(response.into_body(), 8192).await.unwrap();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["error"], error);
+        assert!(value[evidence_field].is_null());
+    }
 }
 
 #[tokio::test]

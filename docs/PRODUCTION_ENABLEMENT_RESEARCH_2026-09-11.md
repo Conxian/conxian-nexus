@@ -33,7 +33,7 @@ tag remains v0.4.22, 2026-07-15).
 | **P1** | **x402 V2 Settlement Rail Payment Verifier** — HTTP 402 payment authorization, Schnorr signatures, satoshi amounts, and nonce verification. | — | **Completed (v0.4.23)** via `X402PaymentVerifier` (`src/verification/x402.rs`) and `/v1/settlement/x402/verify`. |
 | **P1** | **DLC Oracle & CET Verification** — Real BIP-340 Schnorr oracle signature verification and CET outcome calculation (`src/api/dlc.rs`). | — | **Completed (v0.4.23)** via `verify_dlc_oracle_attestation` and `/v1/dlc/cet/verify`. |
 | **P1** | **Chain coverage P2 (Solana)** — Solana Ed25519 signature & transaction adapter. | — | **Completed (v0.4.23)** via `SolanaAdapter` (`src/executor/solana.rs`). |
-| **P1** | **IdempotencyStore → Neon + live-DB conformance** | #251 | **Completed (v0.4.23)** via `idempotency_locks` table (`20260912000000_idempotency_locks.sql`), atomic lock API (`acquire_lock`, `release_lock`, `extend_lock`, `get_lock`), and live-DB conformance suite in `tests/idempotency_conformance.rs`. |
+| **P0 prerequisite** | **IdempotencyStore → disposable DB conformance, then Neon qualification** | #439; historical #251 | **Source implemented; provider/production acceptance open** via `idempotency_locks` table (`20260912000000_idempotency_locks.sql`), atomic lock API (`acquire_lock`, `release_lock`, `extend_lock`, `get_lock`), and live-DB conformance suite in `tests/idempotency_conformance.rs`. |
 | **P1** | **Chain coverage P2 (Sui & Aptos Move Verification)** — Sui & Aptos Move object / JMT proof verification REST endpoints. | — | **Completed (v0.4.23)** via `SuiAdapter` (`src/executor/sui.rs`), `AptosAdapter` (`src/executor/aptos.rs`), `/v1/verify/sui`, and `/v1/verify/aptos`. |
 | **P2** | **Chain coverage P3** — Near, XRPL, Tron, Stellar, Starknet, Monad, Sei(via Cosmos). | — | Research: adapter specs, lowest-priority. |
 | **P2** | **Protocol modules P3** — `ark`, `bip322`, `covenant`, `a2p`, `account_abstraction`, `cctp`, `chain_abstraction`, `credit`, `economy`, `fiat`, `intent`, `job_card`, `opportunity`, `sidl`, `solver`, `stablecoin_orchestrator`, `swap_router`. | — | Research: module boundaries; many are business-layer (N/A for Nexus). |
@@ -80,7 +80,7 @@ tag remains v0.4.22, 2026-07-15).
 ## 7. IdempotencyStore Neon PostgreSQL Conformance Specification (#251) — COMPLETED (v0.4.23)
 - **Target Schema**: SQLx table `idempotency_locks` (`key VARCHAR(512) PRIMARY KEY`, `owner VARCHAR(256) NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `expires_at TIMESTAMPTZ NOT NULL`, `payload JSONB`).
 - **Atomic Operations**: Implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` in `src/storage/idempotency.rs` using atomic `ON CONFLICT DO UPDATE` queries with TTL expiration evaluation, owner isolation, and row-level locking.
-- **Live Conformance Gate**: Verified via `tests/idempotency_conformance.rs` (9 passing integration tests) covering consume-once, batch rollback, anti-rollback high-water clock, lock lifecycle, 32-worker contention, and expired lock re-acquisition.
+- **Conformance evidence correction (20 October 2026)**: The historical nine-test suite returned success when generic DATABASE_URL was absent and could reset shared application tables. #439 requires an explicit disposable fixture, private per-test schemas, negative guard checks and mandatory PostgreSQL-backed workspace CI. See `docs/REPLAY_CONFORMANCE.md`. Reconnect and standalone clock tests do not establish crash/failover or an atomically bound SDK production replay backend.
 
 ## 8. Multi-Criteria Candidate Scoring Matrix (v0.4.23 Research Evaluation)
 
@@ -90,3 +90,46 @@ tag remains v0.4.22, 2026-07-15).
 | **Candidate B (BitVM3)** | **BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion** (Garbled table gate commitments, wire label verification, dispute assertion evaluation, REST API `/v1/verify/bitvm3`) | 9 | 8 | 9 | 9 | **35/40** | **Completed (v0.4.23)** |
 | **Candidate C** | **Cross-Repo Proof Surface & Verifier Ownership Contract Alignment** (Standardized cross-repo proof envelope schema between Nexus and Gateway: curve checks, VK/inputs hashes, state root binding, verifier ownership, REST ) | 8 | 9 | 9 | 10 | **36/40** | **Completed (v0.4.23)** |
 | **Candidate D (Hole 2.1)** | **TEE Enclave Remote Attestation Depth & Measurement Verification** (X.509 validity window enforcement, trusted measurement set matching, and remote attestation validation) | 10 | 9 | 10 | 10 | **39/40** | **Completed (v0.4.23)** |
+
+## 9. Expanded Decentralized Systems Support & Business Integration Analysis
+
+### 9.1 Chain Coverage P3 Architectural Specifications & Support Strategies
+
+To guarantee resilient cross-chain verification and operational issue mitigation across external decentralized networks, Nexus defines explicit architectural requirements and failure mitigation strategies for Phase 3 decentralized system adapters:
+
+1. **Near Protocol (Nightshade Sharding)**:
+   - **Verification Strategy**: Validate `LightClientBlockView` headers containing epoch block producer approvals, Merkle proofs of inclusion for transactions (`ExecutionOutcomeWithId`), and shard state headers.
+   - **Operational Risk & Mitigation**: Mitigate shard state divergence and RPC missing outcome responses by requiring dual-endpoint light client proofs and fallback to validator block header verification.
+
+2. **XRPL (XRP Ledger Consensus Protocol)**:
+   - **Verification Strategy**: Validate signed ledger headers, transaction tree SHA-512Half root hashes, and STObject serialization signatures from trusted UNL (Unique Node List) validator quorums.
+   - **Operational Risk & Mitigation**: Prevent UNL validator set drift via dynamic validator key-list polling and fail-closed transaction state checks.
+
+3. **Starknet (STARK ZK-Rollup)**:
+   - **Verification Strategy**: Parse STARK validity proofs (Fri/Air verification or Cairo zero-knowledge proof state root transitions) and state update storage diff commitments.
+   - **Operational Risk & Mitigation**: Address L1-L2 settlement latency and liveness delays on Ethereum L1 by caching pending state roots with unconfirmed status until verified on-chain.
+
+4. **Monad (High-Throughput Parallel EVM)**:
+   - **Verification Strategy**: Extend EVM MPT receipt verification with MonadBFT epoch consensus header validation and delayed execution state root commitments.
+   - **Operational Risk & Mitigation**: Support ultra-low latency block propagation with streaming RPC connection pools and automatic fallback to transaction receipt execution traces.
+
+5. **Flashbots / MEV-Boost & Builder Networks**:
+   - **Verification Strategy**: Verify builder payload signatures, execution header block hashes, and bid value commitments against relay public keys.
+   - **Operational Risk & Mitigation**: Address builder unbundling and reorg risks via real-time inclusion monitoring in `me_audit_log`.
+
+### 9.2 Nexus Enterprise Business Opportunities & Commercial Rails
+
+Nexus serves as the high-throughput, low-latency zero-token verification engine ("Glass Node") for decentralized finance, cross-chain messaging, and enterprise automated agent networks. Strategic business opportunities include:
+
+1. **B2B Proof-as-a-Service (PaaS)**:
+   - Provide institutional applications and cross-chain bridges with high-performance REST and gRPC cryptographic verification APIs (Groth16, STARK, SP1 zkVM, FROST threshold signatures, EVM MPT, Move object state proofs).
+   - Commercial monetization via tiered API keys, SLA-backed dedicated verification instances, and enterprise support routing.
+
+2. **x402 V2 Autonomous Agent Settlement Rails**:
+   - Enable HTTP 402 payment authorization, satoshi/USDC micropayments, and BIP-340 Schnorr payment signature verification for AI agent-to-agent transactions (integrating with AWS Bedrock AgentCore and decentralized AI agent ecosystems).
+
+3. **Enterprise ISO 20022 Financial Gateway**:
+   - Bridge legacy enterprise messaging standards (SWIFT pacs.008, pain.001, camt.053) into tokenless cross-chain verification events with complete sanction risk normalization (CIPS/SPFS/SWIFT alignment) and audit logging.
+
+4. **Enterprise Proof Envelope Attestation & Enclave Co-location**:
+   - Offer cross-repo proof surface alignment (Candidate C) with hardware enclave TEE attestation (AWS Nitro / AMD SEV X.509 certificates) for high-value settlement rails requiring guaranteed verifier ownership and non-repudiation.

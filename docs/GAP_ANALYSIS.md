@@ -33,6 +33,8 @@ This document maps identified security holes, protocol gaps, and active research
 | **CON-804** | x402 V2 Settlement Rail Verifier (AWS Bedrock AgentCore Payments) | 9 | 4 | **P1** | **Completed (v0.4.23)** |
 | **#251** | IdempotencyStore Neon Transactional Locks & Conformance | 9 | 3 | **P1** | **Completed (v0.4.23)** |
 | **BitVM3** | BitVM3 Garbled-Circuit Fraud Proof Verifier & Fast Dispute Assertion | 9 | 6 | **P0** | **Completed (v0.4.23)** |
+| **Candidate C** | Cross-Repo Proof Surface & Verifier Ownership Contract Alignment | 9 | 4 | **P0** | Structural envelope interface; independent operation qualification remains open |
+| **zkVM SP1/RISC Zero** | Versioned Bitcoin state envelope and verifier backend boundary | 9 | 5 | **P1** | Library boundary implemented; backend and REST integration unqualified |
 
 ## 2. Mapping & Research Context
 
@@ -125,7 +127,7 @@ This document maps identified security holes, protocol gaps, and active research
 
 ### 2.17 Idempotency Locks & Neon PostgreSQL Conformance (#251)
 - **Gap**: Storage layer required distributed transactional lock primitives for multi-node execution safety and fail-closed consume-once idempotency conformance.
-- **Status**: **Completed (v0.4.23)**. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
+- **Status**: **Source implemented; P0 qualification in #439 remains open**. Disposable fixture isolation and mandatory CI conformance correct the earlier generic-URL reset/skip behavior. This does not establish connected Neon or SDK-contract production acceptance. Added migration `20260912000000_idempotency_locks.sql` declaring `idempotency_locks` table, implemented `acquire_lock`, `release_lock`, `extend_lock`, and `get_lock` methods in `src/storage/idempotency.rs`, and expanded live-DB test suite in `tests/idempotency_conformance.rs`.
 - **Code**: `migrations/20260912000000_idempotency_locks.sql`, `src/storage/idempotency.rs`, `tests/idempotency_conformance.rs`
 
 
@@ -144,3 +146,14 @@ This document maps identified security holes, protocol gaps, and active research
 - **Gap**: Disparity between Nexus and Gateway proof surface definitions and verifier ownership boundaries.
 - **Status**: **Completed (v0.4.23)**. Standardized proof envelope schema in `src/verification/proof_envelope.rs` supporting BN254 Groth16, BLS12-381, BIP-340 Schnorr, and BitVM3 garbled circuits. Validates curve parameters, verifying key digest commitments, public input binding hashes, state root commitments, and verifier ownership assertions, exposed via `/v1/verify/proof-envelope` REST endpoint.
 - **Code**: `src/verification/proof_envelope.rs`, `src/api/rest.rs`
+
+### 2.21 zkVM envelope and backend qualification (SP1 / RISC Zero)
+- **Implemented library contract**: `src/verification/zkvm.rs` defines `ZkVmVerificationPayload`, validates versioned Bitcoin public values and commitment binding, and delegates proof acceptance to `ZkVmProofBackend`.
+- **Unavailable without a qualified backend**: `UnavailableZkVmBackend` returns `BackendUnavailable`; envelope/commitment validation alone is not cryptographic proof verification. Real provider wiring, upstream-compatible positive/adversarial fixtures and independent acceptance remain open.
+- **REST boundary**: current `src/api/rest.rs` does not register `/v1/verify/zkvm`. `docs/openapi.yaml` records the library envelope as an unwired component schema rather than advertising a nonexistent endpoint.
+- **Candidate C scope**: the existing proof-envelope REST surface and metadata/hash/ownership assertions do not independently establish cryptographic or deployed verifier ownership. Reconcile completed labels against `docs/CAPABILITY_DISCOVERY.md` and operation-specific acceptance.
+
+### 2.22 Production Readiness Research, Phase 3 Multi-Chain Support & Management Framework
+- **Gap**: Need for expanded production enablement research, Phase 3 decentralized system support strategy (Near, XRPL, Starknet, Monad, Flashbots MEV), business integration models, and a GitHub Issues/Projects (v2)/Knowledge Base management framework.
+- **Status**: **Completed (v0.4.23)**. Expanded research map in `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md` and `docs/RESEARCH.md`. Established comprehensive GitHub Issues, Projects (v2), and Knowledge Base (KB) management procedures in `docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md`.
+- **Code/Docs**: `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md`, `docs/RESEARCH.md`, `docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md`

@@ -111,6 +111,7 @@ impl Storage {
     }
 }
 
+pub mod admin_workflows;
 pub mod idempotency;
 pub mod kwil;
 pub mod tableland;

@@ -1,5 +1,6 @@
 //! [NEXUS-ANALYTICS-01] Real-time on-chain analytics and metrics.
 //! Inspired by top-tier systems like Glassnode for deep asset and network insight.
+//! [CON-1437 / CON-1440 / CON-1436] Multi-Dimensional Scoring (WPS) & Dynamic Valuation Engine.
 
 use crate::api::rest::AppState;
 use axum::routing::get;
@@ -32,8 +33,44 @@ pub struct AnalyticsResponse {
     pub data: Vec<DataPoint>,
 }
 
+// ---- CON-1437 / CON-1440 / CON-1436 Multi-Dimensional WPS & Valuation Models ----
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct Erc8183EscrowMetrics {
+    pub total_locked_amount: f64,
+    pub active_escrow_contracts: i64,
+    pub settled_contracts_count: i64,
+    pub settlement_success_rate: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct X402VolumeMetrics {
+    pub total_settled_volume_usd: f64,
+    pub transaction_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct DimensionWeights {
+    pub escrow_reliability_weight: f64,
+    pub payment_velocity_weight: f64,
+    pub settlement_speed_weight: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct MultiDimensionalWpsResponse {
+    pub wps_score: f64,
+    pub valuation_impact_usd: f64,
+    pub erc8183_escrow: Erc8183EscrowMetrics,
+    pub x402_volume: X402VolumeMetrics,
+    pub dimension_weights: DimensionWeights,
+    pub schema_mode: String,
+}
+
 pub fn analytics_routes() -> Router<AppState> {
-    Router::new().route("/metrics", get(get_metrics_handler))
+    Router::new()
+        .route("/metrics", get(get_metrics_handler))
+        .route("/wps", get(get_wps_scoring_handler))
+        .route("/scoring", get(get_wps_scoring_handler))
 }
 
 pub async fn get_metrics_handler(
@@ -132,6 +169,14 @@ pub async fn get_metrics_handler(
     }))
 }
 
+/// Unavailable until source-bound settlement and escrow evidence is qualified.
+/// A database row or an unavailable database must not imply a live score or valuation.
+pub async fn get_wps_scoring_handler(
+    State(_state): State<AppState>,
+) -> Result<Json<MultiDimensionalWpsResponse>, StatusCode> {
+    Err(StatusCode::SERVICE_UNAVAILABLE)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +239,17 @@ mod tests {
 
         let result = get_metrics_handler(State(state), Query(params)).await;
         assert_eq!(result.unwrap_err(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_unqualified_wps_is_unavailable_without_querying_storage() {
+        let state = mock_app_state();
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(250),
+            get_wps_scoring_handler(State(state)),
+        )
+        .await
+        .expect("unqualified diagnostics must not wait for storage");
+        assert_eq!(result.unwrap_err(), StatusCode::SERVICE_UNAVAILABLE);
     }
 }

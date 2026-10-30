@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1.98.1-slim AS builder
+FROM rust:1.98.1-slim-bookworm AS builder
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 COPY . .
 
 # Build the application
-RUN cargo build --release
+RUN cargo build --release --locked --bin conxian-nexus
 
 # Runtime Stage
 FROM debian:bookworm-slim
@@ -36,7 +36,6 @@ EXPOSE 50051
 
 # Set default environment variables
 ENV RUST_LOG=info
-ENV REST_PORT=3000
 ENV GRPC_PORT=50051
 
 CMD ["conxian-nexus"]

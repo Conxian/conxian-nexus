@@ -2,13 +2,29 @@
 
 Conxian Nexus is a universal chain node and proof layer, serving as the primary observation, synchronization, and verification point for Tier 1 Chain Families in the Conxian ecosystem.
 
+Read [architecture](ARCHITECTURE.md) and [capability discovery](docs/CAPABILITY_DISCOVERY.md) for current evidence semantics. Registered observation components and legacy family lists do not establish live chain connections or production-qualified verification.
+
+## Public protocol and managed service boundary
+
+Nexus owns observation, state commitments, and proof verification. Its public-protocol role is the deterministic, Bitcoin-anchored verification interface. Conxian-Labs may operate managed Nexus nodes with availability and support commitments, but those commercial operations do not change proof validity or introduce a native token, staking asset, or protocol tokenomics.
+
+This repository is currently licensed under BUSL-1.1 and is therefore source-available rather than OSI open source. A separate licensing decision is required before describing the implementation itself as an open-source public good.
+
+ISO 20022 parsing, API-key tenancy, commercial rate limits, and banking compliance orchestration belong to `conxian-gateway`. Multi-tenant deployment and SLA dashboards belong to `conxius-platform`. Hardware-backed signing belongs to `conxius-enclave-sdk`; Nexus consumes attested evidence and must not hold signing keys.
+
+The ecosystem is Bitcoin L1 anchored and has no Conxian native token. References to assets on observed third-party networks describe external state and must not be interpreted as Conxian token issuance or staking.
+
 ## Purpose
 
 Provide a verifiable synchronization, ordering, and proof layer for Conxian services. Nexus ensures authoritative off-chain state remains aligned with multi-chain activity across Tier 1 chain families (Bitcoin, EVM, Cosmos, Solana, Sui, Aptos) via cryptographic state root commitments (MMR) and multi-chain verification adapters.
 
 ## Status
 
-**Active development (v0.4.23).** Production intent exists. Nexus is hardened for Tier 1 multi-chain verification as per ADR-006 / NIP-005 Phase 2, BitVM3 garbled-circuit fraud proofs, FROST threshold signatures, OP_CAT covenants, DLC oracle attestation, x402 V2 settlement rails, and the SRL-1 Lightning resilience layer.
+**Active development (v0.4.23).** Capabilities have different evidence levels.
+Treat a verifier as production-ready only when its implementation, conformance
+fixtures, deployment configuration, and external review satisfy its documented
+gate. The zkVM surface currently provides a fail-closed provider interface; it
+does not yet ship an SP1 or RISC Zero verifier backend or public REST route.
 
 ## Audience
 
@@ -26,9 +42,10 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 
 ## Relationship to the Conxian stack
 
-- **Core Protocol:** `Conxian` (DAO/On-chain) <-> **Nexus** (Observation/Proof)
-- **Middleware:** `conxian-gateway` (Transport/RPC Adaptation)
+- **Public protocol:** Bitcoin-anchored verification contracts and evidence schemas
+- **Middleware:** `conxian-gateway` (routing, ISO 20022, tenancy and compliance)
 - **Libraries:** Nexus-owned protocol and compatibility primitives
+- **Operations:** `conxius-platform` (managed deployment and SLA evidence)
 - **Clients:** `conxius-wallet`, `conxian_ui`
 
 ## Architecture
@@ -53,9 +70,12 @@ Nexus is designed as a modular "Glass Node" that provides a verifiable synchroni
 Comprehensive documentation is available at [docs.conxian-labs.com/nexus](https://docs.conxian-labs.com/nexus) (GitHub Pages route).
 
 - [Operator Guide](./docs/PRD.md)
+- [Architecture and ownership boundary](./docs/ARCHITECTURE.md)
 - [API Reference](./docs/openapi.yaml)
 - [Security Model](./SECURITY.md)
 - [Observability & Runbooks](./docs/remediation/OBSERVABILITY_RUNBOOK.md)
+- [Issue & Project Management Framework](./docs/NEXUS_ISSUE_PROJECT_MANAGEMENT.md)
+- [Production Enablement Research](./docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md)
 
 ## Getting started
 
@@ -138,6 +158,8 @@ docker-compose up --build
 For more detailed setup instructions, including production hardening, see the [Operator Guide](./docs/PRD.md).
 
 ## Policies & Release Guidance
+
+- [Administrative workflow persistence and portable recovery boundary](./docs/ADMIN_WORKFLOW_PERSISTENCE.md)
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)

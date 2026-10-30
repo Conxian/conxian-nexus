@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
   pull_request:
-    branches: [ "main", "staged" ]
+    branches: [ "main", "staged", "dev" ]
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -36,6 +36,8 @@ jobs:
       run: ./scripts/check_production_boundary.sh
     - name: Parse all workflow YAML
       run: ruby scripts/check_workflow_yaml.rb
+    - name: Check Lightning coverage source contracts
+      run: python3 -m unittest discover -s scripts -p test_check_lightning_coverage.py
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -66,12 +68,41 @@ jobs:
     name: Build & Test
     needs: hygiene
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-fixture-only
+        ports:
+          - "5432"
+        options: >-
+          --label conxian.fixture=nexus-workflow-recovery
+          --label conxian.fixture.role=source
+          --health-cmd "pg_isready -U postgres -d conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      workflow_restore:
+        image: postgres:17
+        env:
+          POSTGRES_DB: conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-fixture-only
+        options: >-
+          --label conxian.fixture=nexus-workflow-recovery
+          --label conxian.fixture.role=restore
+          --health-cmd "pg_isready -U postgres -d conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         submodules: recursive
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
         components: clippy, rustfmt
@@ -81,12 +112,44 @@ jobs:
       run: cargo clippy --workspace --all-targets --locked -- -D warnings
     - name: Build
       run: cargo build --workspace --locked --verbose
+    - name: Create dedicated non-superuser conformance role
+      env:
+        POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+        RESTORE_CONTAINER_ID: ${{ job.services.workflow_restore.id }}
+      run: |
+        for fixture in "$POSTGRES_CONTAINER_ID" "$RESTORE_CONTAINER_ID"; do
+          docker exec "$fixture" psql --username postgres --dbname conformance_test --set ON_ERROR_STOP=1 --command "CREATE ROLE conformance LOGIN PASSWORD 'conformance-fixture-only'; ALTER DATABASE conformance_test OWNER TO conformance;"
+        done
+    - name: Verify recovery fixture rejection and receipt checks
+      run: python3 -m unittest discover -s scripts -p test_verify_workflow_restore.py -v
+    - name: Verify conformance configuration guards
+      run: cargo test --locked --test conformance_config
+    - name: Require a fixture and ignore generic application DATABASE_URL
+      run: |
+        if DATABASE_URL=postgres://unused:unused@127.0.0.1:1/application env -u CONFORMANCE_DATABASE_URL -u ALLOW_DESTRUCTIVE_TEST_RESET cargo test --locked --test idempotency_conformance conformance_single_consume_once -- --exact > "$RUNNER_TEMP/conformance-missing.log" 2>&1; then
+          echo "Conformance unexpectedly passed without its explicit fixture" >&2
+          exit 1
+        fi
+        grep -q 'CONFORMANCE_DATABASE_URL is required' "$RUNNER_TEMP/conformance-missing.log"
+    - name: Fail when the selected disposable fixture is unavailable
+      env:
+        CONFORMANCE_DATABASE_URL: postgres://conformance:fixture-only@127.0.0.1:1/conformance_test
+        ALLOW_DESTRUCTIVE_TEST_RESET: 'true'
+      run: |
+        if cargo test --locked --test idempotency_conformance conformance_single_consume_once -- --exact > "$RUNNER_TEMP/conformance-unavailable.log" 2>&1; then
+          echo "Conformance unexpectedly passed with an unavailable fixture" >&2
+          exit 1
+        fi
+        grep -q 'disposable PostgreSQL fixture is unavailable' "$RUNNER_TEMP/conformance-unavailable.log"
     - name: Run tests
+      env:
+        CONFORMANCE_DATABASE_URL: postgres://conformance:conformance-fixture-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/conformance_test
+        ALLOW_DESTRUCTIVE_TEST_RESET: 'true'
       run: cargo test --workspace --locked --verbose
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
     - name: Enforce Lightning scoped coverage (>=90%)
-      run: python3 scripts/check_lightning_coverage.py --min-percent 89
+      run: python3 scripts/check_lightning_coverage.py --min-percent 90
     - name: Enforce Bitcoin scoped coverage (>=92%)
       run: ./scripts/coverage_bitcoin.sh 92
     - name: Publish Bitcoin coverage summary
@@ -97,7 +160,7 @@ jobs:
         fi
     - name: Upload Bitcoin coverage artifacts
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: bitcoin-coverage
         path: |
@@ -105,3 +168,20 @@ jobs:
           target/coverage/bitcoin/summary.json
           target/coverage/bitcoin/summary.md
         if-no-files-found: warn
+    # Must stay after every test/coverage command: this stops the source fixture.
+    - name: Recover persisted workflow rows after source instance loss
+      env:
+        SOURCE_CONTAINER_ID: ${{ job.services.postgres.id }}
+        RESTORE_CONTAINER_ID: ${{ job.services.workflow_restore.id }}
+      run: |
+        python3 scripts/verify_workflow_restore.py \
+          --source-container "$SOURCE_CONTAINER_ID" \
+          --restore-container "$RESTORE_CONTAINER_ID" \
+          --source-sha "$GITHUB_SHA" \
+          --output "$RUNNER_TEMP/workflow-recovery.json"
+    - name: Upload bounded workflow recovery measurements
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: workflow-recovery
+        path: ${{ runner.temp }}/workflow-recovery.json
+        if-no-files-found: error

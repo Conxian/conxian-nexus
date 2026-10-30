@@ -1,5 +1,7 @@
 # Conxian Nexus: Agent Instructions
 
+> Current capability truth (2026-10-14): read `docs/CAPABILITY_DISCOVERY.md`. The historical coverage catalogs below do not prove live provider health or production qualification. Bitcoin is the canonical trust root for universal-chain observation. No native Conxian token; external chains and assets remain in scope. Do not promote prefix/hash checks or caller-supplied threshold metadata into cryptographic/custody evidence.
+
 You are working on **Conxian Nexus**, the protocol-first "Glass Node" proof layer for Tier 1 multi-chain observation, synchronization, and verification in the Conxian ecosystem.
 
 ## Core Identity

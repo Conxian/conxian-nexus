@@ -38,7 +38,7 @@ jobs:
         fetch-depth: 0
         submodules: recursive
     - name: Set up Python
-      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
       with:
         python-version: '3.x'
     - name: Run Contamination Guard
@@ -68,17 +68,58 @@ jobs:
     name: Build & Test
     needs: hygiene
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: conformance_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres-fixture-only
+        ports:
+          - "5432"
+        options: >-
+          --health-cmd "pg_isready -U postgres -d conformance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       with:
         submodules: recursive
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
     - name: Build
       run: cargo build --workspace --locked --verbose
+    - name: Create dedicated non-superuser conformance role
+      env:
+        POSTGRES_CONTAINER_ID: ${{ job.services.postgres.id }}
+      run: |
+        docker exec "$POSTGRES_CONTAINER_ID" psql --username postgres --dbname conformance_test --set ON_ERROR_STOP=1 --command "CREATE ROLE conformance LOGIN PASSWORD 'conformance-fixture-only'; ALTER DATABASE conformance_test OWNER TO conformance;"
+    - name: Verify conformance configuration guards
+      run: cargo test --locked --test conformance_config
+    - name: Require a fixture and ignore generic application DATABASE_URL
+      run: |
+        if DATABASE_URL=postgres://unused:unused@127.0.0.1:1/application env -u CONFORMANCE_DATABASE_URL -u ALLOW_DESTRUCTIVE_TEST_RESET cargo test --locked --test idempotency_conformance conformance_single_consume_once -- --exact > "$RUNNER_TEMP/conformance-missing.log" 2>&1; then
+          echo "Conformance unexpectedly passed without its explicit fixture" >&2
+          exit 1
+        fi
+        grep -q 'CONFORMANCE_DATABASE_URL is required' "$RUNNER_TEMP/conformance-missing.log"
+    - name: Fail when the selected disposable fixture is unavailable
+      env:
+        CONFORMANCE_DATABASE_URL: postgres://conformance:fixture-only@127.0.0.1:1/conformance_test
+        ALLOW_DESTRUCTIVE_TEST_RESET: 'true'
+      run: |
+        if cargo test --locked --test idempotency_conformance conformance_single_consume_once -- --exact > "$RUNNER_TEMP/conformance-unavailable.log" 2>&1; then
+          echo "Conformance unexpectedly passed with an unavailable fixture" >&2
+          exit 1
+        fi
+        grep -q 'disposable PostgreSQL fixture is unavailable' "$RUNNER_TEMP/conformance-unavailable.log"
     - name: Run tests
+      env:
+        CONFORMANCE_DATABASE_URL: postgres://conformance:conformance-fixture-only@127.0.0.1:${{ job.services.postgres.ports[5432] }}/conformance_test
+        ALLOW_DESTRUCTIVE_TEST_RESET: 'true'
       run: cargo test --workspace --locked --verbose
     - name: Install cargo-llvm-cov
       run: cargo install cargo-llvm-cov --locked
@@ -88,7 +129,7 @@ jobs:
       run: ./scripts/coverage_bitcoin.sh 92
     - name: Upload coverage artifacts
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: coverage-artifacts
         path: |
@@ -114,7 +155,7 @@ jobs:
       with:
         fetch-depth: 0
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
     - name: Determine version
@@ -179,7 +220,7 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
     - name: Install pinned compliance tools
@@ -190,7 +231,7 @@ jobs:
     - name: Enforce dependency policy and generate artifacts
       run: scripts/run_license_compliance.sh
     - name: Upload release compliance artifacts
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
         name: release-compliance-${{ github.ref_name }}
         path: target/compliance/
@@ -243,7 +284,7 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
     - name: Verify CARGO_REGISTRY_TOKEN
@@ -278,7 +319,7 @@ jobs:
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
     - name: Install Rust
-      uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
       with:
         toolchain: "1.98.1"
     - name: Build to generate provenance
