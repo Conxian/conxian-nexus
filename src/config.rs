@@ -197,7 +197,7 @@ impl Config {
             rest_port: 3000,
             grpc_port: 50051,
             stacks_node_rpc_url: DEFAULT_STACKS_NODE_RPC_URL.to_string(),
-            stacks_node_ws_url: "wss://api.mainnet.hiro.so/".to_string(),
+            stacks_node_ws_url: "wss://api.mainnet.hiro.so/extended/v1/ws".to_string(),
             gateway_url: None,
             experimental_apis_enabled: true,
             nostr_secret_key: None,
@@ -292,7 +292,7 @@ impl Config {
 
         let experimental_apis_enabled = env_flag(ENV_EXPERIMENTAL_APIS);
         let stacks_node_ws_url = env::var("STACKS_NODE_WS_URL")
-            .unwrap_or_else(|_| "wss://api.mainnet.hiro.so/".to_string());
+            .unwrap_or_else(|_| "wss://api.mainnet.hiro.so/extended/v1/ws".to_string());
         let oracle_enabled = env_flag(ENV_ORACLE_ENABLED);
         let oracle_stub_ok = env_flag(ENV_ORACLE_STUB_OK);
         let oracle_endpoint_url = env::var(ENV_ORACLE_ENDPOINT_URL)
