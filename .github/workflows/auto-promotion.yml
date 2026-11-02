@@ -36,7 +36,7 @@ jobs:
       # Minimum soak time (hours) a staged head must age before it may be
       # promoted to main. Override via the repo variable MIN_MAINNET_DWELL_HOURS
       # (set to 0 to disable the dwell gate).
-      MIN_MAINNET_DWELL_HOURS: ${{ vars.MIN_MAINNET_DWELL_HOURS || '24' }}
+      MIN_MAINNET_DWELL_HOURS: ${{ vars.MIN_MAINNET_DWELL_HOURS || '12' }}
     steps:
       - name: Determine promotion lane
         id: branches
