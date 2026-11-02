@@ -314,8 +314,8 @@ jobs:
             exit 0
           fi
           if [ "${LATEST_TARGET}" != "${TARGET_SHA}" ]; then
-            echo "::notice::Target ${TARGET} advanced past ${TARGET_SHA}; updating candidate branch before merge."
-            gh pr update-branch "$PR_NUMBER" --repo "${{ github.repository }}" || echo "::notice::Could not auto-update branch; proceeding."
+            echo "::error::Target ${TARGET} advanced; retain this candidate unchanged and reconcile acceptance evidence."
+            exit 1
           fi
 
           gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "Promotion candidate left as DRAFT. Manual review required before merge: fill the evidence pack and confirm all required CI checks are green."
