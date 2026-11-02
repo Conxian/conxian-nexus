@@ -8,6 +8,7 @@ use crate::storage::Storage;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio_tungstenite::connect_async;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +58,19 @@ impl NexusSync {
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
+        // Best-effort stream: a dropped WebSocket or transient connect error must
+        // not take the node down (main.rs `select!` treats this task completing
+        // as a shutdown trigger). Reconnect on a backoff loop instead.
+        loop {
+            match self.run_once().await {
+                Ok(()) => tracing::warn!("Sync WebSocket closed; reconnecting in 5s"),
+                Err(e) => tracing::warn!("Sync service error ({e}); reconnecting in 5s"),
+            }
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    }
+
+    async fn run_once(&self) -> anyhow::Result<()> {
         let url_str = self.ws_url.clone();
         let (ws_stream, _) = connect_async(&url_str).await?;
         let (mut _write, mut read) = ws_stream.split();

@@ -1,3 +1,6 @@
+# Pricing architecture: see Conxian/conxian-business ADR-009 — nexus tiers are
+# gateway entitlements (signature-volume seats), not a separate bill.
+
 # Shared billing configuration integration
 
 Tracks Business [#1343](https://github.com/Conxian/conxian-business/issues/1343)

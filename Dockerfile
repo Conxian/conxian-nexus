@@ -20,15 +20,20 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install runtime dependencies. redis-server is bundled as a local sidecar so a
+# single container can satisfy Nexus's Redis cache dependency (REDIS_URL). A
+# managed/remote Redis is the production hardening path; see docker-compose.yml.
 RUN apt-get update && apt-get install -y \
     libssl3 \
     ca-certificates \
+    redis-server \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from the builder
 COPY --from=builder /app/target/release/conxian-nexus /usr/local/bin/conxian-nexus
 COPY --from=builder /app/migrations /app/migrations
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose REST and gRPC ports
 EXPOSE 3000
@@ -38,4 +43,4 @@ EXPOSE 50051
 ENV RUST_LOG=info
 ENV GRPC_PORT=50051
 
-CMD ["conxian-nexus"]
+ENTRYPOINT ["docker-entrypoint.sh"]
