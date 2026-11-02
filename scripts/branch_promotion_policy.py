@@ -131,7 +131,7 @@ def _validate_generated_evidence(
     if not isinstance(ctx.head_sha, str) or not SHA_RE.fullmatch(ctx.head_sha):
         errors.append("PR head SHA must be a valid 40-character commit SHA.")
     elif ctx.head_sha != expected_source:
-        errors.append("Generated candidate PR head SHA must match its immutable source SHA.")
+        errors.append("Generated candidate PR head SHA must match its immutable source SHA. This usually means the promotion branch was rewritten by 'Update branch' (gh pr update-branch / GitHub's Update branch button), which merges the base branch into the immutable candidate. Close this PR and regenerate a clean candidate from the exact source SHA; do not update-branch a promotion/* PR.")
     if source_sha != expected_source or window_source != expected_source:
         errors.append("Generated candidate source SHA evidence does not match its branch/head SHA.")
     if not isinstance(ctx.base_sha, str) or not SHA_RE.fullmatch(ctx.base_sha) or target_sha != ctx.base_sha.lower():
