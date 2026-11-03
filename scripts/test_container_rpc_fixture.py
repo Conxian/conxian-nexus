@@ -32,7 +32,7 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(result.status, 200)
             self.assertEqual(result.getheader("Cache-Control"), "no-store")
             self.assertEqual(json.loads(result.read()), {
-                "burn_block_height": 0, "stacks_tip_height": 0,
+                "burn_block_height": 1, "stacks_tip_height": 100,
                 "fixture": "inert-container-transport"})
         finally:
             conn.close()
