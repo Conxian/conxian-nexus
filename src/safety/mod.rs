@@ -3,6 +3,7 @@
 //! It monitors the drift between the Nexus processed state and the Stacks L1
 //! burn-block height, triggering a safety mode if the Nexus falls behind.
 
+use crate::executor::canonical_bitvm::{StacksBitcoinHeightProvider, TrustedBitcoinHeightProvider};
 use crate::storage::Storage;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ pub struct NexusSafety {
     rpc_url: String,
     gateway_url: Option<String>,
     http_client: Client,
+    height_provider: StacksBitcoinHeightProvider,
 }
 
 pub async fn is_safety_mode_active(storage: &Storage) -> anyhow::Result<bool> {
@@ -49,6 +51,13 @@ pub fn decode_safety_mode(raw: Option<&str>) -> anyhow::Result<bool> {
     }
 }
 
+fn validated_processed_burn_height(height: Option<i64>) -> anyhow::Result<u64> {
+    match height {
+        Some(height) if height > 0 => Ok(height as u64),
+        _ => anyhow::bail!("No positive committed burn-block height is available"),
+    }
+}
+
 impl NexusSafety {
     /// Default maximum allowed drift (in blocks) before safety mode is triggered.
     pub const MAX_DRIFT_BLOCKS: u64 = 2;
@@ -58,6 +67,7 @@ impl NexusSafety {
         Self {
             storage,
             max_drift: Self::MAX_DRIFT_BLOCKS,
+            height_provider: StacksBitcoinHeightProvider::new(rpc_url.clone()),
             rpc_url,
             gateway_url,
             http_client: Client::new(),
@@ -71,6 +81,13 @@ impl NexusSafety {
     /// (i.e. `> 2` blocks under the default) triggers safety mode.
     pub fn drift_exceeded(delta: u64, max_drift: u64) -> bool {
         delta > max_drift
+    }
+
+    /// Gate startup before exposing APIs or starting background consumers.
+    pub async fn initialize(&self) -> anyhow::Result<()> {
+        // Start unavailable until a real committed observation is compared.
+        // This also closes the fresh Redis/restart window before the first RPC.
+        self.trigger_safety_mode(0).await
     }
 
     /// Runs the heartbeat monitor loop.
@@ -91,6 +108,9 @@ impl NexusSafety {
             interval.tick().await;
             if let Err(e) = self.check_health().await {
                 tracing::error!("Safety heartbeat error: {}", e);
+                // A failed observation must not leave a previously healthy
+                // Redis flag authorizing requests indefinitely.
+                self.trigger_safety_mode(0).await?;
             }
 
             if self.gateway_url.is_some() {
@@ -176,25 +196,20 @@ impl NexusSafety {
     }
 
     async fn get_external_burn_height(&self) -> anyhow::Result<u64> {
-        // Real implementation: calls Stacks node RPC.
-        let url = format!("{}/extended/v1/block?limit=1", self.rpc_url);
-        let resp = self.http_client.get(&url).send().await?;
-        let json: Value = resp.json().await?;
-
-        let height = json["results"][0]["height"]
-            .as_u64()
-            .ok_or_else(|| anyhow::anyhow!("Failed to parse block height from Stacks RPC"))?;
-
-        Ok(height)
+        // The API's Stacks height is not a Bitcoin burn height. Reuse the
+        // canonical /v2/info provider rather than comparing different chains.
+        Ok(self.height_provider.current_height().await?)
     }
 
     async fn get_processed_height(&self) -> anyhow::Result<u64> {
-        let row = sqlx::query("SELECT MAX(height) as max_height FROM stacks_blocks")
+        let row = sqlx::query(
+            "SELECT MAX(height) as max_height FROM stacks_blocks WHERE type = 'burn_block' AND state = 'hard'",
+        )
             .fetch_one(&self.storage.pg_pool)
             .await?;
 
         let max_height: Option<i64> = row.get("max_height");
-        Ok(max_height.unwrap_or(0) as u64)
+        validated_processed_burn_height(max_height)
     }
 
     /// Triggers Safety Mode and broadcasts it via Redis.
@@ -281,6 +296,17 @@ impl NexusSafety {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn processed_burn_height_requires_a_positive_committed_observation() {
+        for height in [None, Some(-1), Some(0)] {
+            assert!(validated_processed_burn_height(height).is_err());
+        }
+        assert_eq!(
+            validated_processed_burn_height(Some(973055)).unwrap(),
+            973055
+        );
+    }
 
     #[test]
     fn safety_mode_accepts_observed_cleared_and_legacy_boolean_states() {
