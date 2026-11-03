@@ -65,6 +65,9 @@ impl TrustedBitcoinHeightProvider for StacksBitcoinHeightProvider {
                 .send()
                 .await
                 .map_err(|_| TrustedHeightError::Unavailable)?;
+            if !resp.status().is_success() {
+                return Err(TrustedHeightError::Unavailable);
+            }
             let body: serde_json::Value = resp
                 .json()
                 .await

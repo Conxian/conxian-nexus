@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Inert HTTP/WebSocket transport for disposable container initialization only.
 
-This is not a chain node, proof source or synchronization test. It reports zero
-height and emits no blocks, transactions or payment records. No secrets are used.
+This is not a chain node, proof source or synchronization test. It reports a
+synthetic height of one and emits no blocks, transactions or payment records.
+No secrets are used. The initialization harness seeds its matching local row
+only in its private disposable database after verifying empty-state rejection.
 """
 import base64
 import hashlib
@@ -46,7 +48,7 @@ class FixtureHandler(BaseHTTPRequestHandler):
         if self.path != "/v2/info":
             self.send_error(404)
             return
-        body = json.dumps({"burn_block_height": 0, "stacks_tip_height": 0,
+        body = json.dumps({"burn_block_height": 1, "stacks_tip_height": 100,
                            "fixture": "inert-container-transport"}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
