@@ -26,3 +26,25 @@ the HTTP contract with actual local HTTP responses, including conflicting
 Stacks/Bitcoin heights, unsuccessful status, missing/zero/negative/string
 heights and malformed JSON. These fixtures are regression tests, not mainnet
 or production acceptance evidence.
+
+## Canonical ingestion (follow-up)
+
+`src/sync/chain_ingest.rs` now performs the canonical ingestion the previous
+patch deliberately deferred. On startup and every 30 seconds the sync service
+reads `/extended/v1/block`, derives each committed anchor block's Bitcoin burn
+block (`burn_block_hash` + `burn_block_height`), and persists the distinct burn
+blocks into `stacks_blocks` as `type = 'burn_block'`, `state = 'hard'`. The
+safety comparison therefore sees a real positive processed burn height that
+tracks `/v2/info` `burn_block_height`, rather than an empty table.
+
+Reorg handling: when a new canonical burn block replaces one already recorded
+at the same height, the old row is marked `orphaned` in the same transaction
+that inserts the replacement, so two `hard` burn blocks can never share a
+height. A non-canonical block or a row without a burn identity is skipped, never
+invented. An unavailable or malformed indexer response is an error, not an empty
+success; safety mode stays asserted until a real observation lands.
+
+This is observation-only: it signs nothing, submits no transaction, and mutates
+no provider configuration. It does not yet provide full historical backfill,
+proof-of-work or Merkle verification, durable Redis binding, or independent
+operational acceptance, which remain open under #516 and #439.
