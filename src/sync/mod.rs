@@ -1,5 +1,6 @@
 use sha2::Digest;
 pub mod bip110;
+pub mod chain_ingest;
 
 use crate::state::NexusState;
 use crate::storage::kwil::{KwilAdapter, KwilMmrNodeCommitment};
@@ -25,6 +26,9 @@ pub struct MicroblockData {
     pub tx_ids: Vec<String>,
 }
 
+/// Interval between canonical chain ingestion passes.
+const INGEST_INTERVAL: Duration = Duration::from_secs(30);
+
 pub struct NexusSync {
     pub storage: Arc<Storage>,
     pub state_tracker: Arc<NexusState>,
@@ -32,6 +36,7 @@ pub struct NexusSync {
     pub kwil: Option<Arc<KwilAdapter>>,
     pub rpc_url: String,
     pub ws_url: String,
+    pub ingestor: chain_ingest::ChainIngestor,
 }
 
 impl NexusSync {
@@ -43,6 +48,7 @@ impl NexusSync {
         rpc_url: String,
         ws_url: String,
     ) -> Self {
+        let ingestor = chain_ingest::ChainIngestor::new(storage.clone(), rpc_url.clone());
         Self {
             storage,
             state_tracker,
@@ -50,17 +56,32 @@ impl NexusSync {
             kwil,
             rpc_url,
             ws_url,
+            ingestor,
         }
     }
 
+    /// One-time catch-up so the safety monitor has a committed observation
+    /// before the heartbeat starts. A transient failure is logged and left to
+    /// the periodic loop; it must not fabricate processed height.
     pub async fn load_initial_state(&self) -> anyhow::Result<()> {
+        match self.ingestor.ingest_tip().await {
+            Ok(count) => tracing::info!(blocks = count, "Initial chain catch-up complete"),
+            Err(error) => tracing::warn!("Initial chain catch-up deferred: {error}"),
+        }
         Ok(())
     }
 
     pub async fn run(&self) -> anyhow::Result<()> {
-        // Best-effort stream: a dropped WebSocket or transient connect error must
-        // not take the node down (main.rs `select!` treats this task completing
-        // as a shutdown trigger). Reconnect on a backoff loop instead.
+        // Canonical REST catch-up drives committed observations; the WebSocket
+        // reader is a best-effort latency hint. A dropped WebSocket or transient
+        // connect error must not take the node down (main.rs `select!` treats
+        // this task completing as a shutdown trigger), so reconnect on backoff.
+        let ingestor = self.ingestor.clone();
+        tokio::spawn(async move {
+            if let Err(e) = ingestor.run(INGEST_INTERVAL).await {
+                tracing::error!("Chain ingestion loop failed: {e}");
+            }
+        });
         loop {
             match self.run_once().await {
                 Ok(()) => tracing::warn!("Sync WebSocket closed; reconnecting in 5s"),
@@ -78,7 +99,8 @@ impl NexusSync {
         while let Some(msg) = read.next().await {
             let msg = msg?;
             if msg.is_text() {
-                // Handle message
+                // The REST catch-up owns committed persistence; the socket only
+                // signals new activity.
             }
         }
         Ok(())
