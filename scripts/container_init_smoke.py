@@ -112,9 +112,17 @@ def main():
         port = docker("port", app, "10000/tcp").rsplit(":", 1)[1]
         base = "http://127.0.0.1:" + port
         CURRENT_PHASE = "initial-readiness"
-        wait_for(base, "/health", 200, "ok")
+        wait_for(base, "/health", 503, "safety-mode")
         wait_for(base, "/live", 200)
         wait_for(base, "/admin/v1/status", 401)
+        # A transport connection is not a processed observation. Only the
+        # private disposable fixture gets this explicit committed burn row.
+        # This tests the height comparison, not ingestion or production state.
+        CURRENT_PHASE = "committed-height-fixture"
+        docker("exec", pg, "psql", "-U", "nexus", "-d", "nexus", "-v", "ON_ERROR_STOP=1",
+               "-c", "INSERT INTO stacks_blocks (hash, height, type, state) "
+               "VALUES ('container-fixture-burn-1', 1, 'burn_block', 'hard')")
+        wait_for(base, "/health", 200, "ok")
         # Verify Redis safety observations and dependency loss separately.
         CURRENT_PHASE = "safety-mode"
         docker("exec", redis, "redis-cli", "-a", password, "SET", "nexus:safety_mode", "true")
@@ -139,7 +147,8 @@ def main():
         base = "http://127.0.0.1:" + port
         wait_for(base, "/health", 200, "ok")
         print(json.dumps({"result": "pass", "scope": "isolated-container-initialization",
-                          "checks": ["hosting-port", "migrations", "backend-health",
+                          "checks": ["hosting-port", "migrations", "empty-state-rejected",
+                                     "committed-height-fixture", "backend-health",
                                      "liveness", "admin-denial", "safety-mode",
                                      "dependency-timeout-recovery", "restart"]}))
     finally:

@@ -267,6 +267,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Load Initial State from DB
     sync_service.load_initial_state().await?;
+    safety_service.initialize().await?;
 
     // Spawn Sync Service
     let sync_handle = {
