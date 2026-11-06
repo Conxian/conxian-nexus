@@ -30,7 +30,11 @@ pub const STATE_HARD: &str = "hard";
 pub const STATE_ORPHANED: &str = "orphaned";
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
-const PAGE_LIMIT: u32 = 50;
+/// Maximum page size accepted by the Stacks indexer
+/// (`/extended/v1/block`). Values above this return `400 FST_ERR_VALIDATION`
+/// ("querystring/limit must be <= 30"), which previously produced an empty
+/// observation set and left the node permanently in safety mode (#516).
+pub const PAGE_LIMIT: u32 = 30;
 
 /// A committed Bitcoin burn block observed through the Stacks indexer.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +87,11 @@ pub fn parse_burn_blocks(body: &str) -> anyhow::Result<Vec<CommittedBurnBlock>> 
 }
 
 /// Builds the canonical Stacks block list URL for the current tip.
+///
+/// The requested page size is clamped to [`PAGE_LIMIT`] so a caller can never
+/// exceed the indexer's accepted maximum and trigger a `400`.
 pub fn blocks_url(rpc_url: &str, limit: u32) -> String {
+    let limit = limit.clamp(1, PAGE_LIMIT);
     format!(
         "{}/extended/v1/block?limit={limit}",
         rpc_url.trim_end_matches('/')
