@@ -10,7 +10,7 @@ use conformance_database::ConformanceDatabase;
 
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::chain_ingest::{
-    parse_burn_blocks, persist_burn_blocks, processed_burn_height, CommittedBurnBlock,
+    blocks_url, parse_burn_blocks, persist_burn_blocks, processed_burn_height, CommittedBurnBlock,
     STATE_ORPHANED,
 };
 
@@ -62,6 +62,16 @@ fn parses_distinct_canonical_burn_blocks_and_drops_non_canonical_forks() {
 #[test]
 fn malformed_page_is_an_error_not_empty_success() {
     assert!(parse_burn_blocks("not-json").is_err());
+}
+
+#[test]
+fn blocks_url_never_exceeds_indexer_page_limit() {
+    // The Stacks indexer rejects `limit > 30` with 400, which would starve the
+    // safety monitor of any observation (#516). Oversized requests are clamped.
+    assert!(blocks_url("https://api.mainnet.hiro.so", 50).ends_with("limit=30"));
+    assert!(blocks_url("https://api.mainnet.hiro.so", 30).ends_with("limit=30"));
+    assert!(blocks_url("https://api.mainnet.hiro.so", 0).ends_with("limit=1"));
+    assert!(blocks_url("https://api.mainnet.hiro.so/", 5).ends_with("limit=5"));
 }
 
 #[tokio::test]
