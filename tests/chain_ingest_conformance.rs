@@ -10,8 +10,8 @@ use conformance_database::ConformanceDatabase;
 
 use conxian_nexus::storage::Storage;
 use conxian_nexus::sync::chain_ingest::{
-    blocks_url, parse_burn_blocks, persist_burn_blocks, processed_burn_height,
-    CommittedBurnBlock, STATE_ORPHANED,
+    blocks_url, parse_burn_blocks, persist_burn_blocks, processed_burn_height, CommittedBurnBlock,
+    STATE_ORPHANED,
 };
 
 static SUITE_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
