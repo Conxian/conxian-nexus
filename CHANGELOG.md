@@ -3,9 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Canonical Stacks chain ingestion (`src/sync/chain_ingest.rs`): the sync service now derives committed Bitcoin burn blocks from the canonical block indexer and persists them into `stacks_blocks`, so the safety monitor has a real processed burn height to compare against `/v2/info` `burn_block_height` instead of staying permanently fail-closed (#516). Includes reorg handling (a replaced burn block at the same height is marked `orphaned` in the replacement transaction) and disposable-database conformance tests.
 - Portable PostgreSQL administrative workflow projections and atomic audit receipts, idempotent retries, explicit lifecycle transitions, authenticated release/governance collections and canonical decision IDs. Includes real disposable-database concurrency, rollback and reconnect conformance; production and signing qualification remain separate.
 
 ### Fixed
+- Correct the BIP-110 proposal status in `docs/BIP110_ALIGNMENT.md`: the canonical `bitcoin/bips` source marks BIP-110 `Closed` (Version 1.0.1, 2026-08-09) "following a chain split with stalled mining", not `Complete`. The observed-size policy module is unchanged and remains a metadata-only assessment (#516).
 - Require an explicit disposable PostgreSQL fixture for replay conformance; isolate every case in a private schema, reject unsafe configuration before connection and run mandatory fixture-backed CI tests (#439).
 
 - Document the actual zkVM library envelope and unqualified backend boundary without advertising an unregistered REST route; retain trusted promotion-policy behavior.

@@ -2,13 +2,15 @@
 
 ## Status and scope
 
-BIP-110 is marked `Complete` as a proposal but this is not evidence of
-deployment, activation, or adoption. This repository therefore treats BIP-110
-as a proposal to align against, not as an active consensus rule. The Phase 1
-implementation is intentionally named an **observed-size policy assessment**;
-it does not claim BIP-110 compliance, consensus validity, Bitcoin sync, or SPV
-security. BIP-110 is a proposed consensus soft fork whose BIP status is
-`Complete`; it is not `Deployed`, and it is not a light-client protocol.
+BIP-110 is marked `Closed` (Version 1.0.1, 2026-08-09), following a chain split
+with stalled mining; it is not `Deployed` and was never activated on mainnet.
+This repository therefore treats BIP-110 as a proposal to align against, not as
+an active consensus rule. The Phase 1 implementation is intentionally named an
+**observed-size policy assessment**; it does not claim BIP-110 compliance,
+consensus validity, Bitcoin sync, or SPV security. BIP-110 is a proposed
+consensus soft fork whose BIP status is `Closed`; it is not an active or
+light-client protocol. The canonical bitcoin/bips source is authoritative for
+this status: https://github.com/bitcoin/bips/blob/master/bip-0110.mediawiki
 
 Phase 1 implements a pure function over caller-supplied metadata in
 `src/sync/bip110.rs`. It assesses these five proposed size boundaries when the
