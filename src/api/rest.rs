@@ -86,6 +86,8 @@ pub struct HealthResponse {
     pub status: String,
     pub version: String,
     pub safety_mode: Option<bool>,
+    /// Runtime identity asserted for the status surface's verification check.
+    pub service: String,
 }
 
 /// Proof manifest for the narrow proof surface (Issue #149)
@@ -496,6 +498,7 @@ fn safety_health_response(result: anyhow::Result<bool>) -> (StatusCode, Json<Hea
             status: status.into(),
             version: env!("CARGO_PKG_VERSION").into(),
             safety_mode,
+            service: "conxian-nexus".into(),
         }),
     )
 }
