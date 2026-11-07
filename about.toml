@@ -12,7 +12,7 @@ accepted = [
 ]
 
 [conxian-nexus]
-accepted = ["BUSL-1.1"]
+accepted = ["AGPL-3.0-or-later"]
 
 # These package-specific entries only support deterministic attribution for
 # the exact locked graph; they do not broaden repository-wide license policy.

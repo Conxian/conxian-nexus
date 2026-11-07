@@ -13,7 +13,7 @@ Conxian Nexus is the evidence and verification service. It observes configured n
 | API | Portable proof and health contracts | Authentication at the service perimeter, quotas, observability, and SLA reporting |
 | Persistence | Reproducible schema and integrity rules | Backups, replication, retention, recovery, and regional placement |
 
-The code is currently BUSL-1.1 source-available. The intended public-good role does not by itself make the repository open source; changing that status requires an explicit license decision.
+The code is licensed under AGPL-3.0-or-later (OSI-approved open source). Managed-node operations and enterprise modules are separately licensed commercial offerings.
 
 Commercial ISO 20022 translation, API-key tenancy, banking compliance, and routing policy are owned by `conxian-gateway`. Multi-tenant cloud orchestration is owned by `conxius-platform`. Hardware-backed key isolation and value-bearing signing are owned by `conxius-enclave-sdk`.
 
