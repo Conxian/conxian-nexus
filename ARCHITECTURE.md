@@ -2,7 +2,7 @@
 
 Nexus owns observation, state commitments, and proof verification for the public conxian.org protocol boundary. It is a Bitcoin-rooted universal-chain system. Managed node availability, operations, and SLAs belong to conxian-labs.com. Execution belongs to Gateway; hardware signing/custody verification belongs to the Enclave SDK and user-controlled providers.
 
-There is no native Conxian token, tokenomics, or staking incentive. External chains, layers, assets, and protocol compatibility are retained. The repository's BUSL-1.1 license makes this implementation source-available; its public protocol role does not change the license into an OSI open-source license.
+There is no native Conxian token, tokenomics, or staking incentive. External chains, layers, assets, and protocol compatibility are retained. The repository is licensed under AGPL-3.0-or-later, an OSI-approved open-source license; the public protocol role and the network-copyleft terms reinforce the shared public good.
 
 `sync` ingests observations; `state` commits MMR state; `verification` validates explicitly supported evidence; adapters and APIs expose bounded interfaces. SP1/RISC Zero interfaces cannot claim successful proof verification without a configured cryptographic backend and trusted program/image binding.
 

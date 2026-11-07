@@ -8,7 +8,7 @@ Read [architecture](ARCHITECTURE.md) and [capability discovery](docs/CAPABILITY_
 
 Nexus owns observation, state commitments, and proof verification. Its public-protocol role is the deterministic, Bitcoin-anchored verification interface. Conxian-Labs may operate managed Nexus nodes with availability and support commitments, but those commercial operations do not change proof validity or introduce a native token, staking asset, or protocol tokenomics.
 
-This repository is currently licensed under BUSL-1.1 and is therefore source-available rather than OSI open source. A separate licensing decision is required before describing the implementation itself as an open-source public good.
+This repository is licensed under AGPL-3.0-or-later, an OSI-approved open-source license. The Nexus core is free and open source; Conxian-Labs managed-node operations and enterprise modules are separately licensed commercial offerings and do not change proof validity or introduce a native token.
 
 ISO 20022 parsing, API-key tenancy, commercial rate limits, and banking compliance orchestration belong to `conxian-gateway`. Multi-tenant deployment and SLA dashboards belong to `conxius-platform`. Hardware-backed signing belongs to `conxius-enclave-sdk`; Nexus consumes attested evidence and must not hold signing keys.
 
@@ -189,4 +189,4 @@ All issues are routed and prioritized according to the administrative registry i
 
 ## License
 
-BUSL 1.1
+AGPL-3.0-or-later (GNU Affero General Public License v3.0 or later). See `LICENSE` for the full text. Nexus core is open source under AGPL-3.0-or-later; Conxian-Labs managed-node deployments and enterprise modules remain separately licensed commercial offerings.
