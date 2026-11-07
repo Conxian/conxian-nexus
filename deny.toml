@@ -1,5 +1,5 @@
 # cargo-deny configuration for Conxian Nexus
-# SPDX-License-Identifier: BUSL-1.1
+# SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Last updated: 2026-10-10 — pruned dead license exceptions and git-source
 # allow entries (webauthn-rs stack, musig2/secp, base64urlsafedata, and the
@@ -12,7 +12,7 @@ all-features = true
 
 [licenses]
 include-dev = true
-# The nexus is BUSL-1.1 licensed. Allow only compatible licenses for dependencies.
+# The nexus is AGPL-3.0-or-later licensed. Allow only compatible licenses for dependencies.
 allow = [
     "MIT",
     "Apache-2.0",
@@ -29,7 +29,7 @@ exceptions = [
     # Separate first-party repository scanning from dependency-policy evaluation.
     # This does not approve or ratify the substantive terms, licensor authority,
     # Cargo metadata, publication, or release.
-    { allow = ["BUSL-1.1"], crate = "conxian-nexus@0.4.23" },
+    { allow = ["AGPL-3.0-or-later"], crate = "conxian-nexus@0.4.23" },
     { allow = ["BSL-1.0"], crate = "xxhash-rust@0.8.18" },
     { allow = ["MITNFA"], crate = "hex_lit@0.1.1" },
 ]
