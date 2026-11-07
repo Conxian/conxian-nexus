@@ -6,14 +6,10 @@ import sys
 
 license_text = Path("LICENSE").read_text(encoding="utf-8")
 required_markers = (
-    "Business Source License 1.1",
-    "Licensor:",
-    "Licensed Work:",
-    "Additional Use Grant:",
-    "Change Date:",
-    "Change License:",
-    "Terms",
-    "Covenants of Licensor",
+    "GNU AFFERO GENERAL PUBLIC LICENSE",
+    "Version 3, 19 November 2007",
+    "TERMS AND CONDITIONS",
+    "END OF TERMS AND CONDITIONS",
 )
 errors = [f"missing required marker: {marker}" for marker in required_markers if marker not in license_text]
 if len(license_text.splitlines()) < 60:

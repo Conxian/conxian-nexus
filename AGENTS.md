@@ -6,7 +6,7 @@ You are working on **Conxian Nexus**, the protocol-first "Glass Node" proof laye
 
 ## Core Identity
 - **Role**: Authoritative off-chain state aligned with multi-chain activity via cryptographic state root commitments (MMR).
-- **Governance**: Maintained by Conxian-Labs as public infrastructure. BUSL-1.1 licensed (Change Date: 2030-01-01 → GPL-3.0-or-later).
+- **Governance**: Maintained by Conxian-Labs as public infrastructure. Licensed AGPL-3.0-or-later (OSI-approved open source); managed-node operations and enterprise modules are separately licensed commercial offerings.
 - **Boundary Rule**: Nexus observes and proves — it does NOT execute. Execution is the Gateway's domain.
 
 ## Architecture
@@ -204,8 +204,7 @@ Completed the Oracle-worker signer hardening and drift/Lightning coverage that P
   coverage ≥90%, Bitcoin coverage ≥92%.
 
 ## License
-BUSL-1.1 (Business Source License 1.1). Change Date: 2030-01-01. Change License: GPL-3.0-or-later.
-See `LICENSE` for full text. SPDX identifier: `BUSL-1.1`.
+AGPL-3.0-or-later (GNU Affero General Public License v3.0 or later). See `LICENSE` for the full text. SPDX identifier: `AGPL-3.0-or-later`.
 
 ---
 © 2026 Conxian Foundation. Code is Law.
