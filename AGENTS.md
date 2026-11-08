@@ -30,11 +30,13 @@ Bitcoin/EVM/Cosmos —→ sync module —→ MMR state roots —→ REST/gRPC AP
 | `api` | REST + gRPC surfaces for proofs, event feeds, identity, settlement, ZKML, DLC, ERP | Active |
 | `storage` | Tableland + Kwil adapters for MMR node persistence | Active |
 
-## Protocol Coverage — SDK → Nexus Alignment
+## Protocol Coverage — Core taxonomy → Nexus observation
 
-The Conxius Enclave SDK (`conxius-enclave-sdk` v2.0.17) defines the canonical 42-chain AssetRegistry and 43 protocol modules (25 blockchain + 18 infrastructure). Nexus must maintain observation/proof coverage for all chains where Conxian holds state.
+Core (`lib-conxian-core` ≥ `v0.3.3`) is the canonical concrete-chain/family authority: `capability::known_chains()` derives identifiers and families from the canonical taxonomy (48 concrete chains / 17 families, `taxonomy_version 1.0.0`). The Conxius Enclave SDK's 42-identifier `AssetRegistry` and 43 protocol modules (25 blockchain + 18 infrastructure) are a *separate* SDK-local inventory, not canonical coverage. A known identifier is not an implemented adapter, a configured executor or a production connection. Nexus observes/proves only a subset and holds no execution authority (Nexus #418).
 
-### Chain Coverage (42 SDK chains → Nexus observation status)
+### Chain Coverage (SDK registry snapshot → Nexus observation status)
+
+The table below is an SDK-registry snapshot, not canonical coverage. Consume Core's versioned capability contract before treating any row as authoritative; a copied aggregate count must not be treated as availability.
 
 | Chain | SDK Registry | Nexus Status | Notes |
 |-------|-------------|-------------|-------|
