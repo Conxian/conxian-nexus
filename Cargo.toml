@@ -59,3 +59,6 @@ rustls = { version = "0.23", features = ["ring"] }
 [build-dependencies]
 tonic-prost-build = "0.14"
 protoc-bin-vendored = "3.0"
+
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
