@@ -14,7 +14,7 @@ from typing import Any
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ORDINARY_DEV_HEAD_RE = re.compile(
-    r"^(?:feat(?:ure)?|fix|docs|chore|hotfix|dependabot|jules)/[A-Za-z0-9._/-]+$|^(?:jules-[A-Za-z0-9._-]+)$"
+    r"^(?:feat(?:ure)?|fix|docs|chore|hotfix|dependabot|jules|proof)/[A-Za-z0-9._/-]+$|^(?:jules-[A-Za-z0-9._-]+)$"
 )
 GENERATED_DEV_RE = re.compile(r"^promotion/dev-to-staged-([0-9a-f]{40})$")
 GENERATED_STAGED_RE = re.compile(r"^promotion/staged-to-main-([0-9a-f]{40})$")

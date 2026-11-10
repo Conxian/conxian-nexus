@@ -169,6 +169,7 @@ class PromotionHeadBindingTests(unittest.TestCase):
     def test_existing_work_and_reconciliation_routes_are_preserved(self):
         for head, base, body in (
             ("fix/example", "dev", "### Feature -> dev promotion checklist"),
+            ("proof/721-recompute-ceremony-countdown", "dev", "### Feature -> dev promotion checklist"),
             ("dev", "staged", STAGED),
             ("staged", "main", MAIN),
             ("backmerge/main-to-staged", "staged", ""),
