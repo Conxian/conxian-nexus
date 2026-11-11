@@ -188,6 +188,32 @@ class CheckerTest(unittest.TestCase):
         )
         self.assert_fails(manifest(), "member/Cargo.toml", files={"member/Cargo.toml": member})
 
+    def test_sqlx_renames_duplicates_and_non_root_declarations_fail(self) -> None:
+        alias = 'sqlx-alias = { package = "sqlx", version = "0.9" }'
+        self.assert_fails(
+            manifest(extra=alias),
+            "renamed, duplicate, or non-root sqlx",
+        )
+
+        duplicate = manifest() + f"\n[dev-dependencies]\n{SQLX_DECLARATION}\n"
+        self.assert_fails(duplicate, "renamed, duplicate, or non-root sqlx")
+
+        member = textwrap.dedent(
+            f"""
+            [package]
+            name = "member"
+            version = "0.1.0"
+            edition = "2021"
+            [dependencies]
+            {SQLX_DECLARATION}
+            """
+        )
+        self.assert_fails(
+            manifest(),
+            "member/Cargo.toml",
+            files={"member/Cargo.toml": member},
+        )
+
     def test_workspace_override_lock_member_and_config_failures(self) -> None:
         self.assert_fails(manifest("missing = { workspace = true }"), "workspace inheritance source is missing")
 
