@@ -17,6 +17,14 @@ CORE_REV_MUTATED = CORE_REV[:-1] + ("1" if CORE_REV[-1] == "0" else "0")
 CORE_SOURCE = f"git+{CORE_URL}?rev={CORE_REV}#{CORE_REV}"
 CORE_DECLARATION = f'lib-conxian-core = {{ git = "{CORE_URL}", rev = "{CORE_REV}" }}'
 
+# The RUSTSEC-2026-0459 remediation pins `sqlx` to an exact git rev. The policy
+# requires exactly one such declaration and asserts the locked source, so the
+# fixtures must carry it the same way they carry Core.
+SQLX_URL = "https://github.com/transact-rs/sqlx"
+SQLX_REV = "987b8c5a74b6da8b71da6b5549925a7f6e59aac9"
+SQLX_SOURCE = f"git+{SQLX_URL}?rev={SQLX_REV}#{SQLX_REV}"
+SQLX_DECLARATION = f'sqlx = {{ git = "{SQLX_URL}", rev = "{SQLX_REV}" }}'
+
 
 def lock(core_entries: str | None = None) -> str:
     if core_entries is None:
@@ -26,12 +34,22 @@ def lock(core_entries: str | None = None) -> str:
             name = "lib-conxian-core"
             version = "0.3.3"
             source = "{CORE_SOURCE}"
+
+            [[package]]
+            name = "sqlx"
+            version = "0.9.0"
+            source = "{SQLX_SOURCE}"
+
+            [[package]]
+            name = "libsqlite3-sys"
+            version = "0.39.1"
+            source = "registry+https://github.com/rust-lang/crates.io-index"
             """
         )
     return "version = 4\n" + core_entries
 
 
-def manifest(extra: str = "", core: str = CORE_DECLARATION) -> str:
+def manifest(extra: str = "", core: str = CORE_DECLARATION, sqlx: str = SQLX_DECLARATION) -> str:
     return textwrap.dedent(
         f"""
         [package]
@@ -41,6 +59,7 @@ def manifest(extra: str = "", core: str = CORE_DECLARATION) -> str:
 
         [dependencies]
         {core}
+        {sqlx}
         serde = "1"
         {extra}
         """
