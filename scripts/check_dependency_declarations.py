@@ -210,6 +210,12 @@ def validate_repository(root: Path) -> list[str]:
                         "declaration is prohibited"
                     )
 
+                if is_sqlx and not is_allowed_sqlx_location:
+                    errors.append(
+                        f"{declaration_context}: renamed, duplicate, or non-root sqlx "
+                        "declaration is prohibited"
+                    )
+
                 if isinstance(spec, dict) and "git" in spec:
                     if is_allowed_sqlx_location:
                         sqlx_errors: list[str] = []
