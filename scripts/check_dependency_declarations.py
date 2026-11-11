@@ -18,6 +18,18 @@ CORE_LOCK_SOURCE = (
     f"?rev={CORE_REV}#{CORE_REV}"
 )
 
+# Exco-approved (2026-11-11) RUSTSEC-2026-0459 remediation: pin `sqlx` to the
+# exact upstream commit that widens its `libsqlite3-sys` requirement to
+# `>=0.30.1, <0.40.0`, so the patched `libsqlite3-sys 0.39.1` is selected.
+# `github.com/launchbadge/sqlx` redirects to this canonical repository. The pin
+# is an exact `rev` (never a branch or tag) so resolution is deterministic and
+# reviewable; remove it once a published `sqlx` carries the widened range.
+SQLX_NAME = "sqlx"
+SQLX_VERSION = "0.9.0"
+SQLX_URL = "https://github.com/transact-rs/sqlx"
+SQLX_REV = "987b8c5a74b6da8b71da6b5549925a7f6e59aac9"
+SQLX_LOCK_SOURCE = f"git+{SQLX_URL}?rev={SQLX_REV}#{SQLX_REV}"
+
 DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
 SOURCE_KEYS = ("git", "path", "branch", "tag", "registry")
 
@@ -113,6 +125,19 @@ def declaration_errors(spec: Any) -> list[str]:
     return errors
 
 
+def _at_least_0_39(version: str) -> bool:
+    """True when a libsqlite3-sys version is >= 0.39.0 (RUSTSEC-2026-0459 patch)."""
+    try:
+        parts = version.split(".")
+        major = int(parts[0])
+        minor = int(parts[1]) if len(parts) > 1 else 0
+    except (ValueError, IndexError):
+        return False
+    if major != 0:
+        return major > 0
+    return minor >= 39
+
+
 def validate_repository(root: Path) -> list[str]:
     errors: list[str] = []
     root_manifest_path = root / "Cargo.toml"
@@ -140,6 +165,7 @@ def validate_repository(root: Path) -> list[str]:
                 errors.append(f"Cargo.toml [{override}]: source overrides are prohibited")
 
     valid_core_declarations = 0
+    valid_sqlx_declarations = 0
     for manifest_path in sorted(parsed, key=lambda path: path.as_posix()):
         manifest = parsed[manifest_path]
         for table_name, table in dependency_tables(manifest):
@@ -155,6 +181,13 @@ def validate_repository(root: Path) -> list[str]:
                     manifest_path == Path("Cargo.toml")
                     and table_name == "dependencies"
                     and dependency == CORE_NAME
+                    and package_name is None
+                )
+                is_sqlx = dependency == SQLX_NAME or package_name == SQLX_NAME
+                is_allowed_sqlx_location = (
+                    manifest_path == Path("Cargo.toml")
+                    and table_name == "dependencies"
+                    and dependency == SQLX_NAME
                     and package_name is None
                 )
 
@@ -178,7 +211,20 @@ def validate_repository(root: Path) -> list[str]:
                     )
 
                 if isinstance(spec, dict) and "git" in spec:
-                    if not is_allowed_core_location:
+                    if is_allowed_sqlx_location:
+                        sqlx_errors: list[str] = []
+                        if spec.get("git") != SQLX_URL:
+                            sqlx_errors.append(f"git must be exactly {SQLX_URL}")
+                        if spec.get("rev") != SQLX_REV:
+                            sqlx_errors.append(f"rev must be the exact full SHA {SQLX_REV}")
+                        if any(key in spec for key in ("package", "path", "branch", "tag")):
+                            sqlx_errors.append("package/path/branch/tag keys are prohibited")
+                        if sqlx_errors:
+                            for error in sqlx_errors:
+                                errors.append(f"{declaration_context}: {error}")
+                        else:
+                            valid_sqlx_declarations += 1
+                    elif not is_allowed_core_location:
                         errors.append(
                             f"{declaration_context}: Git dependencies are prohibited except "
                             "for the exact root Core declaration"
@@ -203,6 +249,12 @@ def validate_repository(root: Path) -> list[str]:
         errors.append(
             "Cargo.toml [dependencies]: exactly one valid literal unrenamed "
             f"{CORE_NAME} Git declaration is required"
+        )
+
+    if valid_sqlx_declarations != 1:
+        errors.append(
+            "Cargo.toml [dependencies]: exactly one valid literal unrenamed "
+            f"{SQLX_NAME} Git declaration is required (RUSTSEC-2026-0459 remediation)"
         )
 
     for config_name in ("config", "config.toml"):
@@ -246,6 +298,43 @@ def validate_repository(root: Path) -> list[str]:
                 if package.get("source") != CORE_LOCK_SOURCE:
                     errors.append(
                         f"Cargo.lock: {CORE_NAME} source must be exactly {CORE_LOCK_SOURCE}"
+                    )
+
+            sqlx_packages = [
+                package
+                for package in packages
+                if isinstance(package, dict) and package.get("name") == SQLX_NAME
+            ]
+            if len(sqlx_packages) != 1:
+                errors.append(
+                    f"Cargo.lock: expected exactly one {SQLX_NAME} package, "
+                    f"found {len(sqlx_packages)}"
+                )
+            else:
+                package = sqlx_packages[0]
+                if package.get("version") != SQLX_VERSION:
+                    errors.append(
+                        f"Cargo.lock: {SQLX_NAME} version must be exactly {SQLX_VERSION}"
+                    )
+                if package.get("source") != SQLX_LOCK_SOURCE:
+                    errors.append(
+                        f"Cargo.lock: {SQLX_NAME} source must be exactly {SQLX_LOCK_SOURCE}"
+                    )
+
+            # RUSTSEC-2026-0459 remediation: the pinned sqlx must select the
+            # patched libsqlite3-sys (>= 0.39.0). A regression here would
+            # silently re-introduce the advisory.
+            libsqlite_packages = [
+                package
+                for package in packages
+                if isinstance(package, dict) and package.get("name") == "libsqlite3-sys"
+            ]
+            for package in libsqlite_packages:
+                version = package.get("version")
+                if not isinstance(version, str) or not _at_least_0_39(version):
+                    errors.append(
+                        "Cargo.lock: libsqlite3-sys must be >= 0.39.0 "
+                        f"(RUSTSEC-2026-0459 remediation); found {version!r}"
                     )
 
     return sorted(set(errors))
