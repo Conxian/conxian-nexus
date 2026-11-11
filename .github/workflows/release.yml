@@ -172,7 +172,7 @@ jobs:
           candidate="${INPUT_VERSION}"
         fi
         version="$(bash scripts/validate_release_version.sh "$candidate")"
-        printf 'value=%s\\n' "$version" >> "$GITHUB_OUTPUT"
+        printf 'value=%s\n' "$version" >> "$GITHUB_OUTPUT"
     - name: Validate version matches Cargo.toml
       shell: bash
       env:
