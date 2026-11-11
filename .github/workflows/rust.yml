@@ -36,6 +36,8 @@ jobs:
       run: ./scripts/check_production_boundary.sh
     - name: Parse all workflow YAML
       run: ruby scripts/check_workflow_yaml.rb
+    - name: Verify release-version output boundary
+      run: bash scripts/test_release_version_validation.sh
     - name: Check Lightning coverage source contracts
       run: python3 -m unittest discover -s scripts -p test_check_lightning_coverage.py
     - name: Install Gitleaks

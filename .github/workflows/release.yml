@@ -51,6 +51,8 @@ jobs:
       run: ./scripts/check_production_boundary.sh
     - name: Parse all workflow YAML
       run: ruby scripts/check_workflow_yaml.rb
+    - name: Verify release-version output boundary
+      run: bash scripts/test_release_version_validation.sh
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -161,16 +163,22 @@ jobs:
     - name: Determine version
       id: version
       shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.release_version }}
       run: |
         if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-          echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          candidate="${GITHUB_REF_NAME}"
         else
-          echo "value=${{ inputs.release_version }}" >> "$GITHUB_OUTPUT"
+          candidate="${INPUT_VERSION}"
         fi
+        version="$(bash scripts/validate_release_version.sh "$candidate")"
+        printf 'value=%s\n' "$version" >> "$GITHUB_OUTPUT"
     - name: Validate version matches Cargo.toml
       shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
       run: |
-        version="${{ steps.version.outputs.value }}"
+        version="${VERSION}"
         version="${version#v}"
         cargo_version=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
         if [[ "${version}" != "${cargo_version}" ]]; then
@@ -181,8 +189,10 @@ jobs:
     - name: Extract changelog for this version
       id: changelog
       shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
       run: |
-        version="${{ steps.version.outputs.value }}"
+        version="${VERSION}"
         version="${version#v}"
         # Extract changelog section for this version
         awk -v ver="## [${version}]" '
@@ -199,8 +209,10 @@ jobs:
     - name: Check for existing release
       id: existing
       shell: bash
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
       run: |
-        version="${{ steps.version.outputs.value }}"
+        version="${VERSION}"
         version="${version#v}"
         if gh release view "v${version}" &>/dev/null; then
           echo "exists=true" >> "$GITHUB_OUTPUT"
