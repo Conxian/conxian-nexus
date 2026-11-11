@@ -51,6 +51,8 @@ jobs:
       run: ./scripts/check_production_boundary.sh
     - name: Parse all workflow YAML
       run: ruby scripts/check_workflow_yaml.rb
+    - name: Verify release-version output boundary
+      run: bash scripts/test_release_version_validation.sh
     - name: Install Gitleaks
       run: |
         VERSION="8.18.2"
@@ -165,10 +167,12 @@ jobs:
         INPUT_VERSION: ${{ inputs.release_version }}
       run: |
         if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-          echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          candidate="${GITHUB_REF_NAME}"
         else
-          echo "value=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+          candidate="${INPUT_VERSION}"
         fi
+        version="$(bash scripts/validate_release_version.sh "$candidate")"
+        printf 'value=%s\\n' "$version" >> "$GITHUB_OUTPUT"
     - name: Validate version matches Cargo.toml
       shell: bash
       env:
