@@ -124,6 +124,9 @@ impl NexusGrpcService {
             return Err(Status::unauthenticated("Invalid API key format"));
         }
 
+        // The test bypass is compiled only into debug builds, so a release
+        // binary cannot honour NEXUS_GRPC_TEST_BYPASS (Nexus #588, alert #53).
+        #[cfg(debug_assertions)]
         if api_key == "valid_grpc_test_api_key_123"
             && std::env::var("NEXUS_GRPC_TEST_BYPASS").is_ok()
         {
@@ -152,7 +155,8 @@ impl NexusGrpcService {
             .unwrap_or(false);
 
         if !exists {
-            tracing::warn!("gRPC request with unauthorized API key: {}", api_key);
+            // Never log the presented key value (Nexus #588, alert #59).
+            tracing::warn!("gRPC request rejected: unauthorized API key");
             return Err(Status::unauthenticated("Invalid API key"));
         }
 
