@@ -828,9 +828,18 @@ async fn list_chains(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+    // The canonical chain list is derived from the Core taxonomy, not a local
+    // hard-coded list (Nexus #418). It is a known-identifier set, not a live
+    // support claim; adapter_discovery carries the runtime registration.
+    let known: Vec<String> = lib_conxian_core::capability::known_chains()
+        .into_iter()
+        .filter_map(|entry| serde_json::to_value(entry.chain).ok())
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
     Ok(Json(json!({
-        "chains": ["bitcoin", "stacks", "evm", "cosmos"],
-        "semantics": "legacy-interface-families-not-live-support",
+        "chains": known,
+        "semantics": "known-taxonomy-identifiers-not-live-support",
+        "taxonomy_version": lib_conxian_core::capability::CHAIN_TAXONOMY_VERSION,
         "adapter_discovery": crate::api::capabilities::registered_observation_adapters(&state)
     })))
 }
