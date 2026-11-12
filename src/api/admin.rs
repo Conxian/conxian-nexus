@@ -304,7 +304,7 @@ fn authorize_admin_write(
         return Err(admin_token_not_configured_response());
     };
 
-    if token == expected_token {
+    if crate::api::constant_time_eq(&token, &expected_token) {
         if !cfg!(debug_assertions) {
             tracing::warn!(
                 "REMEDIATION NEEDED: Static admin token used in production-like build (Hole 1.2)."
@@ -340,7 +340,7 @@ fn authorize_for_scope(
 
     // Static fallback
     if let Some(expected_token) = configured_admin_token(state) {
-        if token == expected_token {
+        if crate::api::constant_time_eq(&token, &expected_token) {
             return Ok(vec![
                 "admin.write".to_string(),
                 "api.read".to_string(),
@@ -828,9 +828,18 @@ async fn list_chains(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
+    // The canonical chain list is derived from the Core taxonomy, not a local
+    // hard-coded list (Nexus #418). It is a known-identifier set, not a live
+    // support claim; adapter_discovery carries the runtime registration.
+    let known: Vec<String> = lib_conxian_core::capability::known_chains()
+        .into_iter()
+        .filter_map(|entry| serde_json::to_value(entry.chain).ok())
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
     Ok(Json(json!({
-        "chains": ["bitcoin", "stacks", "evm", "cosmos"],
-        "semantics": "legacy-interface-families-not-live-support",
+        "chains": known,
+        "semantics": "known-taxonomy-identifiers-not-live-support",
+        "taxonomy_version": lib_conxian_core::capability::CHAIN_TAXONOMY_VERSION,
         "adapter_discovery": crate::api::capabilities::registered_observation_adapters(&state)
     })))
 }
