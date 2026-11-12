@@ -1,0 +1,81 @@
+name: "Business operations work item"
+description: "Track a business-linked work item under the org GitHub business-operations workflow."
+title: "[BUSINESS] <concise outcome>"
+labels:
+  - "type:change"
+  - "state:intake"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for business-linked work in this repository
+        ([#520](https://github.com/Conxian/conxian-nexus/issues/520)).
+
+        **Privacy boundary:** public issues may contain opaque identifiers, stage,
+        owner role, due date, sanitized outcome and evidence status only. Do **not**
+        include names, contact details, messages, contracts, negotiated pricing,
+        tax/payment data or credentials. When even sanitized coordination would
+        reveal the counterparty, use a restricted repository instead.
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Outcome and measurable acceptance
+      description: What business outcome is sought, and how will it be measured?
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P0 — immediate"
+        - "P1 — urgent/high impact"
+        - "P2 — normal planned work"
+        - "P3 — low/deferred"
+    validations:
+      required: true
+  - type: input
+    id: owner
+    attributes:
+      label: Accountable owner
+      description: Role or handle accountable for the outcome.
+    validations:
+      required: true
+  - type: input
+    id: parent
+    attributes:
+      label: Parent business issue
+      description: Link to conxian-business#1695 or the owning business issue.
+      placeholder: "https://github.com/Conxian/conxian-business/issues/1695"
+    validations:
+      required: true
+  - type: textarea
+    id: state_deps
+    attributes:
+      label: Current state and dependencies
+      description: What is true now, and what does this depend on?
+    validations:
+      required: true
+  - type: textarea
+    id: next_action
+    attributes:
+      label: Next action and due date
+      description: The next concrete step, owner, and due/review date.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence link or restricted reference
+      description: Public evidence link, or an opaque reference to restricted evidence. No restricted contents.
+    validations:
+      required: true
+  - type: dropdown
+    id: privacy
+    attributes:
+      label: Privacy classification
+      options:
+        - "Public-safe (opaque IDs only)"
+        - "Restricted evidence referenced by opaque ID"
+    validations:
+      required: true
