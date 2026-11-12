@@ -39,7 +39,7 @@ system when even sanitized coordination would reveal the counterparty.
 ## Reuse the template
 
 Open business-operations issues with the
-[Business operations work item](.github/ISSUE_TEMPLATE/business_operations.yml)
+[Business operations work item](../../.github/ISSUE_TEMPLATE/business_operations.yml)
 form. It links the parent business issue and enforces the contract above.
 
 ## Verify / accept
