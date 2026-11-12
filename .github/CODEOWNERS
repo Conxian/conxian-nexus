@@ -1,45 +1,34 @@
-# Conxian Labs Administrative Registry - Governance
+# CODEOWNERS — team-based review routing
+#
+# Worker-agnostic by design: code is owned by TEAMS and ROLES, never by a named
+# individual. A team may hold human or machine (agent/bot) workers, so review
+# coverage survives any single worker joining, leaving or being unavailable.
+# Last match wins.
+#
+# Enforcement: the repository "main" ruleset requires 1 approving review and a
+# code-owner review. Organization administrators retain a permanent bypass, so
+# the owner is never blocked (see the ruleset bypass_actors).
 
-# Verified maintainers with admin access
-* @botshelomokoka @admin-conxian-labs
+# Default owner: any reviewer-team member can satisfy the code-owner review.
+*                                   @Conxian/reviewers
 
-# Security and governance-sensitive files
-/.github/CODEOWNERS @botshelomokoka @admin-conxian-labs
-/SECURITY.md @botshelomokoka @admin-conxian-labs
-/SUPPORT.md @botshelomokoka @admin-conxian-labs
-/.github/release.yml @botshelomokoka @admin-conxian-labs
-/.github/ISSUE_TEMPLATE/** @botshelomokoka @admin-conxian-labs
-/.github/PULL_REQUEST_TEMPLATE* @botshelomokoka @admin-conxian-labs
-/.github/workflows/** @botshelomokoka @admin-conxian-labs
+# Governance, policy and this file itself — org administration.
+/CODEOWNERS                         @Conxian/conxian-admin
+/GOVERNANCE.md                      @Conxian/conxian-admin
+/CONTRIBUTING.md                    @Conxian/conxian-admin
+/SECURITY.md                        @Conxian/conxian-admin
+/.github/                           @Conxian/conxian-admin
 
-# Technical compliance review routing. These entries do not establish legal
-# authority, licensor status, or permission to change substantive terms.
-/LICENSE @botshelomokoka
-/Cargo.toml @botshelomokoka
-/Cargo.lock @botshelomokoka
-/deny.toml @botshelomokoka
-/about.toml @botshelomokoka
-/about.hbs @botshelomokoka
-/scripts/check_dependency_declarations.py @botshelomokoka
-/scripts/test_check_dependency_declarations.py @botshelomokoka
-/scripts/check_repository_license.py @botshelomokoka
-/scripts/check_workflow_yaml.rb @botshelomokoka
-/scripts/compliance_output_path.sh @botshelomokoka
-/scripts/generate_compliance_artifacts.sh @botshelomokoka
-/scripts/normalize_sbom.py @botshelomokoka
-/scripts/run_license_compliance.sh @botshelomokoka
-/scripts/test_normalize_sbom.py @botshelomokoka
-/.github/workflows/license-governance.yml @botshelomokoka
-/.github/workflows/release.yml @botshelomokoka
-/Dockerfile @botshelomokoka
-/docker-compose.yml @botshelomokoka
+# CI/CD, automation and infrastructure — operations.
+/.github/workflows/                 @Conxian/ops
+/scripts/                           @Conxian/ops
+/infra/                             @Conxian/ops
+/infrastructure/                    @Conxian/ops
+/deploy/                            @Conxian/ops
+/docker/                            @Conxian/ops
+/Dockerfile                         @Conxian/ops
+/docker-compose.yml                 @Conxian/ops
 
-# Governance process docs
-/CONTRIBUTING.md @botshelomokoka @admin-conxian-labs
-
-# Repository-specific ownership
-/src/api/ @Conxian/conxian-admin
-/proto/ @Conxian/conxian-admin
-/src/api/billing/ @Conxian/conxian-admin
-/src/safety/ @Conxian/conxian-admin
-/docs/ @Conxian/conxian-admin
+# Shared protocol / SDK code — core engineering.
+/lib-conxian-core/                  @Conxian/core-devs
+/conxius-enclave-sdk/               @Conxian/core-devs
