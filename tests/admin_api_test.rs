@@ -688,6 +688,88 @@ async fn test_unauthorized_status_includes_www_authenticate_metadata() {
 }
 
 #[tokio::test]
+async fn test_environments_endpoint_returns_canonical_records() {
+    let _env_lock = admin_api_token_lock().lock().await;
+    let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));
+    let app = test_router();
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/admin/v1/environments")
+        .header(header::HOST, "nexus.test")
+        .header(header::AUTHORIZATION, "Bearer expected-admin-token")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let value: Value = serde_json::from_slice(&body).unwrap();
+
+    // The control-plane SDK requires RuntimeEnvironmentRecord objects, not bare
+    // strings; a bare-string list is what produced the control-plane 500.
+    let environments = value["environments"]
+        .as_array()
+        .expect("environments must be a JSON array");
+    assert_eq!(environments.len(), 3);
+
+    let allowed_classification = ["local", "staging", "production", "restricted"];
+    let allowed_status = ["ready", "degraded", "blocked", "unknown"];
+    let allowed_trust = [
+        "nativeObservation",
+        "proofVerified",
+        "attesterVerified",
+        "observerOnly",
+        "unknown",
+    ];
+    let allowed_evidence = ["none", "partial", "strong", "verified", "unknown"];
+    let allowed_verification = ["pending", "verified", "restricted"];
+
+    let mut ids = BTreeSet::new();
+    for record in environments {
+        let obj = record.as_object().expect("each record must be an object");
+        for key in [
+            "id",
+            "name",
+            "owner",
+            "classification",
+            "verificationStatus",
+            "status",
+            "trustTier",
+            "evidenceLevel",
+            "lastUpdated",
+        ] {
+            let field = obj
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| panic!("missing/!string field {key} in {record}"));
+            assert!(!field.trim().is_empty(), "field {key} must be non-empty");
+        }
+        assert!(allowed_classification.contains(&obj["classification"].as_str().unwrap()));
+        assert!(allowed_status.contains(&obj["status"].as_str().unwrap()));
+        assert!(allowed_trust.contains(&obj["trustTier"].as_str().unwrap()));
+        assert!(allowed_evidence.contains(&obj["evidenceLevel"].as_str().unwrap()));
+        assert!(allowed_verification.contains(&obj["verificationStatus"].as_str().unwrap()));
+        // `lastUpdated` must be an RFC 3339 instant the SDK's `instant` predicate accepts.
+        let last_updated = obj["lastUpdated"].as_str().unwrap();
+        assert!(
+            last_updated.ends_with('Z'),
+            "lastUpdated must be UTC, got {last_updated}"
+        );
+        assert!(chrono::DateTime::parse_from_rfc3339(last_updated).is_ok());
+        // The SDK rejects a payload whose rows are not uniquely identified.
+        assert!(
+            ids.insert(obj["id"].as_str().unwrap().to_string()),
+            "environment ids must be unique"
+        );
+    }
+    // Honesty: we never claim verification we have not performed.
+    for record in environments {
+        assert_ne!(record["verificationStatus"], "verified");
+    }
+}
+
+#[tokio::test]
 async fn test_canonical_admin_v1_routes_are_reachable_with_expected_methods() {
     let _env_lock = admin_api_token_lock().lock().await;
     let _token = ScopedEnvVar::set(ENV_ADMIN_API_TOKEN, Some("expected-admin-token"));

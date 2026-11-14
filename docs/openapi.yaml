@@ -401,6 +401,15 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  environments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RuntimeEnvironmentRecord'
   /admin/v1/environments/{env}:
     get:
       summary: Get runtime environment details
@@ -1124,6 +1133,34 @@ components:
         maximum: 1000000
         default: 0
   schemas:
+    RuntimeEnvironmentRecord:
+      type: object
+      required: [id, name, owner, classification, verificationStatus, status, trustTier, evidenceLevel, lastUpdated]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+        classification:
+          type: string
+          enum: [local, staging, production, restricted]
+        verificationStatus:
+          type: string
+          enum: [pending, verified, restricted]
+        status:
+          type: string
+          enum: [ready, degraded, blocked, unknown]
+        trustTier:
+          type: string
+          enum: [nativeObservation, proofVerified, attesterVerified, observerOnly, unknown]
+        evidenceLevel:
+          type: string
+          enum: [none, partial, strong, verified, unknown]
+        lastUpdated:
+          type: string
+          format: date-time
     WorkflowMutationReceipt:
       type: object
       required: [accepted, message, auditEventId]
