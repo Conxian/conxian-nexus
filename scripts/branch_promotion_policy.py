@@ -14,7 +14,7 @@ from typing import Any
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ORDINARY_DEV_HEAD_RE = re.compile(
-    r"^(?:feat(?:ure)?|fix|docs|chore|hotfix|dependabot|jules|proof)/[A-Za-z0-9._/-]+$|^(?:jules-[A-Za-z0-9._-]+)$"
+    r"^(?:feat(?:ure)?|fix|docs|chore|hotfix|dependabot|jules|proof|agent|openhands)/[A-Za-z0-9._/-]+$|^(?:jules-[A-Za-z0-9._-]+)$"
 )
 GENERATED_DEV_RE = re.compile(r"^promotion/dev-to-staged-([0-9a-f]{40})$")
 GENERATED_STAGED_RE = re.compile(r"^promotion/staged-to-main-([0-9a-f]{40})$")
@@ -176,7 +176,7 @@ def validate_pull_request(
         elif not ORDINARY_DEV_HEAD_RE.fullmatch(ctx.head_ref):
             errors.append(
                 "PRs into 'dev' must use feat/, feature/, fix/, docs/, chore/, "
-                "hotfix/, or dependabot/ branch names."
+                "hotfix/, dependabot/, agent/, or openhands/ branch names."
             )
         if not (
             FEATURE_CHECKLIST_RE.search(body)
