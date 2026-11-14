@@ -970,9 +970,43 @@ async fn list_environments(
     headers: HeaderMap,
 ) -> Result<Json<Value>, Response> {
     authorize_for_scope(&state, &headers, "api.read")?;
-    Ok(Json(json!({
-        "environments": ["dev", "staging", "prod"]
-    })))
+    let environments: Vec<Value> = KNOWN_ENVIRONMENTS
+        .iter()
+        .map(|name| environment_record(name))
+        .collect();
+    Ok(Json(json!({ "environments": environments })))
+}
+
+/// The runtime environments this control plane reports.
+///
+/// Kept in lock-step with the previous bare-string list so no consumer loses an
+/// environment; only the shape changes to satisfy the canonical contract.
+const KNOWN_ENVIRONMENTS: [&str; 3] = ["dev", "staging", "prod"];
+
+/// Build a `RuntimeEnvironmentRecord` for `name`.
+///
+/// Nexus does not observe the deployment's live posture from inside this
+/// process, so the evidence fields are reported honestly as `unknown` and the
+/// verification status as `pending` — never a fabricated `verified`. The record
+/// exists to satisfy the control-plane contract, not to assert qualification.
+fn environment_record(name: &str) -> Value {
+    let classification = match name {
+        "dev" => "local",
+        "staging" => "staging",
+        "prod" | "production" => "production",
+        _ => "restricted",
+    };
+    json!({
+        "id": name,
+        "name": name,
+        "owner": "conxian-labs",
+        "classification": classification,
+        "verificationStatus": "pending",
+        "status": "unknown",
+        "trustTier": "unknown",
+        "evidenceLevel": "unknown",
+        "lastUpdated": current_timestamp(),
+    })
 }
 
 async fn get_auth_md() -> impl IntoResponse {
