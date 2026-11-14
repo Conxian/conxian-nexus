@@ -63,5 +63,5 @@ See [Release Discipline (`docs/RELEASE.md`)](./RELEASE.md) for the mandatory gat
 - [README Governance & Security](../README.md#governance--security)
 - [Contributing Guide](../CONTRIBUTING.md)
 - [Security Policy](../SECURITY.md)
-- [Mainnet Readiness Evidence](./MAINNET_EVIDENCE.md)
+- [Mainnet Readiness Evidence](./archive/MAINNET_EVIDENCE.md)
 - [Product Requirements Document](./PRD.md)
