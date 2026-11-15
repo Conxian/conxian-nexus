@@ -46,7 +46,7 @@ Maintained by Conxian-Labs as public infrastructure. It provides the proof basel
 - **Middleware:** `conxian-gateway` (routing, ISO 20022, tenancy and compliance)
 - **Libraries:** Nexus-owned protocol and compatibility primitives
 - **Operations:** `conxius-platform` (managed deployment and SLA evidence)
-- **Clients:** `conxius-wallet`, `conxian_ui`
+- **Clients:** `conxius-wallet`
 
 ## Architecture
 
