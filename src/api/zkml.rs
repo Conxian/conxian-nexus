@@ -164,8 +164,12 @@ pub async fn verify_zkml_handler(
             )
                 .into_response()
         }
+        // A rejected proof is not a successful verification: answering 200 here
+        // let a caller that only inspects the status code treat a forgery as
+        // attested. Every failure mode collapses to 422 so the body shape stays
+        // constant and no verifier internals leak.
         _ => (
-            StatusCode::OK,
+            StatusCode::UNPROCESSABLE_ENTITY,
             Json(ZkmlVerifyResponse {
                 valid: false,
                 attestation_id: None,
@@ -274,5 +278,33 @@ mod tests {
         .await
         .into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    /// [R3a] A configured-but-invalid proof must fail closed with a non-2xx
+    /// status. Returning 200 with `valid:false` let status-only callers treat a
+    /// forgery as attested.
+    #[tokio::test]
+    async fn test_verify_zkml_handler_rejects_proof_with_422() {
+        let mut config = Config::default_test();
+        // A syntactically valid base64 verifying key that is not a real VK.
+        config.zkml_vks.insert(
+            "ZKML_VK_B64_TEST_MODEL".to_owned(),
+            BASE64.encode([0u8; 64]),
+        );
+        let response = verify_zkml_handler(
+            State(test_state(config)),
+            Json(ZkmlVerifyRequest {
+                proof: BASE64.encode([0u8; 128]),
+                input_commitment: "00".repeat(32),
+                model_id: "test-model".to_owned(),
+            }),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body, serde_json::json!({ "valid": false }));
     }
 }

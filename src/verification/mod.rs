@@ -11,6 +11,7 @@ pub mod op_cat;
 pub mod proof_envelope;
 pub mod x402;
 pub mod zkcp;
+pub mod zkm;
 pub mod zkvm;
 
 pub use frost::{
@@ -26,6 +27,10 @@ pub use x402::{
     X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
 };
 pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
+pub use zkm::{
+    hash_public_values, verify_ziren_groth16, ZkmError, ZIREN_PROOF_LEN, ZIREN_V2_GROTH16_VK,
+    ZIREN_V2_VK_ROOT, ZIREN_VK_LEN,
+};
 pub use zkvm::{
     validate_envelope as validate_zkvm_envelope, verify_zkvm_proof, BitcoinNetwork,
     BitcoinPublicValues, UnavailableZkVmBackend, ValidatedZkVmProof, ZkVmEnvironment, ZkVmError,

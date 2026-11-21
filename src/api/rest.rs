@@ -966,6 +966,7 @@ mod tests {
 pub fn verify_routes() -> Router<AppState> {
     Router::new()
         .route("/zkcp", post(verify_zkcp))
+        .route("/zkm", post(verify_zkm))
         .route("/op-cat", post(verify_op_cat))
         .route("/frost", post(verify_frost))
         .route("/sui", post(verify_sui))
@@ -1061,13 +1062,74 @@ async fn verify_zkcp(
 ) -> impl IntoResponse {
     let verifier = crate::verification::ZkcpVerifier::new();
     match verifier.verify_proof(&payload) {
-        Ok(valid) => (
+        Ok(true) => (
             StatusCode::OK,
-            Json(serde_json::json!({ "valid": valid, "circuit_id": payload.circuit_id })),
+            Json(serde_json::json!({ "valid": true, "circuit_id": payload.circuit_id })),
+        )
+            .into_response(),
+        // A well-formed but unverifiable proof is a rejection, not a success.
+        // 200 + `valid:false` let status-only callers treat a forgery as valid.
+        Ok(false) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(serde_json::json!({ "valid": false, "circuit_id": payload.circuit_id })),
         )
             .into_response(),
         Err(e) => (
             StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
+        )
+            .into_response(),
+    }
+}
+
+/// Wire format for `POST /v1/verify/zkm`.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ZkmVerifyPayload {
+    /// Ziren Groth16 proof, hex-encoded, including the 4-byte selector.
+    pub proof: String,
+    /// Guest public values, hex-encoded.
+    pub public_inputs: String,
+    /// Program vkey hash (`vk.bytes32()`), hex-encoded, 32 bytes.
+    pub vkey_hash: String,
+}
+
+async fn verify_zkm(Json(payload): Json<ZkmVerifyPayload>) -> impl IntoResponse {
+    let (proof, public_inputs, vkey_hash) = match (
+        hex::decode(payload.proof.trim()),
+        hex::decode(payload.public_inputs.trim()),
+        hex::decode(payload.vkey_hash.trim()),
+    ) {
+        (Ok(p), Ok(pi), Ok(vh)) => (p, pi, vh),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": "proof, public_inputs and vkey_hash must be hex-encoded",
+                    "valid": false,
+                })),
+            )
+                .into_response()
+        }
+    };
+
+    match crate::verification::verify_ziren_groth16(
+        &proof,
+        &public_inputs,
+        &vkey_hash,
+        crate::verification::ZIREN_V2_GROTH16_VK,
+    ) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "valid": true,
+                "backend": "ziren-groth16-bn254",
+                "backend_version": "v2.0.0",
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
             Json(serde_json::json!({ "error": e.to_string(), "valid": false })),
         )
             .into_response(),
