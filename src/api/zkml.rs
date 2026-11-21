@@ -481,4 +481,4 @@ mod tests {
             attestation_id(&same_statement_new_proof)
         );
     }
-    }
+}
