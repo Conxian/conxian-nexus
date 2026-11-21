@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: postgres:19
         env:
           POSTGRES_DB: conformance_test
           POSTGRES_USER: postgres
