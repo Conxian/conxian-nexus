@@ -96,7 +96,7 @@ The table below is an SDK-registry snapshot, not canonical coverage. Consume Cor
 | rgb | ✅ Executor | RGBAdapter |
 | fedimint | ✅ Executor | FedimintAdapter |
 | dlc | ⚠️ API only | DLC API route |
-| zkml | ⚠️ API only | ZKML API route |
+| zkml | ⚠️ API only | ZKML API route; statement-bound Groth16 verification, no inference circuit yet (docs/ZKML_SOUNDNESS_2026-11-21.md) |
 | mmr | ✅ State | Core state commitment |
 | solana | ⚠️ Planned | SolanaAdapter P2 |
 | ark | ❌ Not covered | P3 |
