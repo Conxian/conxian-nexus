@@ -48,6 +48,7 @@ k256 = { version = "0.14.0", features = ["ecdsa", "sha256", "schnorr"] }
 ark-groth16 = "0.6.0"
 ark-serialize = "0.6.0"
 ark-bn254 = "0.6.0"
+ark-ec = "0.6.0"
 ark-crypto-primitives = { version = "0.6.0", features = ["snark"] }
 ark-ff = "0.6.0"
 ark-relations = "0.6.0"

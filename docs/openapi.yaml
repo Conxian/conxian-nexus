@@ -1004,6 +1004,43 @@ paths:
                     type: string
         '400':
           description: Invalid payload or proof verification failed
+  /v1/verify/zkm:
+    post:
+      summary: Verify a Ziren (ZKM) v2.0.0 BN254 Groth16 Proof
+      description: |
+        Runs the real arkworks Groth16 pairing check against the pinned Ziren
+        v2.0.0 verifying key. The proof must carry the 4-byte selector equal to
+        `sha256(verifying_key)[0..4]`. A well-formed but unverifiable proof is
+        rejected with `422`; it is never reported as valid.
+      operationId: verifyZkm
+      tags:
+        - Proof Verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZkmVerifyPayload'
+      responses:
+        '200':
+          description: Proof verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid:
+                    type: boolean
+                  backend:
+                    type: string
+                    example: ziren-groth16-bn254
+                  backend_version:
+                    type: string
+                    example: v2.0.0
+        '400':
+          description: Payload is not hex-encoded
+        '422':
+          description: Proof rejected (pairing check failed, wrong length, or selector mismatch)
   /v1/verify/op-cat:
     post:
       summary: Verify OP_CAT Recursive Covenant Stack Execution & State Commitment
@@ -1519,6 +1556,22 @@ components:
             type: array
             items:
               type: integer
+    ZkmVerifyPayload:
+      type: object
+      required: [proof, public_inputs, vkey_hash]
+      additionalProperties: false
+      properties:
+        proof:
+          type: string
+          description: Hex-encoded Ziren Groth16 proof, including the 4-byte selector (260 bytes total).
+          example: b3e14fe901cb6540...
+        public_inputs:
+          type: string
+          description: Hex-encoded guest public values committed by the program.
+          example: e80300004d170000430e0000
+        vkey_hash:
+          type: string
+          description: Hex-encoded 32-byte program vkey hash (`vk.bytes32()`).
     OpCatCovenantPayload:
       type: object
       required: [domain_id, stack, expected_state_hash, recursion_depth]
