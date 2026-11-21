@@ -26,7 +26,10 @@ pub use proof_envelope::{
 pub use x402::{
     X402Error, X402PaymentPayload, X402PaymentVerifier, X402VerificationResponse, X402_VERIFIER_ID,
 };
-pub use zkcp::{ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID};
+pub use zkcp::{
+    verify_groth16_statement, ZkcpError, ZkcpProofPayload, ZkcpVerifier, ZKCP_CIRCUIT_ID,
+    ZKML_CIRCUIT_ID,
+};
 pub use zkm::{
     hash_public_values, verify_ziren_groth16, ZkmError, ZIREN_PROOF_LEN, ZIREN_V2_GROTH16_VK,
     ZIREN_V2_VK_ROOT, ZIREN_VK_LEN,
