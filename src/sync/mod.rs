@@ -29,6 +29,23 @@ pub struct MicroblockData {
 /// Interval between canonical chain ingestion passes.
 const INGEST_INTERVAL: Duration = Duration::from_secs(30);
 
+/// A WebSocket handshake sent to a plain HTTP endpoint is answered with a 2xx
+/// status, which tungstenite surfaces as `HTTP error: 200 OK`. That message
+/// names the transport, not the cause, so check the scheme up front.
+pub fn validate_websocket_url(url: &str) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("STACKS_NODE_WS_URL is empty; a ws:// or wss:// URL is required".to_string());
+    }
+    if trimmed.starts_with("ws://") || trimmed.starts_with("wss://") {
+        return Ok(());
+    }
+    Err(format!(
+        "STACKS_NODE_WS_URL must use ws:// or wss:// (got '{trimmed}'); an HTTP endpoint answers the \
+         WebSocket handshake with a 2xx status, which appears as 'HTTP error: 200 OK'"
+    ))
+}
+
 pub struct NexusSync {
     pub storage: Arc<Storage>,
     pub state_tracker: Arc<NexusState>,
@@ -84,8 +101,17 @@ impl NexusSync {
         });
         loop {
             match self.run_once().await {
-                Ok(()) => tracing::warn!("Sync WebSocket closed; reconnecting in 5s"),
-                Err(e) => tracing::warn!("Sync service error ({e}); reconnecting in 5s"),
+                Ok(()) => {
+                    tracing::warn!(url = %self.ws_url, "Sync WebSocket closed; reconnecting in 5s")
+                }
+                Err(e) => match validate_websocket_url(&self.ws_url) {
+                    Err(reason) => tracing::error!("{reason}"),
+                    Ok(()) => tracing::warn!(
+                        url = %self.ws_url,
+                        error = %e,
+                        "Sync WebSocket error; reconnecting in 5s"
+                    ),
+                },
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
@@ -299,5 +325,30 @@ impl NexusSync {
         .await?;
 
         Ok(state_commitment)
+    }
+}
+
+#[cfg(test)]
+mod websocket_url_tests {
+    use super::validate_websocket_url;
+
+    #[test]
+    fn accepts_ws_and_wss() {
+        assert!(validate_websocket_url("ws://127.0.0.1:3999").is_ok());
+        assert!(validate_websocket_url("wss://api.mainnet.hiro.so/extended/v1/ws").is_ok());
+        assert!(validate_websocket_url("  wss://example.test/ws  ").is_ok());
+    }
+
+    #[test]
+    fn rejects_http_endpoints_and_names_the_cause() {
+        let reason = validate_websocket_url("https://api.mainnet.hiro.so/extended/v1/ws")
+            .expect_err("an HTTP URL cannot carry a WebSocket handshake");
+        assert!(reason.contains("ws:// or wss://"));
+        assert!(reason.contains("HTTP error: 200 OK"));
+    }
+
+    #[test]
+    fn rejects_an_empty_url() {
+        assert!(validate_websocket_url("   ").is_err());
     }
 }
