@@ -114,4 +114,5 @@ impl Storage {
 pub mod admin_workflows;
 pub mod idempotency;
 pub mod kwil;
+pub mod replay_binding;
 pub mod tableland;

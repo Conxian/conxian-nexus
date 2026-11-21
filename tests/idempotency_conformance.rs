@@ -413,3 +413,97 @@ async fn conformance_private_schemas_do_not_reset_other_test_records() {
         ConsumeOutcome::AlreadyConsumed
     );
 }
+
+// ---------------------------------------------------------------------------
+// Replay-binding path (#439 F2/F4): consume via a canonical SDK binding key,
+// observe the anti-rollback clock as part of the consume, and prove distinct
+// bindings never collide.
+// ---------------------------------------------------------------------------
+
+use conxian_nexus::storage::replay_binding::ReplayBinding;
+
+fn sample_binding(policy_byte: u8) -> ReplayBinding {
+    ReplayBinding::builder()
+        .provider("aws-nitro")
+        .proof_subject("release-signer")
+        .proof_mechanism("nitro-attestation")
+        .nonce(&[1u8; 32])
+        .operation_digest([2u8; 32])
+        .purpose("release")
+        .policy_digest([policy_byte; 32])
+        .key_identity(&[4u8; 32])
+        .evidence_digest([5u8; 32])
+        .proof_id("proof-1")
+        .build()
+        .unwrap()
+}
+
+/// 11. Binding consume: first Fresh, duplicate AlreadyConsumed, key derived from binding.
+#[tokio::test]
+async fn conformance_binding_consume_once() {
+    let url = ConformanceDatabase::from_environment();
+    let _guard = SUITE_LOCK.lock().await;
+    url.prepare().await;
+    let store = connect(&url).await;
+    let binding = sample_binding(3);
+
+    assert_eq!(
+        store
+            .consume_binding(&binding, "release", 1_000, None)
+            .await
+            .unwrap(),
+        ConsumeOutcome::Fresh
+    );
+    assert_eq!(
+        store
+            .consume_binding(&binding, "release", 1_001, None)
+            .await
+            .unwrap(),
+        ConsumeOutcome::AlreadyConsumed
+    );
+}
+
+/// 12. Distinct bindings (different policy) do not collide in the store.
+#[tokio::test]
+async fn conformance_binding_distinct_no_collision() {
+    let url = ConformanceDatabase::from_environment();
+    let _guard = SUITE_LOCK.lock().await;
+    url.prepare().await;
+    let store = connect(&url).await;
+
+    assert_eq!(
+        store
+            .consume_binding(&sample_binding(3), "release", 2_000, None)
+            .await
+            .unwrap(),
+        ConsumeOutcome::Fresh
+    );
+    assert_eq!(
+        store
+            .consume_binding(&sample_binding(7), "release", 2_001, None)
+            .await
+            .unwrap(),
+        ConsumeOutcome::Fresh,
+        "a different policy digest must be a distinct replay key"
+    );
+}
+
+/// 13. Clock rollback fails closed on the binding consume path.
+#[tokio::test]
+async fn conformance_binding_clock_rollback_fails_closed() {
+    let url = ConformanceDatabase::from_environment();
+    let _guard = SUITE_LOCK.lock().await;
+    url.prepare().await;
+    let store = connect(&url).await;
+
+    store
+        .consume_binding(&sample_binding(3), "release", 5_000, None)
+        .await
+        .unwrap();
+    assert!(matches!(
+        store
+            .consume_binding(&sample_binding(3), "release", 4_999, None)
+            .await,
+        Err(IdempotencyError::ClockRollback)
+    ));
+}
