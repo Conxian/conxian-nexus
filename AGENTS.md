@@ -137,7 +137,7 @@ The table below is an SDK-registry snapshot, not canonical coverage. Consume Cor
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.98.1, edition 2021
+- **MSRV**: Rust 1.99.1, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
