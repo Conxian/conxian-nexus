@@ -30,21 +30,36 @@ All tasks and reported issues are categorized into five standard issue tracks:
 
 ## 3. GitHub Projects (v2) Board Architecture
 
-All issues across `conxian-nexus` and linked Conxian ecosystem repositories (`lib-conxian-core`, `conxian-gateway`, `conxian-business`) are managed through a unified **Conxian Nexus Production & Expansion** GitHub Project (v2) board.
+There is no single "Conxian Nexus Production & Expansion" board. Issues from `conxian-nexus` and
+linked repositories are grouped across the organization's existing GitHub Projects (v2):
 
-### 3.1 Project Board Views
+| Project | Number | Use |
+| --- | --- | --- |
+| Sprint — Nexus | [#1](https://github.com/orgs/Conxian/projects/1) | Current Nexus sprint work |
+| Build & Test | [#2](https://github.com/orgs/Conxian/projects/2) | CI, build and test items |
+| Release Management | [#4](https://github.com/orgs/Conxian/projects/4) | Release candidates and promotions |
+| Service Operations | [#6](https://github.com/orgs/Conxian/projects/6) | Runtime and support operations |
+| Change Backlog | [#7](https://github.com/orgs/Conxian/projects/7) | Change requests and improvements |
+| Portfolio — Ecosystem | [#8](https://github.com/orgs/Conxian/projects/8) | Portfolio-level view |
 
-1. **Production Readiness Roadmap View (Table)**:
-   - Tracks open gaps from `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md`.
-   - Columns: `Title`, `Track`, `Priority (P0, P1, P2)`, `Status`, `Target Release`, `Assignees`, `Linked KB Doc`.
+A Project is an optional view of existing issues, not a second task authority. Issues remain the
+source of truth even when a board does not show them.
 
-2. **Decentralized System Support View (Kanban)**:
-   - Manages verification adapter health and operational issue support across connected networks (Bitcoin, EVM, Cosmos, Solana, Sui, Aptos, Near, XRPL, Starknet, Monad).
-   - Columns: `Triage` -> `In Research` -> `In Development` -> `In Verification` -> `Active in Production`.
+### 3.1 Working views
 
-3. **Commercial & Business Job Cards View (Board)**:
-   - Tracks partner integrations, x402 agent settlement rails, ISO 20022 gateway onboarding, and developer bounties.
-   - Columns: `Backlog` -> `In Review` -> `In Progress` -> `Testing` -> `Completed`.
+Board view names and columns are owned in the Project settings, not in this document; confirm them
+in the project before relying on a view name.
+
+1. **Production readiness** — open gaps from
+   `docs/PRODUCTION_ENABLEMENT_RESEARCH_2026-09-11.md`, with track, priority, status, target
+   release, assignees and linked KB document.
+2. **Decentralized system support** — verification-adapter health and operational issue support
+   across connected networks (Bitcoin, EVM, Cosmos, Solana, Sui, Aptos, Near, XRPL, Starknet,
+   Monad). Suggested flow: Triage -> In Research -> In Development -> In Verification -> Active in
+   Production.
+3. **Commercial and business job cards** — partner integrations, x402 agent settlement rails,
+   ISO 20022 gateway onboarding and developer bounties. Suggested flow: Backlog -> In Review ->
+   In Progress -> Testing -> Completed.
 
 ---
 
@@ -60,7 +75,7 @@ Create a GitHub issue using the `bug_report.yml` template with the tag `decentra
 
 ### Step 2: Automated Routing & Triage
 - Issues labeled `p0` or `decentralized-system` automatically notify assigned CODEOWNERS.
-- The issue is linked to the GitHub Project board under `Decentralized System Support`.
+- The issue is linked to the relevant GitHub Project (for example Service Operations or the current sprint board).
 
 ### Step 3: Mitigation & KB Update
 - Apply mitigation in code (e.g. fail-closed protection, multi-RPC quorum verification, re-org invalidation handling).
