@@ -11,7 +11,7 @@ Every case creates a random `nexus_conformance_<uuid>` schema and installs the t
 Run an isolated container, bound only to loopback:
 
 ```bash
-docker run --rm --name nexus-conformance -e POSTGRES_DB=conformance_test -e POSTGRES_PASSWORD=postgres-fixture-only -p 127.0.0.1:5433:5432 postgres:17
+docker run --rm --name nexus-conformance -e POSTGRES_DB=conformance_test -e POSTGRES_PASSWORD=postgres-fixture-only -p 127.0.0.1:5433:5432 postgres:19
 ```
 
 After PostgreSQL is ready, in another terminal:
