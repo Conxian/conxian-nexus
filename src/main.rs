@@ -433,14 +433,24 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!("Shutdown signal received");
     };
 
+    // Background services are supervised, not fatal. A task exiting — including a successful
+    // return, or a transient upstream RPC error inside sync — previously terminated the whole
+    // node and took the REST and gRPC surfaces down with it.
+    tokio::spawn(async move {
+        tokio::select! {
+            res = sync_handle => tracing::error!("Sync service exited: {:?}", res),
+            res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
+            res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
+            res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
+            res = health_join => tracing::error!("Health report task exited: {:?}", res),
+            res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
+        }
+        tracing::warn!("A background service exited; the node continues serving.");
+    });
+
+    // Only the serving surfaces and an explicit shutdown signal end the process.
     tokio::select! {
         _ = shutdown => tracing::info!("Shutting down..."),
-        res = sync_handle => tracing::error!("Sync service exited: {:?}", res),
-        res = safety_handle => tracing::error!("Safety service exited: {:?}", res),
-        res = oracle_join => tracing::error!("Oracle service exited: {:?}", res),
-        res = rebalance_handle => tracing::error!("Rebalance task exited: {:?}", res),
-        res = health_join => tracing::error!("Health report task exited: {:?}", res),
-        res = orch_handle => tracing::error!("Orchestrator task exited: {:?}", res),
         res = rest_handle => tracing::error!("REST handle exited: {:?}", res),
         res = grpc_handle => tracing::error!("gRPC handle exited: {:?}", res),
     }
