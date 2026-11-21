@@ -11,7 +11,7 @@ an observed active safety mode also returns 503. Raw backend errors are omitted.
 These checks do not establish chain freshness, proof/provider qualification,
 paid entitlements or independent release acceptance.
 
-The container uses Rust 1.98.1 and Debian bookworm in both build and runtime stages,
+The container uses Rust 1.99.1 and Debian bookworm in both build and runtime stages,
 and builds the committed dependency graph using `cargo build --release --locked`.
 No database or Redis development-default override is enabled by the image.
 
