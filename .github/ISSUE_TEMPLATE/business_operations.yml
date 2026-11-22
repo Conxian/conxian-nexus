@@ -3,7 +3,7 @@ description: "Track a business-linked work item under the org GitHub business-op
 title: "[BUSINESS] <concise outcome>"
 labels:
   - "type:change"
-  - "state:intake"
+  - "state:qualified"
 body:
   - type: markdown
     attributes:
