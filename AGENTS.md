@@ -137,7 +137,7 @@ The table below is an SDK-registry snapshot, not canonical coverage. Consume Cor
 - **Build**: `cargo build --workspace`
 - **Test**: `cargo test --workspace`
 - **Docker**: `docker-compose up --build` (PostgreSQL 15 + Redis 7)
-- **MSRV**: Rust 1.99.1, edition 2021
+- **MSRV**: Rust 1.100.0, edition 2021
 
 ## Verification Protocol
 1. `cargo fmt --all -- --check`
@@ -243,4 +243,4 @@ AGPL-3.0-or-later (GNU Affero General Public License v3.0 or later). See `LICENS
 - Updated `docs/GAP_ANALYSIS.md` and `docs/RESEARCH.md` mapping all missing research areas and initializing best candidate specifications:
   - Candidate 1: FROST Threshold Signature Productionization (`CON-1302` in `src/orchestrator/roast.rs`).
   - Candidate 2: ZKCP Pre-Image Circuit Verification (`CON-1313` / `G-50` in `lib-conxian-core`).
-- Verified build and test suite readiness under Rust 1.98.1.
+- Verified build and test suite readiness under Rust 1.100.0.

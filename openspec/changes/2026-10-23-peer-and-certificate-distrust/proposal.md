@@ -10,7 +10,7 @@ Update only these existing lock entries to patched stable versions: negentropy 0
 
 ## Options considered
 
-- Selected: upstream stable patch releases. They retain existing semver lines and dependency burden; published MSRVs (negentropy 1.51; the TLS packages 1.71) fit the repository's Rust 1.98.1 baseline. No new hosted resource or runtime cost is introduced.
+- Selected: upstream stable patch releases. They retain existing semver lines and dependency burden; published MSRVs (negentropy 1.51; the TLS packages 1.71) fit the repository's Rust 1.100.0 baseline. No new hosted resource or runtime cost is introduced.
 - Rejected: advisory ignores, disabling certificate validation or suppressing reconciliation errors. These weaken security and cannot satisfy acceptance.
 - Deferred: replacing TLS or Nostr/reconciliation stacks. This adds compatibility and maintenance burden without evidence that supported patch releases are insufficient.
 
