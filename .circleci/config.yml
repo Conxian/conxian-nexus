@@ -1,0 +1,31 @@
+# CircleCI resolves a project's config from its DEFAULT branch when the project
+# is first set up, so this file has to exist on main for "Use Existing Config"
+# to succeed. The real pipelines (tests, image publishing) live on dev/staged;
+# this job only proves the lane is wired end to end and costs a few seconds.
+version: 2.1
+
+jobs:
+  lane-check:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: lane is wired
+          command: |
+            echo "CircleCI lane OK for $CIRCLE_PROJECT_REPONAME"
+            echo "branch=$CIRCLE_BRANCH commit=$CIRCLE_SHA1"
+      - run:
+          name: record where the real pipelines live
+          command: |
+            git fetch --depth 1 origin dev 2>/dev/null || true
+            if git cat-file -e origin/dev:.circleci/config.yml 2>/dev/null; then
+              echo "dev carries a CircleCI config"; git show origin/dev:.circleci/config.yml | head -5
+            else
+              echo "dev carries no CircleCI config"
+            fi
+
+workflows:
+  lane:
+    jobs: [lane-check]
